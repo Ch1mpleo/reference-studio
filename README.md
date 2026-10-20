@@ -4,7 +4,7 @@ A visual workspace, portable agent skill, and MCP server for turning art and des
 
 Reference Studio is being built for the moment when you know what a project should do, but are still discovering what it should look and feel like. Bring photography, artwork, game environments, posters, interfaces, or a rough idea. Explore their qualities with your coding agent, test a composition, and preserve the decisions that make it work.
 
-> **Early development:** Milestone 0, the application foundation, is complete. The current interface shows local service and connection status. The reference library, canvas, creative-workflow skill, and working MCP integration are planned. See [implementation status](docs/STATUS.md) for completed work and verification evidence.
+> **Early development:** Milestone 0's application foundation is delivered, with reliability follow-ups identified before core implementation. The current interface shows local service and connection status. The reference library, canvas, creative-workflow skill, and working MCP integration are planned. See [implementation status](docs/STATUS.md) for completed work and verification evidence.
 
 ## Why Reference Studio?
 
@@ -13,6 +13,16 @@ A design direction can come from more than a UI template. A landscape might esta
 Reference Studio will give that exploration a shared place. The human brings interests, judgment, and feedback. The agent helps research, interpret, compare, and build experiments. References stay connected to the reasoning, revisions, and approval that follow.
 
 Images are part of the composition from the beginning. Their light, scale, subject, and crop can influence how live typography, layout, and interaction are designed around them.
+
+## Design and motion, together
+
+The planned handoff will describe a reusable design system and motion system for each target product. Visual tokens, component states, layout, and image treatment establish how it looks. Motion rules establish how interactions respond: spatial continuity, timing or springs, interruption, reduced motion, and when actions should be instantaneous.
+
+A planned motion playground will let you interact with the same example in different styles, compare variants, and tune timing, easing, or spring behavior with sliders and options. Save a variation as a draft recipe, then verify it in the actual product before approval.
+
+References and runnable experiments will support these decisions. Approved exports will include `design.md`, `motion.md`, and versioned system data, so an agent can apply the same direction across the product's app and website. Studio's own controls will use a separate, consistent interface system.
+
+These capabilities are planned. See [design and motion scope](docs/DESIGN_AND_MOTION.md) for deliverables and milestone integration.
 
 ## Three parts, one project
 
@@ -40,9 +50,9 @@ The browser and agent will use the same application service and project records.
 
 1. **Collect.** Paste links or images, upload screenshots, and build a collection of human-made references from sources such as Pinterest, ArtStation, artists' sites, or your own work.
 2. **Explore.** Group references into directions and discuss specific qualities: atmosphere, imagery, composition, typography, material, pacing, or interaction. Record why a combination fits the project.
-3. **Experiment.** Ask the external coding agent to build a small representative section in the target website repository. Attach desktop/mobile screenshots and a live preview link for review.
+3. **Experiment.** Compare and tune interaction variants in the built-in motion playground. Ask the external coding agent to build a representative section in the target website repository, then attach screenshots, a live preview, and interaction observations.
 4. **Refine and approve.** Comment on a particular image region or experiment version. Keep earlier explorations, and approve a revision when the direction feels right.
-5. **Hand off.** Export `design.md`, annotated references, an asset manifest, approved experiment evidence, and an implementation checklist so another agent can continue without the original conversation.
+5. **Hand off.** Export `design.md`, `motion.md`, versioned design/motion system data, annotated references, an asset manifest, approved experiment evidence, and an implementation checklist so another agent can continue without the original conversation.
 
 ## Design principles
 
@@ -115,12 +125,12 @@ The monorepo uses TypeScript and npm workspaces. The application service owns pe
 
 ## Roadmap
 
-- [x] **M0 — Foundation:** workspace packages, local service, SQLite migration runner, shared contracts, and connection-status interface.
+- [x] **M0 — Foundation:** workspace packages, local service, SQLite migration runner, shared contracts, and connection-status interface. Readiness follow-ups are tracked in [status](docs/STATUS.md).
 - [ ] **M1 — Reference library:** projects, image/link/note imports, search, source metadata, asset roles, and backup/restore.
-- [ ] **M2 — Visual exploration:** grouped canvas, focused comparison, region annotations, direction drafts, and reliable arrangement editing.
+- [ ] **M2 — Visual exploration:** grouped canvas, focused comparison, region annotations, direction drafts, reliable arrangement editing, and an adjustable motion playground.
 - [ ] **M3 — Agent connection:** working MCP tools, explicit project/session selection, visual context retrieval, and a verified Cursor interaction.
 - [ ] **M4 — Portable skill:** research and discussion workflow, capability-aware behavior, contextual quality review, and setup guidance for supported clients.
-- [ ] **M5 — Experiments and handoff:** versioned previews, feedback, immutable approvals, and implementation exports.
+- [ ] **M5 — Experiments and handoff:** versioned visual/interaction previews, feedback, immutable approvals, and design/motion system exports.
 - [ ] **M6 — Release validation:** complete end-to-end workflow, accessibility and recovery checks, cross-client verification, and setup documentation.
 
 [Implementation status](docs/STATUS.md) records completed tasks, actual checks, known limitations, and the next task. [Product boundaries](docs/PRODUCT.md) describes the agreed direction.
