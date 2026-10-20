@@ -1,15 +1,17 @@
-import { createApp } from "./app.js";
-import { loadConfig, removeConnectionFile, writeConnectionFile } from "./config.js";
-import { openDatabase } from "./db.js";
+import { startService, type RunningService } from "./run.js";
 
-const config = loadConfig();
-const database = openDatabase(config.dataDir);
-const app = await createApp({ config, database });
+let running: RunningService;
+
+try {
+  running = await startService();
+} catch {
+  process.exit(1);
+}
 
 let shuttingDown = false;
 
 process.on("exit", () => {
-  removeConnectionFile(config.dataDir);
+  running.releaseConnection();
 });
 
 async function shutdown(signal: string): Promise<void> {
@@ -17,9 +19,8 @@ async function shutdown(signal: string): Promise<void> {
     return;
   }
   shuttingDown = true;
-  app.log.info({ signal }, "shutting down");
-  await app.close();
-  database.close();
+  running.app.log.info({ signal }, "shutting down");
+  await running.shutdown();
 }
 
 process.on("SIGINT", () => {
@@ -29,16 +30,10 @@ process.on("SIGTERM", () => {
   void shutdown("SIGTERM").then(() => process.exit(0));
 });
 
-try {
-  await app.listen({ host: config.host, port: config.port });
-  writeConnectionFile(config);
-  app.log.info(
-    { baseUrl: `http://${config.host}:${config.port}`, contractVersion: config.contractVersion },
-    "reference studio listening",
-  );
-} catch (error) {
-  app.log.error({ err: error }, "could not start reference studio");
-  removeConnectionFile(config.dataDir);
-  database.close();
-  process.exit(1);
-}
+running.app.log.info(
+  {
+    baseUrl: `http://${running.config.host}:${running.config.port}`,
+    contractVersion: running.config.contractVersion,
+  },
+  "reference studio listening",
+);

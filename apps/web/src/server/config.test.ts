@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { bearerMatches, ensureToken } from "./auth.js";
-import { findRepoRoot, loadConfig, writeConnectionFile } from "./config.js";
+import {
+  findRepoRoot,
+  loadConfig,
+  readConnectionFile,
+  removeOwnedConnectionFile,
+  writeConnectionFile,
+} from "./config.js";
 
 const directories: string[] = [];
 
@@ -66,5 +72,22 @@ describe("runtime configuration", () => {
     expect(connection.contractVersion).toBe(1);
     expect(connection.baseUrl).toBe("http://127.0.0.1:4317");
     expect(JSON.stringify(connection)).not.toContain(config.token);
+  });
+
+  it("removes a connection file only for the recorded process", () => {
+    const directory = tempDir();
+    const config = loadConfig({
+      REFERENCE_STUDIO_DATA_DIR: directory,
+      REFERENCE_STUDIO_PORT: "4317",
+    });
+    writeConnectionFile(config);
+    const owned = readConnectionFile(directory);
+    expect(owned?.pid).toBe(process.pid);
+
+    removeOwnedConnectionFile(directory, process.pid + 1);
+    expect(readConnectionFile(directory)?.pid).toBe(process.pid);
+
+    removeOwnedConnectionFile(directory, process.pid);
+    expect(readConnectionFile(directory)).toBeUndefined();
   });
 });

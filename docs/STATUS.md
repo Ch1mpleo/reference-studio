@@ -4,9 +4,9 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2.
-- Active milestone: M0 foundation delivered; readiness follow-ups M0.R3–R4 remain before M1.
-- Next task: M0.R3 — preserve discovery-file ownership when a second service fails to bind.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4.
+- Active milestone: M0 is complete, including the readiness follow-ups.
+- Next task: M1.1 — project creation, editing, selection, and archiving.
 
 ## Milestone 0 — Foundation
 
@@ -31,21 +31,21 @@ Browser check of the production page and the Vite dev page: both rendered the lo
 
 - Node 24 is not installed here, so only Node 26 was exercised. `engines` allows Node 24 or newer.
 - Windows does not apply Unix mode `0600` to `auth-token`. The token stays inside gitignored `.reference-studio/`.
-- A hard process kill can leave `connection.json` behind. The next successful start overwrites it. An interactive Ctrl+C runs the shutdown path, and process exit removes the file when Node is allowed to exit normally.
+- A hard process kill can leave `connection.json` behind. The next successful start overwrites it. A normal shutdown removes the file only when its recorded pid matches the exiting process.
 - The MCP package builds, then its CLI tells the caller that the adapter arrives in M3. It does not speak MCP yet.
-- `npm run test:e2e` is wired to Playwright, and there are no browser scenarios yet.
+- `npm run test:e2e` uses installed Microsoft Edge (`msedge`). Bundled Playwright Chromium is not installed. Set `REFERENCE_STUDIO_BROWSER_CHANNEL` to another installed Playwright channel when Edge is unavailable.
 - This npm version rejects the `workspace:` protocol. Local packages depend on `@reference-studio/core` with `*`, which still links the workspace.
 
 ## Readiness review — 2026-10-21
 
 Reviewed commit `32a4c45` using current source and CodeGraph (index up to date). Type checking, all 15 tests, and the full build passed again. Built production HTML/JavaScript returned HTTP 200; headless installed Edge showed “Service connected” and “Listening”. Review probes used temporary SQLite data, not the personal workspace.
 
-The following are reproduced findings, not completed fixes:
+The readiness findings below are fixed:
 
 - [x] **M0.R1 — Prevent stale connection updates.** Health requests carry a generation and an abort signal. A retry or cleanup cancels the previous request, and a late response cannot replace a newer success or failure. `useServiceConnection.test.tsx` covers both orderings and event-stream cleanup. `npm run check` and `npm test` passed (18 tests). The production page at `http://127.0.0.1:4317` connected, “Check again” returned to “Service connected”, contract 1, and “Listening”.
 - [x] **M0.R2 — Close SSE streams during shutdown.** `preClose` ends each open event stream, clears its keepalive, and removes its hub subscription before Fastify waits on sockets. The service test keeps a client connected, `app.close()` finishes within one second, the subscriber count returns to zero, and a new server on the same port accepts health and event requests. `npm run check` and `npm test` passed (19 tests). This covers `app.close()` directly.
-- [ ] **M0.R3 — Preserve discovery-file ownership.** A second service failing on the occupied port deleted the first service's `connection.json` while the first still returned HTTP 200. Remove metadata only for the owning instance; define same-data-directory instance ownership and add a duplicate-start regression.
-- [ ] **M0.R4 — Make browser smoke checks repeatable.** `npm run test:e2e -- --list` reports zero tests. The expected bundled Chromium executable is also absent on this machine; review used installed Edge separately. Add isolated test-server setup/teardown and production connection/retry/restart scenarios.
+- [x] **M0.R3 — Preserve discovery-file ownership.** `connection.json` records the pid of the process that bound the port. A failed start does not register cleanup, and removal ignores a file owned by another pid. `startup.test.ts` starts a service, fails a second process on the same data directory and port, and checks that the original file and HTTP 200 health response remain. `npm test` passed (21 tests).
+- [x] **M0.R4 — Make browser smoke checks repeatable.** `npm run test:e2e` builds the web app and runs two Edge scenarios against an isolated temporary data directory and port: production connect plus retry, and reconnect after a server restart. Both passed (2 tests, 5.6s). Teardown stops the process and deletes that temporary directory.
 
 Before persistent project endpoints, explicitly define browser authorization and require agent authentication. The present hook rejects bad supplied tokens but permits missing tokens for the scaffold; future protected writes must not inherit that as their authorization policy.
 

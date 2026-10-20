@@ -61,7 +61,33 @@ export function writeConnectionFile(config: AppConfig): void {
   renameSync(temporary, file);
 }
 
-export function removeConnectionFile(dataDir: string): void {
+export type ConnectionRecord = {
+  pid: number;
+  port: number;
+  contractVersion: number;
+  baseUrl: string;
+};
+
+export function readConnectionFile(dataDir: string): ConnectionRecord | undefined {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(connectionFilePath(dataDir), "utf8"));
+    if (!isConnectionRecord(parsed)) {
+      return undefined;
+    }
+    return parsed;
+  } catch (error) {
+    if (errorCode(error) === "ENOENT" || error instanceof SyntaxError) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+export function removeOwnedConnectionFile(dataDir: string, pid = process.pid): void {
+  const current = readConnectionFile(dataDir);
+  if (current === undefined || current.pid !== pid) {
+    return;
+  }
   try {
     unlinkSync(connectionFilePath(dataDir));
   } catch (error) {
@@ -113,6 +139,20 @@ function splitCsv(value: string): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function isConnectionRecord(value: unknown): value is ConnectionRecord {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.pid === "number" &&
+    Number.isInteger(record.pid) &&
+    typeof record.port === "number" &&
+    typeof record.contractVersion === "number" &&
+    typeof record.baseUrl === "string"
+  );
 }
 
 function errorCode(error: unknown): string | undefined {

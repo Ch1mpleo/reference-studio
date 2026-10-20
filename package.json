@@ -15,9 +15,9 @@
     "dev": "node scripts/dev.mjs",
     "build": "npm run build -w @reference-studio/core && npm run build -w @reference-studio/web && npm run build -w @reference-studio/mcp",
     "start": "npm run start -w @reference-studio/web",
-    "check": "tsc -b --pretty false && tsc -p apps/web/tsconfig.client.json --pretty false --noEmit && tsc -p apps/web/tsconfig.client.tests.json --pretty false --noEmit && tsc -p tsconfig.tests.json --pretty false --noEmit",
+    "check": "tsc -b --pretty false && tsc -p apps/web/tsconfig.client.json --pretty false --noEmit && tsc -p apps/web/tsconfig.client.tests.json --pretty false --noEmit && tsc -p tsconfig.tests.json --pretty false --noEmit && tsc -p tsconfig.e2e.json --pretty false --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "npm run build -w @reference-studio/web && playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
