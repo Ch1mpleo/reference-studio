@@ -34,6 +34,15 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
 
   migrate(dependencies.database, dependencies.migrationsDir ?? defaultMigrationsDir());
 
+  const streams = new Set<EventStream>();
+  app.addHook("preClose", async () => {
+    const openStreams = [...streams];
+    streams.clear();
+    for (const stream of openStreams) {
+      stream.close();
+    }
+  });
+
   app.addHook("onRequest", async (request) => {
     const host = request.headers.host;
     if (host !== undefined && !dependencies.config.allowedHosts.includes(host)) {
@@ -65,7 +74,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
     });
 
     const send = (event: StudioEvent) => {
-      if (!reply.raw.writableEnded) {
+      if (!reply.raw.writableEnded && !reply.raw.destroyed) {
         reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       }
     };
@@ -73,14 +82,32 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
     send(readyEvent());
     const unsubscribe = hub.subscribe(send);
     const keepalive = setInterval(() => {
-      if (!reply.raw.writableEnded) {
+      if (!reply.raw.writableEnded && !reply.raw.destroyed) {
         reply.raw.write(": keepalive\n\n");
       }
     }, 15_000);
 
+    let closed = false;
+    const stream: EventStream = {
+      close() {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        clearInterval(keepalive);
+        unsubscribe();
+        streams.delete(stream);
+        if (!reply.raw.writableEnded) {
+          reply.raw.end();
+        }
+        if (!reply.raw.destroyed) {
+          reply.raw.destroy();
+        }
+      },
+    };
+    streams.add(stream);
     request.raw.on("close", () => {
-      clearInterval(keepalive);
-      unsubscribe();
+      stream.close();
     });
   });
 
@@ -119,3 +146,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
 export function publishChange(hub: EventHub): void {
   hub.publish({ type: "changed", contractVersion: CONTRACT_VERSION });
 }
+
+type EventStream = {
+  close: () => void;
+};

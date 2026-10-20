@@ -34,15 +34,42 @@ function testConfig(dataDir: string): AppConfig {
   };
 }
 
-async function startApp(): Promise<{ app: FastifyInstance; database: DatabaseSync; hub: EventHub }> {
+async function startApp(): Promise<{
+  app: FastifyInstance;
+  database: DatabaseSync;
+  hub: EventHub;
+  config: AppConfig;
+}> {
   const dataDir = tempDir();
   const database = openDatabase(dataDir);
   const hub = new EventHub();
-  const app = await createApp({ config: testConfig(dataDir), database, hub });
+  const config = testConfig(dataDir);
+  const app = await createApp({ config, database, hub });
   closers.push(() => {
     database.close();
   });
-  return { app, database, hub };
+  return { app, database, hub, config };
+}
+
+function allowBoundPort(config: AppConfig, port: number): void {
+  const host = `127.0.0.1:${port}`;
+  const origin = `http://${host}`;
+  if (!config.allowedHosts.includes(host)) {
+    config.allowedHosts.push(host);
+  }
+  if (!config.allowedOrigins.includes(origin)) {
+    config.allowedOrigins.push(origin);
+  }
+}
+
+async function listen(app: FastifyInstance, config: AppConfig): Promise<number> {
+  await app.listen({ host: "127.0.0.1", port: 0 });
+  const address = app.server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("Expected the service to bind a TCP port.");
+  }
+  allowBoundPort(config, address.port);
+  return address.port;
 }
 
 afterEach(async () => {
@@ -118,5 +145,44 @@ describe("application service", () => {
     publishChange(hub);
     expect(received).toEqual(["changed"]);
     await app.close();
+  });
+
+  it("closes an open event stream during shutdown and accepts a new client", async () => {
+    const first = await startApp();
+    const port = await listen(first.app, first.config);
+    const events = await fetch(`http://127.0.0.1:${port}/api/events`);
+    expect(events.status).toBe(200);
+    expect(events.body).not.toBeNull();
+    const reader = events.body?.getReader();
+    if (reader === undefined) {
+      throw new Error("Expected an event stream body.");
+    }
+    const ready = await reader.read();
+    expect(new TextDecoder().decode(ready.value)).toContain("event: ready");
+    expect(first.hub.subscriberCount()).toBe(1);
+
+    const closed = await Promise.race([
+      first.app.close().then(() => true),
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), 1000);
+      }),
+    ]);
+    expect(closed).toBe(true);
+    expect(first.hub.subscriberCount()).toBe(0);
+    const ended = await reader.read();
+    expect(ended.done).toBe(true);
+
+    const restarted = await createApp({
+      config: first.config,
+      database: first.database,
+      hub: new EventHub(),
+    });
+    await restarted.listen({ host: "127.0.0.1", port });
+    const health = await fetch(`http://127.0.0.1:${port}/api/health`);
+    expect(health.status).toBe(200);
+    const nextEvents = await fetch(`http://127.0.0.1:${port}/api/events`);
+    expect(nextEvents.status).toBe(200);
+    await nextEvents.body?.cancel();
+    await restarted.close();
   });
 });

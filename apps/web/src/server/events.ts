@@ -15,4 +15,8 @@ export class EventHub {
       listener(event);
     }
   }
+
+  subscriberCount(): number {
+    return this.listeners.size;
+  }
 }

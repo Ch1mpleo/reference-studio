@@ -4,9 +4,9 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1.
-- Active milestone: M0 foundation delivered; readiness follow-ups M0.R2–R4 remain before M1.
-- Next task: M0.R2 — close SSE streams during shutdown.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2.
+- Active milestone: M0 foundation delivered; readiness follow-ups M0.R3–R4 remain before M1.
+- Next task: M0.R3 — preserve discovery-file ownership when a second service fails to bind.
 
 ## Milestone 0 — Foundation
 
@@ -43,7 +43,7 @@ Reviewed commit `32a4c45` using current source and CodeGraph (index up to date).
 The following are reproduced findings, not completed fixes:
 
 - [x] **M0.R1 — Prevent stale connection updates.** Health requests carry a generation and an abort signal. A retry or cleanup cancels the previous request, and a late response cannot replace a newer success or failure. `useServiceConnection.test.tsx` covers both orderings and event-stream cleanup. `npm run check` and `npm test` passed (18 tests). The production page at `http://127.0.0.1:4317` connected, “Check again” returned to “Service connected”, contract 1, and “Listening”.
-- [ ] **M0.R2 — Close SSE streams during shutdown.** With an HTTP event stream open, `app.close()` remained pending until the client disconnected. End active streams and clear subscriptions/intervals during shutdown; verify restart with clients present. The probe exercised application close directly, not an OS signal.
+- [x] **M0.R2 — Close SSE streams during shutdown.** `preClose` ends each open event stream, clears its keepalive, and removes its hub subscription before Fastify waits on sockets. The service test keeps a client connected, `app.close()` finishes within one second, the subscriber count returns to zero, and a new server on the same port accepts health and event requests. `npm run check` and `npm test` passed (19 tests). This covers `app.close()` directly.
 - [ ] **M0.R3 — Preserve discovery-file ownership.** A second service failing on the occupied port deleted the first service's `connection.json` while the first still returned HTTP 200. Remove metadata only for the owning instance; define same-data-directory instance ownership and add a duplicate-start regression.
 - [ ] **M0.R4 — Make browser smoke checks repeatable.** `npm run test:e2e -- --list` reports zero tests. The expected bundled Chromium executable is also absent on this machine; review used installed Edge separately. Add isolated test-server setup/teardown and production connection/retry/restart scenarios.
 
