@@ -1,0 +1,15 @@
+{
+  "name": "@reference-studio/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@reference-studio/core": "*"
+  },
+  "bin": {
+    "reference-studio-mcp": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json"
+  }
+}

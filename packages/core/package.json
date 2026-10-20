@@ -1,0 +1,19 @@
+{
+  "name": "@reference-studio/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "dev": "tsc -b tsconfig.json --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}

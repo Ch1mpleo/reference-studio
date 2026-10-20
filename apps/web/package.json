@@ -1,0 +1,25 @@
+{
+  "name": "@reference-studio/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "@reference-studio/core": "*",
+    "fastify": "^5.12.7",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "scripts": {
+    "dev:server": "tsx watch src/server/index.ts",
+    "dev:client": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "build": "tsc -b tsconfig.server.json && vite build",
+    "start": "node scripts/start.mjs"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4"
+  }
+}

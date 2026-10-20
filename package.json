@@ -1,0 +1,30 @@
+{
+  "name": "reference-studio",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local workspace for collecting references and developing website art direction.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build -w @reference-studio/core && npm run build -w @reference-studio/web && npm run build -w @reference-studio/mcp",
+    "start": "npm run start -w @reference-studio/web",
+    "check": "tsc -b --pretty false && tsc -p apps/web/tsconfig.client.json --pretty false --noEmit && tsc -p tsconfig.tests.json --pretty false --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "concurrently": "^10.0.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
