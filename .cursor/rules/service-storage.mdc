@@ -1,0 +1,19 @@
+---
+description: "Fastify HTTP behavior, SQLite migrations, persistence, file imports, and change events."
+globs: "apps/web/src/server/**,apps/web/migrations/**"
+alwaysApply: false
+---
+
+# Application service and storage
+
+- Keep persistent writes in this service. Browser code and the MCP adapter must use the same service operations; keep transport handling thin as shared domain operations emerge.
+- Use `packages/core` schemas/errors at boundaries. Follow `app.ts` and `ServiceError`/`serviceErrorBody`; do not introduce Obox response envelopes, Swagger dependencies, or a second error protocol.
+- Validate untrusted requests on the server regardless of client validation. Return actionable errors without exposing filesystem paths, tokens, or stack traces.
+- Preserve the existing loopback host/origin restrictions and token handling. Agent operations must authenticate; never ship the local token in browser bundles or logs. Do not treat a localhost connection as unlimited filesystem access.
+- Use prepared SQL parameters and atomic transactions for related writes. Enforce expected revisions at the write boundary; report conflicts rather than overwriting newer edits.
+- Add ordered SQL migrations using the existing runner in `migrate.ts`. Do not rewrite an applied migration or reset personal data to accommodate schema changes.
+- Publish change events after successful commits. Idempotent retries must not repeat side effects; reconnecting clients must be able to refetch authoritative state.
+- Treat original assets as immutable; store thumbnails and other derived views separately. Validate image bytes/type and constrain file destinations to the configured data directory.
+- For archive/file imports, reject traversal and verify resolved paths remain inside the intended root, including Windows paths. The HTTP API accepts uploads, not arbitrary local filesystem read requests.
+- Keep usage/interpretation records separate from global assets; preserve material referenced by approved snapshots. Read `docs/PRODUCT.md` for approval and asset-role semantics.
+- Extend the existing dependency-injected `createApp` pattern and tests. Exercise actual SQLite behavior in temporary directories for revisions, transactions, migration rollback, and retry/import integrity when affected.

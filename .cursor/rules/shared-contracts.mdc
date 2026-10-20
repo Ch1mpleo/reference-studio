@@ -1,0 +1,16 @@
+---
+description: "Shared Zod schemas, stable identifiers, revisions, errors, and service events."
+globs: "packages/core/**"
+alwaysApply: false
+---
+
+# Shared contracts
+
+- Keep core transport-independent: no React, Fastify, filesystem, SQLite, or MCP SDK imports. It defines shared contracts and reusable pure behavior, not persistence or transport implementations.
+- Follow existing schemas in `health.ts`/`events.ts`; derive validated types with `z.infer` instead of maintaining duplicate interface shapes.
+- Treat external JSON as `unknown` until parsed. Add validation where information enters the system; avoid unnecessary repeated parsing of already validated internal values.
+- Reuse the existing ID helpers, `assertExpectedRevision`, `ServiceError`, and public exports. Add fields or variants to the owning contract rather than copying schemas into client/server/MCP packages.
+- Check callers across all workspaces before changing a public contract. Use the contract-version convention in `ids.ts`; coordinate a breaking shape change across producers, consumers, and compatibility checks.
+- Keep serialized values JSON-safe and explicit. Preserve stable record IDs across UI, events, annotations, and agent handoffs; do not substitute array positions for identity.
+- Preserve the distinction between current state, draft edits, and approved snapshots when introducing domain schemas. Validate region bounds against the agreed normalized-image representation.
+- Add behavior-level contract tests for meaningful invalid input, revision conflicts, and changed wire shapes. Do not prove compatibility with TypeScript assertions alone.

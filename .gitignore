@@ -7,3 +7,4 @@ test-results/
 blob-report/
 *.tsbuildinfo
 *.log
+.codegraph/
