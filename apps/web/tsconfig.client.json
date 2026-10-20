@@ -14,5 +14,6 @@
       "@reference-studio/core": ["../../packages/core/src/index.ts"]
     }
   },
-  "include": ["src/client/**/*.ts", "src/client/**/*.tsx"]
+  "include": ["src/client/**/*.ts", "src/client/**/*.tsx"],
+  "exclude": ["src/client/**/*.test.ts", "src/client/**/*.test.tsx"]
 }
