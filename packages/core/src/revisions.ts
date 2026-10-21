@@ -1,6 +1,15 @@
 import { ServiceError } from "./errors.js";
 
-export function assertExpectedRevision(current: number, expected: number): void {
+export type RevisionTarget = {
+  type: string;
+  id: string;
+};
+
+export function assertExpectedRevision(
+  current: number,
+  expected: number,
+  record?: RevisionTarget,
+): void {
   if (!Number.isInteger(expected) || expected < 1) {
     throw new ServiceError("validation", "expectedRevision must be a positive integer.");
   }
@@ -8,6 +17,7 @@ export function assertExpectedRevision(current: number, expected: number): void 
     throw new ServiceError("conflict", "The record changed since it was loaded.", {
       currentRevision: current,
       expectedRevision: expected,
+      ...(record === undefined ? {} : { recordType: record.type, recordId: record.id }),
     });
   }
 }

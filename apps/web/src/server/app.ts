@@ -2,7 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 import {
-  CONTRACT_VERSION,
+  browserSessionResponseSchema,
   healthResponse,
   readyEvent,
   ServiceError,
@@ -11,10 +11,20 @@ import {
 } from "@reference-studio/core";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
-import { bearerMatches } from "./auth.js";
+import {
+  assertBrowserBootstrap,
+  establishCaller,
+  headerValue,
+  isPublicRequest,
+  rememberCaller,
+} from "./access.js";
 import type { AppConfig } from "./config.js";
 import { EventHub } from "./events.js";
 import { defaultMigrationsDir, migrate } from "./migrate.js";
+import { registerProjectRoutes } from "./projects.js";
+import { issueSessionCookie } from "./session.js";
+
+export { publishChange } from "./changes.js";
 
 export type AppDependencies = {
   config: AppConfig;
@@ -44,26 +54,33 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   });
 
   app.addHook("onRequest", async (request) => {
-    const host = request.headers.host;
+    const host = headerValue(request.headers.host);
     if (host !== undefined && !dependencies.config.allowedHosts.includes(host)) {
       throw new ServiceError("forbidden_origin", "Host is not allowed.");
     }
 
-    const origin = request.headers.origin;
-    if (typeof origin === "string" && !dependencies.config.allowedOrigins.includes(origin)) {
+    const origin = headerValue(request.headers.origin);
+    if (origin !== undefined && !dependencies.config.allowedOrigins.includes(origin)) {
       throw new ServiceError("forbidden_origin", "Origin is not allowed.");
     }
 
-    const authorization = request.headers.authorization;
-    if (
-      authorization !== undefined &&
-      !bearerMatches(authorization, dependencies.config.token)
-    ) {
-      throw new ServiceError("unauthorized", "Invalid local token.");
+    const caller = establishCaller(request, dependencies.config);
+    rememberCaller(request, caller);
+    if (!isPublicRequest(request.method, request.url) && caller === "anonymous") {
+      throw new ServiceError("unauthorized", "Authentication is required.");
     }
   });
 
   app.get("/api/health", async () => healthResponse());
+
+  app.get("/api/session", async (request, reply) => {
+    assertBrowserBootstrap(headerValue(request.headers["sec-fetch-site"]));
+    reply.header("cache-control", "no-store");
+    reply.header("set-cookie", issueSessionCookie(dependencies.config.sessionKey));
+    return browserSessionResponseSchema.parse({ ok: true });
+  });
+
+  registerProjectRoutes(app, dependencies.database, hub);
 
   app.get("/api/events", (request, reply) => {
     reply.hijack();
@@ -131,6 +148,10 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
     if (error instanceof ServiceError) {
       return reply.code(error.status).send(serviceErrorBody(error));
     }
+    const transport = transportError(error);
+    if (transport !== undefined) {
+      return reply.code(transport.status).send(transport.body);
+    }
     request.log.error({ err: error }, "request failed");
     return reply.code(500).send({
       error: {
@@ -143,8 +164,25 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   return app;
 }
 
-export function publishChange(hub: EventHub): void {
-  hub.publish({ type: "changed", contractVersion: CONTRACT_VERSION });
+function transportError(
+  error: unknown,
+): { status: number; body: ReturnType<typeof serviceErrorBody> } | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return undefined;
+  }
+  if (error.code === "FST_ERR_CTP_INVALID_JSON_BODY" || error.code === "FST_ERR_CTP_EMPTY_JSON_BODY") {
+    return {
+      status: 400,
+      body: serviceErrorBody(new ServiceError("validation", "Request body must be valid JSON.")),
+    };
+  }
+  if (error.code === "FST_ERR_CTP_INVALID_MEDIA_TYPE") {
+    return {
+      status: 415,
+      body: serviceErrorBody(new ServiceError("unsupported_media", "Unsupported media type.")),
+    };
+  }
+  return undefined;
 }
 
 type EventStream = {

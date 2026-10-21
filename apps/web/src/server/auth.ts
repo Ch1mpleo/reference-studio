@@ -7,10 +7,18 @@ export function ensureDataDir(dataDir: string): void {
 }
 
 export function ensureToken(dataDir: string): string {
+  return ensureSecret(dataDir, "auth-token");
+}
+
+export function ensureSessionKey(dataDir: string): string {
+  return ensureSecret(dataDir, "session-key");
+}
+
+function ensureSecret(dataDir: string, fileName: string): string {
   ensureDataDir(dataDir);
-  const tokenPath = path.join(dataDir, "auth-token");
+  const secretPath = path.join(dataDir, fileName);
   try {
-    const existing = readFileSync(tokenPath, "utf8").trim();
+    const existing = readFileSync(secretPath, "utf8").trim();
     if (existing.length > 0) {
       return existing;
     }
@@ -20,9 +28,9 @@ export function ensureToken(dataDir: string): string {
     }
   }
 
-  const token = randomBytes(32).toString("base64url");
-  writeFileSync(tokenPath, token, { encoding: "utf8", mode: 0o600 });
-  return token;
+  const secret = randomBytes(32).toString("base64url");
+  writeFileSync(secretPath, secret, { encoding: "utf8", mode: 0o600 });
+  return secret;
 }
 
 export function bearerMatches(header: string | undefined, token: string): boolean {

@@ -4,8 +4,8 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4.
-- Active milestone: M0 is complete, including the readiness follow-ups.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0.
+- Active milestone: M1 — projects and the reference library.
 - Next task: M1.1 — project creation, editing, selection, and archiving.
 
 ## Milestone 0 — Foundation
@@ -47,7 +47,7 @@ The readiness findings below are fixed:
 - [x] **M0.R3 — Preserve discovery-file ownership.** `connection.json` records the pid of the process that bound the port. A failed start does not register cleanup, and removal ignores a file owned by another pid. `startup.test.ts` starts a service, fails a second process on the same data directory and port, and checks that the original file and HTTP 200 health response remain. `npm test` passed (21 tests).
 - [x] **M0.R4 — Make browser smoke checks repeatable.** `npm run test:e2e` builds the web app and runs two Edge scenarios against an isolated temporary data directory and port: production connect plus retry, and reconnect after a server restart. Both passed (2 tests, 5.6s). Teardown stops the process and deletes that temporary directory.
 
-Before persistent project endpoints, explicitly define browser authorization and require agent authentication. The present hook rejects bad supplied tokens but permits missing tokens for the scaffold; future protected writes must not inherit that as their authorization policy.
+Before persistent project endpoints, explicitly define browser authorization and require agent authentication. That boundary is implemented in M1.0. The readiness note remains: a missing token used to be enough for the scaffold, and protected routes no longer inherit that.
 
 Node 24 remains unverified. A CI check is recommended for reproducibility. The review did not rerun dependency installation, development-mode browser checks, full accessibility coverage, or cross-client integration.
 
@@ -65,9 +65,35 @@ The user confirmed both project handoff systems and Studio's own consistent inte
 - [ ] **M5 extension:** validated system exports, interaction evidence, and a consistent immutable approval snapshot.
 - [ ] **M6 extension:** two-view handoff reuse, interruption/repetition, keyboard/reduced-motion checks, and revision integrity; confirm tuned variants survive reload and match their approved export.
 
+## Milestone 1 — Projects and library
+
+### M1.0 — Persistent operation contract
+
+Protected `/api` routes accept either an agent bearer token or a browser session. `GET /api/health` stays public. `GET /api/session` issues an HttpOnly `rs_session` cookie only when Fetch Metadata is `same-origin` or `none`. Browser changes also require an allowed Origin. A page on another loopback port is `same-site` and is rejected, because cookies are not scoped to a port. The disk token is not returned to the browser. Agents may omit Origin. Events are protected. A presented bearer token that does not match is unauthorized even if a session cookie is also present.
+
+Project creates and updates run in one SQLite transaction with an idempotency record. The key is scoped to the caller, operation, and project. The request hash is SHA-256 of canonical JSON: object keys are sorted, array order is kept, and upload mutations will include `contentSha256` of the raw bytes rather than multipart framing. The same key and payload return the original status and body and do not publish another event. A different payload for a stored key returns 409 `idempotency_mismatch`. Revision conflicts return 409 with the current revision, expected revision, record type, and record id, and do not apply the losing write. `changed` events now carry `entity`, `entityId`, `projectId`, and `revision`. The browser opens one EventSource, refetches health when it reconnects or receives `changed`, and bumps `refreshKey` so later screens can reload authoritative records. There is no second reconnect timer.
+
+Asset, reference, and placement tables are not created yet. They arrive with the ingestion and placement tasks.
+
+### Checks
+
+Run on Windows 11 with Node v26.2.0 and npm 11.13.0.
+
+- `npm run check` — passed.
+- `npm test` — passed. 7 files, 36 tests, including authorization, malformed input, safe internal errors, idempotent replay, payload mismatch, concurrent revision conflict, transaction rollback, and reconnect refetch.
+- `npm run test:e2e` — passed. 2 Edge tests: production connect plus retry, and reconnect after restart. The browser establishes a session before the event stream.
+- Dev browser check — passed. Vite at `http://127.0.0.1:5173` proxied session, health, and the event stream. The page showed “Service connected”, contract 1, and “Listening”. “Check again” returned to that state.
+
+### Known limitations
+
+- Forging `Sec-Fetch-Site` is outside the browser threat model. Other local programs use the bearer token.
+- An idempotency key is stored only after a write commits. A rejected request does not consume the key.
+- `refreshKey` tells the interface to refetch. The project screen that consumes it arrives in M1.1.
+- Node 24 remains unverified.
+
 ## Later milestones
 
-M1 through M6 are not started.
+M1.1 through M6 are not started. M1.0 is in place.
 
 ## Commands
 

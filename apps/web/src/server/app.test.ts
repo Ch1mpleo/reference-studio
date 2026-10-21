@@ -26,6 +26,7 @@ function testConfig(dataDir: string): AppConfig {
     port: 4317,
     dataDir,
     token: "local-test-token",
+    sessionKey: "local-test-session-key",
     allowedOrigins: ["http://127.0.0.1:4317", "http://127.0.0.1:5173"],
     allowedHosts: ["127.0.0.1:4317", "localhost:4317"],
     contractVersion: 1,
@@ -142,7 +143,12 @@ describe("application service", () => {
     const { app, hub } = await startApp();
     const received: string[] = [];
     hub.subscribe((event) => received.push(event.type));
-    publishChange(hub);
+    publishChange(hub, {
+      entity: "project",
+      entityId: "00000000-0000-4000-8000-000000000001",
+      projectId: "00000000-0000-4000-8000-000000000001",
+      revision: 1,
+    });
     expect(received).toEqual(["changed"]);
     await app.close();
   });
@@ -150,7 +156,9 @@ describe("application service", () => {
   it("closes an open event stream during shutdown and accepts a new client", async () => {
     const first = await startApp();
     const port = await listen(first.app, first.config);
-    const events = await fetch(`http://127.0.0.1:${port}/api/events`);
+    const events = await fetch(`http://127.0.0.1:${port}/api/events`, {
+      headers: { authorization: "Bearer local-test-token" },
+    });
     expect(events.status).toBe(200);
     expect(events.body).not.toBeNull();
     const reader = events.body?.getReader();
@@ -180,7 +188,9 @@ describe("application service", () => {
     await restarted.listen({ host: "127.0.0.1", port });
     const health = await fetch(`http://127.0.0.1:${port}/api/health`);
     expect(health.status).toBe(200);
-    const nextEvents = await fetch(`http://127.0.0.1:${port}/api/events`);
+    const nextEvents = await fetch(`http://127.0.0.1:${port}/api/events`, {
+      headers: { authorization: "Bearer local-test-token" },
+    });
     expect(nextEvents.status).toBe(200);
     await nextEvents.body?.cancel();
     await restarted.close();

@@ -2,13 +2,14 @@ import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONTRACT_VERSION } from "@reference-studio/core";
-import { ensureToken } from "./auth.js";
+import { ensureSessionKey, ensureToken } from "./auth.js";
 
 export type AppConfig = {
   host: "127.0.0.1";
   port: number;
   dataDir: string;
   token: string;
+  sessionKey: string;
   allowedOrigins: string[];
   allowedHosts: string[];
   contractVersion: number;
@@ -22,6 +23,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   );
   const port = readPort(env.REFERENCE_STUDIO_PORT);
   const token = ensureToken(dataDir);
+  const sessionKey = ensureSessionKey(dataDir);
   const devOrigins = splitCsv(
     env.REFERENCE_STUDIO_DEV_ORIGINS ?? "http://127.0.0.1:5173,http://localhost:5173",
   );
@@ -31,6 +33,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     port,
     dataDir,
     token,
+    sessionKey,
     allowedOrigins: [`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...devOrigins],
     allowedHosts: [`127.0.0.1:${port}`, `localhost:${port}`],
     contractVersion: CONTRACT_VERSION,

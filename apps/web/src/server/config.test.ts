@@ -72,6 +72,7 @@ describe("runtime configuration", () => {
     expect(connection.contractVersion).toBe(1);
     expect(connection.baseUrl).toBe("http://127.0.0.1:4317");
     expect(JSON.stringify(connection)).not.toContain(config.token);
+    expect(JSON.stringify(connection)).not.toContain(config.sessionKey);
   });
 
   it("removes a connection file only for the recorded process", () => {
