@@ -50,6 +50,8 @@ describe("ReferenceCollection", () => {
         onAddImage,
         onAddLink: vi.fn(),
         onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onPlace: vi.fn(),
       }),
     );
     const file = new File([Uint8Array.from([1, 2, 3])], "north.png", { type: "image/png" });
@@ -86,6 +88,8 @@ describe("ReferenceCollection", () => {
         onAddImage: vi.fn(),
         onAddLink,
         onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onPlace: vi.fn(),
       }),
     );
     const input = view.container.querySelector<HTMLInputElement>("#reference-link");

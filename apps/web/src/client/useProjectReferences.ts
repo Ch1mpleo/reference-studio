@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CreateLinkReference, CreateNoteReference, ImageFields, ProjectReference } from "@reference-studio/core";
+import type {
+  CreateLinkReference,
+  CreateNoteReference,
+  ImageFields,
+  LibraryReference,
+  ProjectReference,
+} from "@reference-studio/core";
 import {
   addProjectLink,
   addProjectNote,
   listProjectReferences,
+  placeReference,
   ReferenceRequestError,
+  updateReference,
   uploadProjectImage,
+  type ReferenceDetailsInput,
 } from "./referenceApi.js";
 
 export function useProjectReferences(projectId: string, refreshKey: number): {
@@ -14,6 +23,8 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
   addImage: (file: File, fields: ImageFields) => Promise<ProjectReference>;
   addLink: (input: CreateLinkReference) => Promise<ProjectReference>;
   addNote: (input: CreateNoteReference) => Promise<ProjectReference>;
+  saveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+  place: (referenceId: string) => Promise<ProjectReference>;
 } {
   const [references, setReferences] = useState<ProjectReference[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
@@ -76,5 +87,27 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     [projectId, remember],
   );
 
-  return { references, notice, addImage, addLink, addNote };
+  const saveDetails = useCallback(
+    async (referenceId: string, input: ReferenceDetailsInput): Promise<LibraryReference> => {
+      const saved = await updateReference(referenceId, input);
+      generation.current += 1;
+      setReferences((current) =>
+        current.map((item) => (item.reference.id === saved.id ? { ...item, reference: saved } : item)),
+      );
+      setNotice(null);
+      return saved;
+    },
+    [],
+  );
+
+  const place = useCallback(
+    async (referenceId: string): Promise<ProjectReference> => {
+      const item = await placeReference(projectId, referenceId);
+      remember(item);
+      return item;
+    },
+    [projectId, remember],
+  );
+
+  return { references, notice, addImage, addLink, addNote, saveDetails, place };
 }

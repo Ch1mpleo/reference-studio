@@ -77,12 +77,12 @@ function agentHeaders(idempotencyKey?: string, extra?: Record<string, string>): 
   };
 }
 
-async function createProject(app: FastifyInstance): Promise<string> {
+async function createProject(app: FastifyInstance, name = "Atlas", key = "project-key"): Promise<string> {
   const response = await app.inject({
     method: "POST",
     url: "/api/projects",
-    headers: agentHeaders("project-key", { "content-type": "application/json" }),
-    payload: { name: "Atlas" },
+    headers: agentHeaders(key, { "content-type": "application/json" }),
+    payload: { name },
   });
   expect(response.statusCode).toBe(201);
   const body = response.json() as { id: string };
@@ -424,5 +424,266 @@ describe("reference ingestion", () => {
     });
     expect(listed.statusCode).toBe(200);
     expect(listed.json()).toEqual({ references: [] });
+  });
+});
+
+describe("reference details and search", () => {
+  it("shares edited facts across projects and leaves placement notes empty", async () => {
+    const { app, database, hub } = await startApp();
+    const atlas = await createProject(app, "Atlas", "project-atlas");
+    const harbor = await createProject(app, "Harbor", "project-harbor");
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${atlas}/references/notes`,
+      headers: agentHeaders("note-north", { "content-type": "application/json" }),
+      payload: { body: "North light", title: "", sourceUrl: "", creator: "", motion: null },
+    });
+    expect(created.statusCode).toBe(201);
+    const referenceId = (created.json() as { reference: { id: string; revision: number } }).reference.id;
+    const events: StudioEvent[] = [];
+    const unsubscribe = hub.subscribe((event) => events.push(event));
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/api/references/${referenceId}`,
+      headers: agentHeaders("edit-north", { "content-type": "application/json" }),
+      payload: {
+        expectedRevision: 1,
+        title: "North stair",
+        sourceUrl: "",
+        creator: "",
+        observations: "Quiet stone",
+        tags: [" North ", "north", "type"],
+      },
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json()).toMatchObject({
+      title: "North stair",
+      sourceUrl: null,
+      creator: null,
+      observations: "Quiet stone",
+      tags: ["North", "type"],
+      revision: 2,
+    });
+    const replay = await app.inject({
+      method: "PATCH",
+      url: `/api/references/${referenceId}`,
+      headers: agentHeaders("edit-north", { "content-type": "application/json" }),
+      payload: {
+        expectedRevision: 1,
+        title: "North stair",
+        sourceUrl: "",
+        creator: "",
+        observations: "Quiet stone",
+        tags: [" North ", "north", "type"],
+      },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ revision: 2 });
+    const mismatch = await app.inject({
+      method: "PATCH",
+      url: `/api/references/${referenceId}`,
+      headers: agentHeaders("edit-north", { "content-type": "application/json" }),
+      payload: {
+        expectedRevision: 2,
+        title: "Different",
+        sourceUrl: "",
+        creator: "",
+        observations: "Quiet stone",
+        tags: ["North"],
+      },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json()).toMatchObject({ error: { details: { reason: "idempotency_mismatch" } } });
+
+    const placed = await app.inject({
+      method: "POST",
+      url: `/api/projects/${harbor}/placements`,
+      headers: agentHeaders("place-harbor", { "content-type": "application/json" }),
+      payload: { referenceId },
+    });
+    expect(placed.statusCode).toBe(201);
+    expect(placed.json()).toMatchObject({
+      role: "inspiration",
+      reference: { id: referenceId, observations: "Quiet stone", creator: null },
+    });
+    const again = await app.inject({
+      method: "POST",
+      url: `/api/projects/${harbor}/placements`,
+      headers: agentHeaders("place-harbor-again", { "content-type": "application/json" }),
+      payload: { referenceId },
+    });
+    expect(again.statusCode).toBe(409);
+    expect(again.json()).toMatchObject({ error: { details: { reason: "already_placed" } } });
+    const notes = database
+      .prepare("SELECT usage_notes, interpretation FROM placements WHERE project_id = ? AND reference_id = ?")
+      .get(harbor, referenceId) as { usage_notes: string; interpretation: string };
+    expect(notes).toEqual({ usage_notes: "", interpretation: "" });
+    expect(countRows(database, "placements")).toBe(2);
+
+    for (const projectId of [atlas, harbor]) {
+      const listed = await app.inject({
+        method: "GET",
+        url: `/api/projects/${projectId}/references`,
+        headers: agentHeaders(),
+      });
+      expect(listed.json()).toMatchObject({
+        references: [{ reference: { title: "North stair", observations: "Quiet stone", creator: null } }],
+      });
+    }
+
+    const stale = await app.inject({
+      method: "PATCH",
+      url: `/api/references/${referenceId}`,
+      headers: agentHeaders("edit-stale", { "content-type": "application/json" }),
+      payload: {
+        expectedRevision: 1,
+        title: "Lost edit",
+        sourceUrl: "",
+        creator: "",
+        observations: "Should not apply",
+        tags: [],
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({
+      error: { details: { currentRevision: 2, expectedRevision: 1, recordType: "reference", recordId: referenceId } },
+    });
+    const unchanged = await app.inject({
+      method: "PATCH",
+      url: `/api/references/${referenceId}`,
+      headers: agentHeaders("edit-same", { "content-type": "application/json" }),
+      payload: {
+        expectedRevision: 2,
+        title: "North stair",
+        sourceUrl: "",
+        creator: "",
+        observations: "Quiet stone",
+        tags: ["North", "type"],
+      },
+    });
+    expect(unchanged.statusCode).toBe(200);
+    expect(unchanged.json()).toMatchObject({ revision: 2 });
+    const cleared = await app.inject({
+      method: "POST",
+      url: `/api/projects/${atlas}/references/links`,
+      headers: agentHeaders("link-keep", { "content-type": "application/json" }),
+      payload: { url: "https://example.com/board", title: "", creator: "", observations: "", motion: null },
+    });
+    expect(cleared.statusCode).toBe(201);
+    const linkId = (cleared.json() as { reference: { id: string } }).reference.id;
+    const clearSource = await app.inject({
+      method: "PATCH",
+      url: `/api/references/${linkId}`,
+      headers: agentHeaders("clear-link", { "content-type": "application/json" }),
+      payload: { expectedRevision: 1, sourceUrl: "" },
+    });
+    expect(clearSource.statusCode).toBe(400);
+    expect(events.filter((event) => event.type === "changed" && event.entityId === referenceId)).toHaveLength(2);
+    unsubscribe();
+  });
+
+  it("pages metadata search and keeps image bytes on the asset route", async () => {
+    const { app, database } = await startApp();
+    const projectId = await createProject(app);
+    const form = multipart(PNG_1X1, "window.png", { title: "Window" });
+    const image = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/images`,
+      headers: agentHeaders("image-window", { "content-type": form.contentType }),
+      payload: form.payload,
+    });
+    expect(image.statusCode).toBe(201);
+    const assetId = (image.json() as { reference: { asset: { id: string } } }).reference.asset.id;
+    const titles = ["Oldest stair", "Middle stair", "Newest stair"];
+    const stamps = ["2026-10-21T00:00:00.000Z", "2026-10-21T00:00:01.000Z", "2026-10-21T00:00:02.000Z"];
+    const ids: string[] = [];
+    for (const [index, title] of titles.entries()) {
+      const note = await app.inject({
+        method: "POST",
+        url: `/api/projects/${projectId}/references/notes`,
+        headers: agentHeaders(`note-${index}`, { "content-type": "application/json" }),
+        payload: { body: title, title, sourceUrl: "", creator: "", motion: null },
+      });
+      expect(note.statusCode).toBe(201);
+      const id = (note.json() as { reference: { id: string } }).reference.id;
+      ids.push(id);
+      const stamp = stamps[index];
+      if (stamp === undefined) {
+        throw new Error("Missing stamp.");
+      }
+      const tagged = await app.inject({
+        method: "PATCH",
+        url: `/api/references/${id}`,
+        headers: agentHeaders(`tag-${index}`, { "content-type": "application/json" }),
+        payload: {
+          expectedRevision: 1,
+          tags: [index === 0 ? "northern" : "north"],
+          observations: title,
+        },
+      });
+      expect(tagged.statusCode).toBe(200);
+    }
+    for (const [index, id] of ids.entries()) {
+      const stamp = stamps[index];
+      if (stamp === undefined) {
+        throw new Error("Missing stamp.");
+      }
+      database.prepare(`UPDATE "references" SET updated_at = ? WHERE id = ?`).run(stamp, id);
+    }
+
+    const anonymous = await app.inject({ method: "GET", url: "/api/references?q=stair", headers: { host } });
+    expect(anonymous.statusCode).toBe(401);
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/api/references?cursor=not-a-cursor",
+      headers: agentHeaders(),
+    });
+    expect(invalid.statusCode).toBe(400);
+    const first = await app.inject({
+      method: "GET",
+      url: "/api/references?q=NORTH&kind=note&limit=2",
+      headers: agentHeaders(),
+    });
+    expect(first.statusCode).toBe(200);
+    const firstBody = first.json() as { references: Array<{ id: string; title: string }>; nextCursor: string | null };
+    expect(firstBody.references.map((item) => item.title)).toEqual(["Newest stair", "Middle stair"]);
+    expect(first.body).not.toContain("original_path");
+    expect(first.body).not.toContain("iVBORw0KGgo");
+    expect(first.body).not.toContain("placementId");
+    expect(firstBody.nextCursor).toEqual(expect.any(String));
+    const second = await app.inject({
+      method: "GET",
+      url: `/api/references?q=NORTH&kind=note&limit=2&cursor=${encodeURIComponent(firstBody.nextCursor ?? "")}`,
+      headers: agentHeaders(),
+    });
+    expect(second.json()).toMatchObject({
+      references: [{ title: "Oldest stair" }],
+      nextCursor: null,
+    });
+    const exact = await app.inject({
+      method: "GET",
+      url: "/api/references?tag=north&kind=note",
+      headers: agentHeaders(),
+    });
+    const exactTitles = (exact.json() as { references: Array<{ title: string }> }).references.map((item) => item.title);
+    expect(exactTitles).not.toContain("Oldest stair");
+    expect(exactTitles).toEqual(expect.arrayContaining(["Newest stair", "Middle stair"]));
+    const foundImage = await app.inject({
+      method: "GET",
+      url: "/api/references?q=Window&kind=image",
+      headers: agentHeaders(),
+    });
+    expect(foundImage.body).not.toContain("assets/");
+    expect(foundImage.json()).toMatchObject({
+      references: [{ title: "Window", asset: { id: assetId, mediaType: "image/png" } }],
+    });
+    const thumbnail = await app.inject({
+      method: "GET",
+      url: `/api/assets/${assetId}/thumbnail`,
+      headers: agentHeaders(),
+    });
+    expect(thumbnail.statusCode).toBe(200);
+    expect(thumbnail.headers["content-type"]).toContain("image/webp");
+    expect(thumbnail.rawPayload.subarray(0, 4).toString("ascii")).toBe("RIFF");
   });
 });

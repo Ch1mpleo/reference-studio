@@ -150,6 +150,112 @@ export const projectReferenceListSchema = z.object({
 
 export type ProjectReferenceList = z.infer<typeof projectReferenceListSchema>;
 
+export const MAX_REFERENCE_TAGS = 20;
+export const REFERENCE_PAGE_LIMIT = 20;
+export const MAX_REFERENCE_PAGE_LIMIT = 50;
+
+const editableSource = z
+  .string()
+  .trim()
+  .max(2_000)
+  .refine((value) => value === "" || isHttpUrl(value), { message: "Use an http or https link." })
+  .transform((value) => (value === "" ? null : value));
+
+const editableCreator = z
+  .string()
+  .trim()
+  .max(200)
+  .transform((value) => (value === "" ? null : value));
+
+export function normalizeTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const tag of tags) {
+    const trimmed = tag.trim();
+    if (trimmed === "") {
+      continue;
+    }
+    const key = trimmed.toLocaleLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
+
+export const updateReferenceRequestSchema = z
+  .object({
+    expectedRevision: z.number().int().positive(),
+    title: z.string().trim().min(1).max(200).optional(),
+    sourceUrl: editableSource.optional(),
+    creator: editableCreator.optional(),
+    observations: z.string().max(20_000).optional(),
+    tags: z.array(z.string().trim().max(40)).max(40).optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.title !== undefined ||
+      value.sourceUrl !== undefined ||
+      value.creator !== undefined ||
+      value.observations !== undefined ||
+      value.tags !== undefined,
+    { message: "Update must change at least one field." },
+  )
+  .refine((value) => value.tags === undefined || normalizeTags(value.tags).length <= MAX_REFERENCE_TAGS, {
+    message: "Use at most 20 tags.",
+  })
+  .transform((value) => ({
+    ...value,
+    tags: value.tags === undefined ? undefined : normalizeTags(value.tags),
+  }));
+
+export type UpdateReferenceRequest = z.infer<typeof updateReferenceRequestSchema>;
+
+export const createPlacementRequestSchema = z
+  .object({
+    referenceId: z.uuid(),
+  })
+  .strict();
+
+export type CreatePlacementRequest = z.infer<typeof createPlacementRequestSchema>;
+
+export const referenceSearchQuerySchema = z.object({
+  q: z.string().trim().max(200).default(""),
+  tag: z.string().trim().max(40).default(""),
+  kind: z.enum(REFERENCE_KINDS).optional(),
+  limit: z.coerce.number().int().min(1).max(MAX_REFERENCE_PAGE_LIMIT).default(REFERENCE_PAGE_LIMIT),
+  cursor: z.string().min(1).max(240).optional(),
+});
+
+export type ReferenceSearchQuery = z.infer<typeof referenceSearchQuerySchema>;
+
+export const referenceSearchResultSchema = z.object({
+  references: z.array(libraryReferenceSchema),
+  nextCursor: z.string().nullable(),
+});
+
+export type ReferenceSearchResult = z.infer<typeof referenceSearchResultSchema>;
+
+const referenceCursorPattern =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+export function referenceCursor(updatedAt: string, id: string): string {
+  return `${updatedAt}|${id}`;
+}
+
+export function readReferenceCursor(value: string): { updatedAt: string; id: string } | undefined {
+  const match = referenceCursorPattern.exec(value);
+  const updatedAt = match?.[1];
+  const id = match?.[2];
+  if (updatedAt === undefined || id === undefined) {
+    return undefined;
+  }
+  return { updatedAt, id };
+}
+
 export function parseRecordId(value: unknown): string | undefined {
   const parsed = z.uuid().safeParse(value);
   return parsed.success ? parsed.data : undefined;

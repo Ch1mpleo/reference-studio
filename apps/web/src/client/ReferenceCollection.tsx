@@ -9,10 +9,13 @@ import {
   type CreateLinkReference,
   type CreateNoteReference,
   type ImageFields,
+  type LibraryReference,
   type MotionMark,
   type ProjectReference,
 } from "@reference-studio/core";
-import { ReferenceRequestError } from "./referenceApi.js";
+import { ReferenceDetails } from "./ReferenceDetails.js";
+import { ReferenceSearch } from "./ReferenceSearch.js";
+import { ReferenceRequestError, type ReferenceDetailsInput } from "./referenceApi.js";
 
 type AddState = "idle" | "adding" | "added" | "error";
 
@@ -24,12 +27,16 @@ export function ReferenceCollection({
   onAddImage,
   onAddLink,
   onAddNote,
+  onSaveDetails,
+  onPlace,
 }: {
   references: ProjectReference[];
   notice: string | null;
   onAddImage: (file: File, fields: ImageFields) => Promise<ProjectReference>;
   onAddLink: (input: CreateLinkReference) => Promise<ProjectReference>;
   onAddNote: (input: CreateNoteReference) => Promise<ProjectReference>;
+  onSaveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+  onPlace: (referenceId: string) => Promise<ProjectReference>;
 }) {
   const [state, setState] = useState<AddState>("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -104,6 +111,10 @@ export function ReferenceCollection({
         </p>
       </div>
       <p>Add an image, a link, or a note. Source and creator can stay unknown.</p>
+      <ReferenceSearch
+        placedReferenceIds={references.map((item) => item.reference.id)}
+        onPlace={onPlace}
+      />
       {notice !== null ? <p className="form-error">{notice}</p> : null}
       {message !== null ? <p className="form-error">{message}</p> : null}
       <ImageForm disabled={adding} onFile={(file) => void addFiles([file])} onError={showError} />
@@ -124,7 +135,7 @@ export function ReferenceCollection({
       {references.length > 0 ? (
         <ul className="reference-list">
           {references.map((item) => (
-            <ReferenceCard key={item.placementId} item={item} />
+            <ReferenceCard key={item.placementId} item={item} onSave={onSaveDetails} />
           ))}
         </ul>
       ) : null}
@@ -462,7 +473,13 @@ function MotionFields({
   );
 }
 
-function ReferenceCard({ item }: { item: ProjectReference }) {
+function ReferenceCard({
+  item,
+  onSave,
+}: {
+  item: ProjectReference;
+  onSave: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+}) {
   const reference = item.reference;
   return (
     <li className="reference-card">
@@ -488,6 +505,7 @@ function ReferenceCard({ item }: { item: ProjectReference }) {
             {reference.sourceUrl}
           </a>
         ) : null}
+        {reference.tags.length > 0 ? <p className="reference-meta">{reference.tags.join(", ")}</p> : null}
         {reference.observations !== "" ? <p>{reference.observations}</p> : null}
         {reference.motion !== null ? (
           <p className="reference-meta">
@@ -495,6 +513,7 @@ function ReferenceCard({ item }: { item: ProjectReference }) {
             {reference.motion.behavior === "" ? "" : ` ${reference.motion.behavior}`}
           </p>
         ) : null}
+        <ReferenceDetails reference={reference} onSave={onSave} />
       </div>
     </li>
   );

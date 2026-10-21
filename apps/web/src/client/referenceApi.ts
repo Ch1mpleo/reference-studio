@@ -2,29 +2,53 @@ import {
   canonicalRequestJson,
   createLinkReferenceSchema,
   createNoteReferenceSchema,
+  createPlacementRequestSchema,
   imageFieldSchema,
   imageRequestForStorage,
+  libraryReferenceSchema,
   linkRequestForStorage,
   noteRequestForStorage,
   parseContract,
   projectReferenceListSchema,
   projectReferenceSchema,
+  referenceSearchResultSchema,
   serviceErrorBodySchema,
+  updateReferenceRequestSchema,
   type CreateLinkReference,
   type CreateNoteReference,
   type ImageFields,
+  type LibraryReference,
   type ProjectReference,
+  type ReferenceSearchResult,
 } from "@reference-studio/core";
 
 export class ReferenceRequestError extends Error {
   readonly code: string;
+  readonly currentRevision: number | undefined;
 
-  constructor(message: string, code: string) {
+  constructor(message: string, code: string, currentRevision?: number) {
     super(message);
     this.name = "ReferenceRequestError";
     this.code = code;
+    this.currentRevision = currentRevision;
   }
 }
+
+export type ReferenceDetailsInput = {
+  expectedRevision: number;
+  title: string;
+  sourceUrl: string;
+  creator: string;
+  observations: string;
+  tags: string[];
+};
+
+export type ReferenceSearchInput = {
+  q: string;
+  tag: string;
+  kind: "" | "image" | "link" | "note";
+  cursor?: string;
+};
 
 type KeyMemory = { key: string; hash: string };
 
@@ -76,6 +100,43 @@ export async function addProjectLink(projectId: string, input: CreateLinkReferen
   return parseContract(projectReferenceSchema, await response.json(), "Reference was invalid.");
 }
 
+export async function updateReference(referenceId: string, input: ReferenceDetailsInput): Promise<LibraryReference> {
+  const parsed = parseContract(updateReferenceRequestSchema, input, "Reference details are invalid.");
+  const response = await send(`/api/references/${referenceId}`, parsed, { json: input }, "PATCH");
+  return parseContract(libraryReferenceSchema, await response.json(), "Reference was invalid.");
+}
+
+export async function placeReference(projectId: string, referenceId: string): Promise<ProjectReference> {
+  const parsed = parseContract(createPlacementRequestSchema, { referenceId }, "Placement is invalid.");
+  const response = await send(`/api/projects/${projectId}/placements`, parsed, { json: parsed });
+  return parseContract(projectReferenceSchema, await response.json(), "Reference was invalid.");
+}
+
+export async function searchReferences(input: ReferenceSearchInput): Promise<ReferenceSearchResult> {
+  const params = new URLSearchParams();
+  if (input.q !== "") {
+    params.set("q", input.q);
+  }
+  if (input.tag !== "") {
+    params.set("tag", input.tag);
+  }
+  if (input.kind !== "") {
+    params.set("kind", input.kind);
+  }
+  params.set("limit", "20");
+  if (input.cursor !== undefined) {
+    params.set("cursor", input.cursor);
+  }
+  const response = await fetch(`/api/references?${params.toString()}`, {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw await readError(response);
+  }
+  return parseContract(referenceSearchResultSchema, await response.json(), "Search results were invalid.");
+}
+
 export async function addProjectNote(projectId: string, input: CreateNoteReference): Promise<ProjectReference> {
   const parsed = parseContract(createNoteReferenceSchema, input, "Note is invalid.");
   const response = await send(`/api/projects/${projectId}/references/notes`, noteRequestForStorage(parsed), {
@@ -88,12 +149,13 @@ async function send(
   url: string,
   canonical: unknown,
   body: { json: unknown } | { form: FormData },
+  method: "POST" | "PATCH" = "POST",
 ): Promise<Response> {
   const key = idempotencyKey(canonical);
   let response: Response;
   try {
     response = await fetch(url, {
-      method: "POST",
+      method,
       credentials: "same-origin",
       cache: "no-store",
       headers:
@@ -141,7 +203,15 @@ async function readError(response: Response): Promise<ReferenceRequestError> {
   const issue = firstIssue(parsed.data.error.details);
   const message =
     parsed.data.error.code === "validation" && issue !== undefined ? issue : parsed.data.error.message;
-  return new ReferenceRequestError(message, parsed.data.error.code);
+  return new ReferenceRequestError(message, parsed.data.error.code, readCurrentRevision(parsed.data.error.details));
+}
+
+function readCurrentRevision(details: unknown): number | undefined {
+  if (typeof details !== "object" || details === null || !("currentRevision" in details)) {
+    return undefined;
+  }
+  const revision = details.currentRevision;
+  return typeof revision === "number" && Number.isInteger(revision) && revision > 0 ? revision : undefined;
 }
 
 function firstIssue(details: unknown): string | undefined {

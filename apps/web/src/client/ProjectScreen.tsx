@@ -294,6 +294,8 @@ function ProjectEditor({
       onAddImage={collection.addImage}
       onAddLink={collection.addLink}
       onAddNote={collection.addNote}
+      onSaveDetails={collection.saveDetails}
+      onPlace={collection.place}
     />
     </>
   );

@@ -1,18 +1,28 @@
 import {
+  assertExpectedRevision,
   createId,
   createLinkReferenceSchema,
   createNoteReferenceSchema,
+  createPlacementRequestSchema,
   imageFieldSchema,
   imageRequestForStorage,
   imageTooLargeMessage,
+  libraryReferenceSchema,
   linkRequestForStorage,
   noteRequestForStorage,
   parseContract,
   parseRecordId,
   projectReferenceSchema,
+  readReferenceCursor,
+  referenceCursor,
+  referenceSearchQuerySchema,
+  referenceSearchResultSchema,
   ServiceError,
   mutationScope,
+  updateReferenceRequestSchema,
+  type LibraryReference,
   type ProjectReference,
+  type UpdateReferenceRequest,
 } from "@reference-studio/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
@@ -118,6 +128,54 @@ export function registerReferenceRoutes(
     return createTextReference(request, reply, database, hub, "note");
   });
 
+  app.get("/api/references", async (request) => {
+    requireCaller(request);
+    return searchReferences(database, readSearchQuery(request.query));
+  });
+
+  app.patch("/api/references/:referenceId", async (request, reply) => {
+    requireJson(request, "Send reference details as application/json.");
+    const caller = requireCaller(request);
+    const referenceId = requireReferenceId(routeParam(request, "referenceId"));
+    const key = readIdempotencyKey(request.headers["idempotency-key"]);
+    const input = parseContract(updateReferenceRequestSchema, request.body, "Reference details are invalid.");
+    const outcome = commitMutation(database, {
+      scope: mutationScope(caller, "reference.update", referenceId),
+      key,
+      requestHash: hashCanonicalRequest(input),
+      execute: () => {
+        const reference = updateReference(database, referenceId, input);
+        return {
+          statusCode: 200,
+          body: reference,
+          revision: reference.revision,
+          changed: reference.revision !== input.expectedRevision,
+        };
+      },
+    });
+    publishLibraryChange(hub, database, outcome);
+    return reply.code(outcome.statusCode).send(outcome.body);
+  });
+
+  app.post("/api/projects/:projectId/placements", async (request, reply) => {
+    requireJson(request, "Send the placement as application/json.");
+    const caller = requireCaller(request);
+    const projectId = requireProject(database, routeParam(request, "projectId"));
+    const key = readIdempotencyKey(request.headers["idempotency-key"]);
+    const input = parseContract(createPlacementRequestSchema, request.body, "Placement is invalid.");
+    const outcome = commitMutation(database, {
+      scope: mutationScope(caller, "placement.create", projectId),
+      key,
+      requestHash: hashCanonicalRequest(input),
+      execute: () => {
+        const placed = placeReference(database, projectId, input.referenceId);
+        return { statusCode: 201, body: placed, revision: placed.reference.revision, changed: true };
+      },
+    });
+    publishReference(hub, projectId, outcome);
+    return reply.code(outcome.statusCode).send(outcome.body);
+  });
+
   app.get("/api/assets/:assetId/original", async (request, reply) => {
     return sendAsset(database, dataDir, routeParam(request, "assetId"), "original", reply);
   });
@@ -179,10 +237,13 @@ function requireProject(database: DatabaseSync, value: string | undefined): stri
   return projectId;
 }
 
-function requireJson(request: FastifyRequest): void {
+function requireJson(
+  request: FastifyRequest,
+  message = "Send link and note changes as application/json.",
+): void {
   const mediaType = headerValue(request.headers["content-type"])?.split(";")[0]?.trim().toLowerCase();
   if (mediaType !== "application/json") {
-    throw new ServiceError("unsupported_media", "Send link and note changes as application/json.");
+    throw new ServiceError("unsupported_media", message);
   }
 }
 
@@ -525,6 +586,325 @@ function sendAsset(
   return reply.header("cache-control", "private, max-age=86400").type(mediaType).send(bytes);
 }
 
+const LIBRARY_COLUMNS = `
+  "references".id AS id,
+  "references".kind AS kind,
+  "references".title AS title,
+  "references".source_url AS source_url,
+  "references".creator AS creator,
+  "references".observations AS observations,
+  "references".tags_json AS tags_json,
+  "references".availability AS availability,
+  "references".archived AS archived,
+  "references".motion_start AS motion_start,
+  "references".motion_end AS motion_end,
+  "references".motion_behavior AS motion_behavior,
+  "references".revision AS revision,
+  "references".created_at AS created_at,
+  "references".updated_at AS updated_at,
+  assets.id AS asset_id,
+  assets.sha256 AS sha256,
+  assets.media_type AS media_type,
+  assets.byte_size AS byte_size,
+  assets.width AS width,
+  assets.height AS height
+`;
+
+function readSearchQuery(query: unknown): {
+  q: string;
+  tag: string;
+  kind?: "image" | "link" | "note";
+  limit: number;
+  cursor?: string;
+} {
+  if (typeof query !== "object" || query === null) {
+    throw new ServiceError("validation", "Search is invalid.");
+  }
+  const record = query as Record<string, unknown>;
+  const single = (name: string): unknown => {
+    const value = record[name];
+    if (Array.isArray(value)) {
+      throw new ServiceError("validation", "Send each search field once.");
+    }
+    return value;
+  };
+  const kind = single("kind");
+  const limit = single("limit");
+  const cursor = single("cursor");
+  return parseContract(
+    referenceSearchQuerySchema,
+    {
+      q: single("q") ?? "",
+      tag: single("tag") ?? "",
+      ...(kind === undefined || kind === "" ? {} : { kind }),
+      ...(limit === undefined || limit === "" ? {} : { limit }),
+      ...(cursor === undefined || cursor === "" ? {} : { cursor }),
+    },
+    "Search is invalid.",
+  );
+}
+
+function searchReferences(
+  database: DatabaseSync,
+  query: { q: string; tag: string; kind?: "image" | "link" | "note"; limit: number; cursor?: string },
+): { references: LibraryReference[]; nextCursor: string | null } {
+  const cursor = query.cursor === undefined ? undefined : readReferenceCursor(query.cursor);
+  if (query.cursor !== undefined && cursor === undefined) {
+    throw new ServiceError("validation", "Search cursor is invalid.");
+  }
+  const like = query.q === "" ? null : likeContains(query.q);
+  const rows = database
+    .prepare(
+      `SELECT ${LIBRARY_COLUMNS}
+       FROM "references"
+       LEFT JOIN assets ON assets.id = "references".asset_id
+       WHERE "references".archived = 0
+         AND (? IS NULL OR "references".kind = ?)
+         AND (
+           ? = ''
+           OR EXISTS (
+             SELECT 1 FROM json_each("references".tags_json) AS tag
+             WHERE lower(tag.value) = lower(?)
+           )
+         )
+         AND (
+           ? IS NULL
+           OR "references".title LIKE ? ESCAPE '\\'
+           OR IFNULL("references".source_url, '') LIKE ? ESCAPE '\\'
+           OR IFNULL("references".creator, '') LIKE ? ESCAPE '\\'
+           OR "references".observations LIKE ? ESCAPE '\\'
+           OR EXISTS (
+             SELECT 1 FROM json_each("references".tags_json) AS keyword_tag
+             WHERE keyword_tag.value LIKE ? ESCAPE '\\'
+           )
+         )
+         AND (
+           ? IS NULL
+           OR "references".updated_at < ?
+           OR ("references".updated_at = ? AND "references".id > ?)
+         )
+       ORDER BY "references".updated_at DESC, "references".id ASC
+       LIMIT ?`,
+    )
+    .all(
+      query.kind ?? null,
+      query.kind ?? null,
+      query.tag,
+      query.tag,
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      cursor?.updatedAt ?? null,
+      cursor?.updatedAt ?? null,
+      cursor?.updatedAt ?? null,
+      cursor?.id ?? null,
+      query.limit + 1,
+    );
+  const page = rows.slice(0, query.limit).map((row) => libraryReferenceFromRow(row));
+  const last = page.at(-1);
+  const nextCursor = rows.length > query.limit && last !== undefined ? referenceCursor(last.updatedAt, last.id) : null;
+  return referenceSearchResultSchema.parse({ references: page, nextCursor });
+}
+
+function updateReference(database: DatabaseSync, id: string, input: UpdateReferenceRequest): LibraryReference {
+  const current = findLibraryReference(database, id);
+  if (current === undefined) {
+    throw new ServiceError("not_found", "Reference was not found.");
+  }
+  assertExpectedRevision(current.revision, input.expectedRevision, { type: "reference", id });
+  const title = input.title ?? current.title;
+  const sourceUrl = input.sourceUrl === undefined ? current.sourceUrl : input.sourceUrl;
+  const creator = input.creator === undefined ? current.creator : input.creator;
+  const observations = input.observations ?? current.observations;
+  const tags = input.tags ?? current.tags;
+  if (current.kind === "link" && sourceUrl === null) {
+    throw new ServiceError("validation", "A link needs an http or https address.");
+  }
+  if (
+    title === current.title &&
+    sourceUrl === current.sourceUrl &&
+    creator === current.creator &&
+    observations === current.observations &&
+    sameTags(tags, current.tags)
+  ) {
+    return current;
+  }
+  const updatedAt = new Date().toISOString();
+  const revision = current.revision + 1;
+  const result = database
+    .prepare(
+      `UPDATE "references"
+       SET title = ?, source_url = ?, creator = ?, observations = ?, tags_json = ?, revision = ?, updated_at = ?
+       WHERE id = ? AND revision = ?`,
+    )
+    .run(title, sourceUrl, creator, observations, JSON.stringify(tags), revision, updatedAt, id, current.revision);
+  if (result.changes !== 1) {
+    const raced = findLibraryReference(database, id);
+    if (raced === undefined) {
+      throw new ServiceError("not_found", "Reference was not found.");
+    }
+    assertExpectedRevision(raced.revision, input.expectedRevision, { type: "reference", id });
+    throw new ServiceError("conflict", "The record changed since it was loaded.", {
+      currentRevision: raced.revision,
+      expectedRevision: input.expectedRevision,
+      recordType: "reference",
+      recordId: id,
+    });
+  }
+  const saved = findLibraryReference(database, id);
+  if (saved === undefined) {
+    throw new Error("Updated reference is missing.");
+  }
+  return saved;
+}
+
+function placeReference(database: DatabaseSync, projectId: string, referenceId: string): ProjectReference {
+  const reference = findLibraryReference(database, referenceId);
+  if (reference === undefined || reference.archived) {
+    throw new ServiceError("not_found", "Reference was not found.");
+  }
+  const existing = database
+    .prepare("SELECT id FROM placements WHERE project_id = ? AND reference_id = ?")
+    .get(projectId, referenceId);
+  if (existing !== undefined) {
+    throw new ServiceError("conflict", "This reference is already in the project.", {
+      reason: "already_placed",
+      referenceId,
+      projectId,
+    });
+  }
+  const placementId = createId();
+  const now = new Date().toISOString();
+  database
+    .prepare(
+      `INSERT INTO placements (
+        id, project_id, reference_id, direction_id, role, usage_notes, crop_json, interpretation, rect_json,
+        revision, created_at, updated_at
+      ) VALUES (?, ?, ?, NULL, 'inspiration', '', NULL, '', NULL, 1, ?, ?)`,
+    )
+    .run(placementId, projectId, referenceId, now, now);
+  const placed = readProjectReference(database, projectId, referenceId);
+  if (placed === undefined) {
+    throw new Error("Placed reference is missing.");
+  }
+  return placed;
+}
+
+function findLibraryReference(database: DatabaseSync, id: string): LibraryReference | undefined {
+  const row = database
+    .prepare(
+      `SELECT ${LIBRARY_COLUMNS}
+       FROM "references"
+       LEFT JOIN assets ON assets.id = "references".asset_id
+       WHERE "references".id = ?`,
+    )
+    .get(id);
+  return row === undefined ? undefined : libraryReferenceFromRow(row);
+}
+
+function readProjectReference(
+  database: DatabaseSync,
+  projectId: string,
+  referenceId: string,
+): ProjectReference | undefined {
+  const row = database
+    .prepare(
+      `SELECT
+        placements.id AS placement_id,
+        placements.role AS role,
+        ${LIBRARY_COLUMNS}
+      FROM placements
+      JOIN "references" ON "references".id = placements.reference_id
+      LEFT JOIN assets ON assets.id = "references".asset_id
+      WHERE placements.project_id = ? AND placements.reference_id = ?`,
+    )
+    .get(projectId, referenceId);
+  return row === undefined ? undefined : projectReferenceFromRow(row);
+}
+
+function projectIdsForReference(database: DatabaseSync, referenceId: string): string[] {
+  const rows = database.prepare("SELECT DISTINCT project_id AS id FROM placements WHERE reference_id = ?").all(referenceId);
+  return rows.flatMap((row) => (isIdRow(row) ? [row.id] : []));
+}
+
+function libraryReferenceFromRow(row: unknown): LibraryReference {
+  if (!isLibraryRow(row)) {
+    throw new Error("Reference row is missing required columns.");
+  }
+  const asset =
+    row.asset_id === null
+      ? null
+      : {
+          id: row.asset_id,
+          sha256: requiredString(row.sha256),
+          mediaType: requiredString(row.media_type),
+          byteSize: readInteger(row.byte_size),
+          width: readInteger(row.width),
+          height: readInteger(row.height),
+        };
+  return libraryReferenceSchema.parse({
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    sourceUrl: row.source_url,
+    creator: row.creator,
+    observations: row.observations,
+    tags: readTags(row.tags_json),
+    availability: row.availability,
+    archived: readInteger(row.archived) === 1,
+    motion:
+      row.motion_start === null
+        ? null
+        : {
+            startSeconds: row.motion_start,
+            endSeconds: row.motion_end,
+            behavior: row.motion_behavior ?? "",
+          },
+    asset,
+    revision: readInteger(row.revision),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function likeContains(value: string): string {
+  return `%${value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+}
+
+function sameTags(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((tag, index) => tag === right[index]);
+}
+
+function requireReferenceId(value: string | undefined): string {
+  const referenceId = parseRecordId(value);
+  if (referenceId === undefined) {
+    throw new ServiceError("not_found", "Reference was not found.");
+  }
+  return referenceId;
+}
+
+function publishLibraryChange(
+  hub: EventHub,
+  database: DatabaseSync,
+  outcome: { body: unknown; changed: boolean; replayed: boolean },
+): void {
+  if (!outcome.changed || outcome.replayed) {
+    return;
+  }
+  const reference = libraryReferenceSchema.parse(outcome.body);
+  for (const projectId of projectIdsForReference(database, reference.id)) {
+    publishChange(hub, {
+      entity: "reference",
+      entityId: reference.id,
+      projectId,
+      revision: reference.revision,
+    });
+  }
+}
+
 function publishReference(
   hub: EventHub,
   projectId: string,
@@ -600,6 +980,33 @@ function isAssetRow(value: unknown): value is AssetRow {
     (typeof row.height === "number" || typeof row.height === "bigint") &&
     typeof row.original_path === "string" &&
     typeof row.thumbnail_path === "string"
+  );
+}
+
+type LibraryRow = Omit<ReferenceListRow, "placement_id" | "role">;
+
+function isLibraryRow(value: unknown): value is LibraryRow {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.id === "string" &&
+    typeof row.kind === "string" &&
+    typeof row.title === "string" &&
+    (row.source_url === null || typeof row.source_url === "string") &&
+    (row.creator === null || typeof row.creator === "string") &&
+    typeof row.observations === "string" &&
+    typeof row.tags_json === "string" &&
+    typeof row.availability === "string" &&
+    (typeof row.archived === "number" || typeof row.archived === "bigint") &&
+    (row.motion_start === null || typeof row.motion_start === "number") &&
+    (row.motion_end === null || typeof row.motion_end === "number") &&
+    (row.motion_behavior === null || typeof row.motion_behavior === "string") &&
+    (typeof row.revision === "number" || typeof row.revision === "bigint") &&
+    typeof row.created_at === "string" &&
+    typeof row.updated_at === "string" &&
+    (row.asset_id === null || typeof row.asset_id === "string")
   );
 }
 

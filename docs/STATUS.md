@@ -4,9 +4,9 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3.
 - Active milestone: M1 — projects and the reference library.
-- Next task: M1.3 — reference details and search.
+- Next task: M1.4 — asset roles.
 
 ## Milestone 0 — Foundation
 
@@ -126,9 +126,27 @@ A project accepts JPEG, PNG, and WebP bytes, an http(s) link, or a note. The ser
 - A failed write can leave an unreferenced content-addressed file. It is not a project record, and the same bytes reuse it later.
 - Node 24 remains unverified.
 
+### M1.3 — Details and search
+
+Title, source, creator, tags, and observations are shared facts on the reference. Editing them updates every project that has placed that reference. A blank source or creator stays null. Adding an existing reference to a project creates an inspiration placement with empty usage notes and does not copy observations into the placement. A second placement of the same reference in one project is rejected. `GET /api/references` searches by keyword, exact tag, and kind, and pages with a cursor of `updated_at` and id. Results are metadata. Thumbnails stay on `GET /api/assets/:id/thumbnail`. The project screen edits those shared details, searches, and adds a result to the open project. A conflicting save keeps the draft.
+
+### Checks
+
+- `npm run check` — passed.
+- `npm test` — passed. 15 files, 59 tests. Coverage includes a shared edit visible from two projects, empty placement notes, a revision conflict, idempotent replay, payload mismatch, exact tag matching, pagination, and a search body without image bytes or filesystem paths.
+- `npm run test:e2e` — passed. 2 Edge tests still connect, retry, and reconnect.
+- Dev browser check — passed on a temporary data directory. Created “Atlas”, added a note, and saved the shared title “North stair”, tags “north, type”, and observations “Quiet stone and north light”, leaving source and creator blank. Search by tag showed “Source unknown” and “In this project”. Created “Harbor”, searched, and added the same reference. Harbor showed the shared title, tags, and observations. After reload, Harbor still had that copy, and Atlas showed the same facts. Enter submitted a keyword search. At 390px the list and detail stack, with no horizontal overflow. At a wide window they sit side by side. Light and dark color schemes both apply. The search JSON had a null creator and source, and it did not include a placement, a filesystem path, or image bytes. The temporary database stored empty usage notes on both placements.
+
+### Known limitations
+
+- The placement role stays inspiration. Usage notes and crops are not edited here. They arrive in M1.4.
+- The interface requests 20 results per page. The service test pages with a limit of 2.
+- Animated images are rejected. Images larger than 20 MB or 12000 pixels on a side are rejected.
+- Node 24 remains unverified.
+
 ## Later milestones
 
-M1.3 through M6 are not started.
+M1.4 through M6 are not started.
 
 ## Commands
 

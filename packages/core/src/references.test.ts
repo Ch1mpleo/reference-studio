@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   createLinkReferenceSchema,
   imageEdgeMessage,
+  normalizeTags,
   parseMotionTimestamp,
+  readReferenceCursor,
+  referenceCursor,
+  updateReferenceRequestSchema,
   titleFromFilename,
   titleFromNote,
   titleFromUrl,
@@ -57,6 +61,27 @@ describe("reference contracts", () => {
     expect(titleFromUrl("https://films.example/watch")).toBe("films.example");
     expect(titleFromNote("North light\nsecond line")).toBe("North light");
     expect(imageEdgeMessage()).toContain("12000");
+  });
+
+  it("keeps an unknown source empty and folds repeated tags", () => {
+    expect(updateReferenceRequestSchema.parse({
+      expectedRevision: 1,
+      title: " North light ",
+      sourceUrl: "  ",
+      creator: "",
+      observations: "Quiet stair",
+      tags: [" North ", "north", " type "],
+    })).toMatchObject({
+      title: "North light",
+      sourceUrl: null,
+      creator: null,
+      tags: ["North", "type"],
+    });
+    expect(normalizeTags(["", "  "])).toEqual([]);
+    const cursor = referenceCursor("2026-10-21T00:00:00.000Z", "00000000-0000-4000-8000-000000000002");
+    expect(readReferenceCursor(cursor)?.id).toBe("00000000-0000-4000-8000-000000000002");
+    expect(readReferenceCursor("not-a-cursor")).toBeUndefined();
+    expect(updateReferenceRequestSchema.safeParse({ expectedRevision: 1 }).success).toBe(false);
   });
 
   it("accepts a reference change event", () => {

@@ -122,7 +122,8 @@ body {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   margin-top: 0.35rem;
   padding: 0.55rem 0.7rem;
@@ -383,8 +384,17 @@ button:hover {
   font-size: 0.85rem;
 }
 
-.reference-card a {
+.reference-card a,
+.reference-form a {
   color: var(--accent);
+}
+
+.reference-details {
+  margin-top: 0.35rem;
+}
+
+.reference-details summary {
+  cursor: pointer;
 }
 
 input[type="file"] {
