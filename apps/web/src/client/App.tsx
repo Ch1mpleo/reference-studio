@@ -63,6 +63,7 @@ export function App() {
         <ProjectScreen
           projects={library.projects}
           notice={library.notice}
+          refreshKey={connection.refreshKey}
           onCreate={library.create}
           onSave={(id, expectedRevision, patch) =>
             library.save(id, { ...patch, expectedRevision } satisfies UpdateProjectRequest)

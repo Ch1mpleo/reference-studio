@@ -1,9 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
+import multipart from "@fastify/multipart";
 import {
   browserSessionResponseSchema,
   healthResponse,
+  imageTooLargeMessage,
+  MAX_IMAGE_BYTES,
   readyEvent,
   ServiceError,
   serviceErrorBody,
@@ -22,6 +25,7 @@ import type { AppConfig } from "./config.js";
 import { EventHub } from "./events.js";
 import { defaultMigrationsDir, migrate } from "./migrate.js";
 import { registerProjectRoutes } from "./projects.js";
+import { registerReferenceRoutes } from "./references.js";
 import { issueSessionCookie } from "./session.js";
 
 export { publishChange } from "./changes.js";
@@ -36,9 +40,20 @@ export type AppDependencies = {
 export async function createApp(dependencies: AppDependencies): Promise<FastifyInstance> {
   const hub = dependencies.hub ?? new EventHub();
   const app = Fastify({
+    bodyLimit: MAX_IMAGE_BYTES + 1024 * 1024,
     logger: {
       level: dependencies.config.logLevel,
       stream: process.stderr,
+    },
+  });
+  await app.register(multipart, {
+    throwFileSizeLimit: true,
+    limits: {
+      fileSize: MAX_IMAGE_BYTES,
+      files: 1,
+      fields: 8,
+      fieldSize: 24_000,
+      parts: 12,
     },
   });
 
@@ -81,6 +96,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   });
 
   registerProjectRoutes(app, dependencies.database, hub);
+  registerReferenceRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
 
   app.get("/api/events", (request, reply) => {
     reply.hijack();
@@ -180,6 +196,30 @@ function transportError(
     return {
       status: 415,
       body: serviceErrorBody(new ServiceError("unsupported_media", "Unsupported media type.")),
+    };
+  }
+  if (error.code === "FST_REQ_FILE_TOO_LARGE" || error.code === "FST_ERR_CTP_BODY_TOO_LARGE") {
+    return {
+      status: 400,
+      body: serviceErrorBody(new ServiceError("validation", imageTooLargeMessage())),
+    };
+  }
+  if (error.code === "FST_FILES_LIMIT") {
+    return {
+      status: 400,
+      body: serviceErrorBody(new ServiceError("validation", "Send one image.")),
+    };
+  }
+  if (error.code === "FST_FIELDS_LIMIT" || error.code === "FST_PARTS_LIMIT") {
+    return {
+      status: 400,
+      body: serviceErrorBody(new ServiceError("validation", "That upload has too many fields.")),
+    };
+  }
+  if (error.code === "FST_INVALID_MULTIPART_CONTENT_TYPE") {
+    return {
+      status: 415,
+      body: serviceErrorBody(new ServiceError("unsupported_media", "Send the image as multipart form data.")),
     };
   }
   return undefined;

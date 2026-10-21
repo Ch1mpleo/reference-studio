@@ -4,9 +4,9 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2.
 - Active milestone: M1 — projects and the reference library.
-- Next task: M1.2 — image, link, and note ingestion.
+- Next task: M1.3 — reference details and search.
 
 ## Milestone 0 — Foundation
 
@@ -107,9 +107,28 @@ The workspace lists projects, creates one from a name, and edits its name and br
 - Adding an image, link, or note is invited but not yet implemented.
 - Node 24 remains unverified.
 
+### M1.2 — Image, link, and note ingestion
+
+A project accepts JPEG, PNG, and WebP bytes, an http(s) link, or a note. The service sniffs the image bytes, keeps the original file unchanged, and writes a separate WebP thumbnail. Identical bytes reuse one asset and still create a separate reference. A link is stored as a bookmark and is not fetched. Links and notes can record a start time or a range, plus observed motion. The HTTP API does not accept a local filesystem path. Each added item is placed in the project as inspiration. The open project lists those items, and another tab keeps its own selection.
+
+### Checks
+
+- `npm run check` — passed.
+- `npm test` — passed. 14 files, 55 tests. Coverage includes byte sniffing, thumbnail separation, asset reuse, idempotent replay, payload mismatch, oversized and oversized-dimension images, path rejection, bookmark links, motion ranges, and reload from SQLite.
+- `npm run test:e2e` — passed. 2 Edge tests still connect, retry, and reconnect.
+- Dev browser check — passed on a temporary data directory. Created “Atlas”, uploaded a PNG, added `https://example.com/board` at 1:05, and added a note with the range 0:12–0:18. After reload, all three remained and the thumbnail request returned the image. At a wide window the list and detail sit side by side. At 390px they stack, with no horizontal overflow. Light and dark color schemes both apply.
+
+### Known limitations
+
+- Title, source, creator, tags, and observations are not edited after creation. Search arrives in M1.3.
+- The placement role is inspiration. Changing it arrives in M1.4.
+- Animated images are rejected. Images larger than 20 MB or 12000 pixels on a side are rejected.
+- A failed write can leave an unreferenced content-addressed file. It is not a project record, and the same bytes reuse it later.
+- Node 24 remains unverified.
+
 ## Later milestones
 
-M1.2 through M6 are not started.
+M1.3 through M6 are not started.
 
 ## Commands
 

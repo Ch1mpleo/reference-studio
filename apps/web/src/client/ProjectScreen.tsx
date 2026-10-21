@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
 import type { Project, UpdateProjectRequest } from "@reference-studio/core";
 import { ProjectRequestError } from "./projectApi.js";
+import { ReferenceCollection } from "./ReferenceCollection.js";
 import { readSelectedProjectId, writeSelectedProjectId } from "./selectedProject.js";
+import { useProjectReferences } from "./useProjectReferences.js";
 
 export type ProjectDraft = {
   name: string;
@@ -16,13 +18,14 @@ type ProjectPatch = Omit<UpdateProjectRequest, "expectedRevision">;
 type ProjectScreenProps = {
   projects: Project[];
   notice: string | null;
+  refreshKey: number;
   onCreate: (name: string) => Promise<Project>;
   onSave: (id: string, expectedRevision: number, patch: ProjectPatch) => Promise<Project>;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-export function ProjectScreen({ projects, notice, onCreate, onSave }: ProjectScreenProps) {
+export function ProjectScreen({ projects, notice, refreshKey, onCreate, onSave }: ProjectScreenProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     typeof sessionStorage === "undefined" ? null : readSelectedProjectId(sessionStorage),
   );
@@ -92,7 +95,9 @@ export function ProjectScreen({ projects, notice, onCreate, onSave }: ProjectScr
             <p>Opening one here does not change the project selected in another tab.</p>
           </div>
         ) : null}
-        {selected !== null ? <ProjectEditor key={selected.id} project={selected} onSave={onSave} /> : null}
+        {selected !== null ? (
+          <ProjectEditor key={selected.id} project={selected} refreshKey={refreshKey} onSave={onSave} />
+        ) : null}
       </section>
     </div>
   );
@@ -137,11 +142,14 @@ function EmptyLibrary() {
 
 function ProjectEditor({
   project,
+  refreshKey,
   onSave,
 }: {
   project: Project;
+  refreshKey: number;
   onSave: ProjectScreenProps["onSave"];
 }) {
+  const collection = useProjectReferences(project.id, refreshKey);
   const [draft, setDraft] = useState<ProjectDraft>(() => draftFromProject(project));
   const [baseRevision, setBaseRevision] = useState(project.revision);
   const [overrideRevision, setOverrideRevision] = useState<number | null>(null);
@@ -206,6 +214,7 @@ function ProjectEditor({
   }
 
   return (
+    <>
     <form className="project-form" onSubmit={(event) => void save(event)}>
       <div className="detail-heading">
         <h2>{project.status === "archived" ? "Archived project" : "Project"}</h2>
@@ -278,11 +287,15 @@ function ProjectEditor({
         )}
       </div>
       {message !== null ? <p className={saveState === "error" ? "form-error" : "form-note"}>{message}</p> : null}
-      <section className="invitation compact" aria-label="References">
-        <h3>References</h3>
-        <p>Add an image, a link, or a note. Source and creator can stay unknown.</p>
-      </section>
     </form>
+    <ReferenceCollection
+      references={collection.references}
+      notice={collection.notice}
+      onAddImage={collection.addImage}
+      onAddLink={collection.addLink}
+      onAddNote={collection.addNote}
+    />
+    </>
   );
 }
 

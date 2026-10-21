@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "@reference-studio/core";
 import { ProjectRequestError } from "./projectApi.js";
 import { ProjectScreen } from "./ProjectScreen.js";
@@ -35,6 +35,17 @@ describe("ProjectScreen", () => {
     document.body.replaceChildren();
     sessionStorage.clear();
     localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ references: [] }),
+      })),
+    );
   });
 
   it("invites an image, link, or note without a project questionnaire", async () => {
@@ -42,6 +53,7 @@ describe("ProjectScreen", () => {
       createElement(ProjectScreen, {
         projects: [],
         notice: null,
+        refreshKey: 0,
         onCreate: vi.fn(),
         onSave: vi.fn(),
       }),
@@ -62,6 +74,7 @@ describe("ProjectScreen", () => {
       createElement(ProjectScreen, {
         projects: [],
         notice: null,
+        refreshKey: 0,
         onCreate: created,
         onSave: vi.fn(),
       }),
@@ -95,6 +108,7 @@ describe("ProjectScreen", () => {
       createElement(ProjectScreen, {
         projects: [project],
         notice: null,
+        refreshKey: 0,
         onCreate: vi.fn(),
         onSave,
       }),

@@ -30,6 +30,22 @@ export function hashCanonicalRequest(value: unknown): string {
   return createHash("sha256").update(canonicalRequestJson(value)).digest("hex");
 }
 
+export function rejectIdempotencyMismatch(
+  database: DatabaseSync,
+  scope: string,
+  key: string,
+  requestHash: string,
+): void {
+  const existing = findIdempotency(database, scope, key);
+  if (existing !== undefined && existing.request_hash !== requestHash) {
+    throw new ServiceError(
+      "conflict",
+      "This idempotency key was already used for a different request.",
+      { reason: "idempotency_mismatch" },
+    );
+  }
+}
+
 export function readIdempotencyKey(value: string | string[] | undefined): string {
   if (Array.isArray(value)) {
     throw new ServiceError("validation", "Send one Idempotency-Key header.");
