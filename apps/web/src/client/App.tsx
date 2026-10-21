@@ -1,3 +1,6 @@
+import type { UpdateProjectRequest } from "@reference-studio/core";
+import { ProjectScreen } from "./ProjectScreen.js";
+import { useProjectLibrary } from "./useProjectLibrary.js";
 import { useServiceConnection, type ServiceState } from "./useServiceConnection.js";
 
 const copy: Record<ServiceState, { title: string; detail: string }> = {
@@ -21,32 +24,51 @@ const copy: Record<ServiceState, { title: string; detail: string }> = {
 
 export function App() {
   const connection = useServiceConnection();
+  const library = useProjectLibrary(connection);
   const status = copy[connection.state];
+  const libraryVisible =
+    connection.state === "ready" ||
+    connection.state === "reconnecting" ||
+    connection.health !== null;
 
   return (
     <main className="shell">
-      <p className="eyebrow">Reference Studio</p>
-      <h1>Local art-direction workspace</h1>
-      <section className="panel" aria-live="polite">
-        <div className="status-row">
-          <span className={`mark mark-${connection.state}`} aria-hidden="true" />
-          <h2>{status.title}</h2>
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">Reference Studio</p>
+          <h1>Projects</h1>
         </div>
-        <p>{status.detail}</p>
-        <dl>
-          <div>
-            <dt>Contract</dt>
-            <dd>{connection.health?.contractVersion ?? "Unknown"}</dd>
+        <section className="connection" aria-live="polite">
+          <div className="status-row">
+            <span className={`mark mark-${connection.state}`} aria-hidden="true" />
+            <h2>{status.title}</h2>
           </div>
-          <div>
-            <dt>Updates</dt>
-            <dd>{connection.live ? "Listening" : "Not listening"}</dd>
-          </div>
-        </dl>
-        <button type="button" onClick={connection.retry}>
-          Check again
-        </button>
-      </section>
+          <p>{status.detail}</p>
+          <dl>
+            <div>
+              <dt>Contract</dt>
+              <dd>{connection.health?.contractVersion ?? "Unknown"}</dd>
+            </div>
+            <div>
+              <dt>Updates</dt>
+              <dd>{connection.live ? "Listening" : "Not listening"}</dd>
+            </div>
+          </dl>
+          <button type="button" onClick={connection.retry}>
+            Check again
+          </button>
+        </section>
+      </header>
+      {libraryVisible ? (
+        <ProjectScreen
+          projects={library.projects}
+          notice={library.notice}
+          onCreate={library.create}
+          onSave={(id, expectedRevision, patch) =>
+            library.save(id, { ...patch, expectedRevision } satisfies UpdateProjectRequest)
+          }
+        />
+      ) : null}
     </main>
   );
 }

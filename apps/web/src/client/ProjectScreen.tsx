@@ -1,0 +1,307 @@
+import { useState, type FormEvent } from "react";
+import type { Project, UpdateProjectRequest } from "@reference-studio/core";
+import { ProjectRequestError } from "./projectApi.js";
+import { readSelectedProjectId, writeSelectedProjectId } from "./selectedProject.js";
+
+export type ProjectDraft = {
+  name: string;
+  brief: string;
+  audience: string;
+  purpose: string;
+  constraints: string;
+};
+
+type ProjectPatch = Omit<UpdateProjectRequest, "expectedRevision">;
+
+type ProjectScreenProps = {
+  projects: Project[];
+  notice: string | null;
+  onCreate: (name: string) => Promise<Project>;
+  onSave: (id: string, expectedRevision: number, patch: ProjectPatch) => Promise<Project>;
+};
+
+type SaveState = "idle" | "saving" | "saved" | "error";
+
+export function ProjectScreen({ projects, notice, onCreate, onSave }: ProjectScreenProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    typeof sessionStorage === "undefined" ? null : readSelectedProjectId(sessionStorage),
+  );
+  const [name, setName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const selected = projects.find((project) => project.id === selectedId) ?? null;
+  const active = projects.filter((project) => project.status === "active");
+  const archived = projects.filter((project) => project.status === "archived");
+
+  function select(id: string | null): void {
+    setSelectedId(id);
+    writeSelectedProjectId(sessionStorage, id);
+  }
+
+  async function submitProject(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const project = await onCreate(name);
+      setName("");
+      select(project.id);
+    } catch (error) {
+      setCreateError(error instanceof ProjectRequestError ? error.message : "The project could not be created.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="workspace-body">
+      <section className="project-list" aria-label="Projects">
+        <form className="create-project" onSubmit={(event) => void submitProject(event)}>
+          <label htmlFor="new-project-name">New project</label>
+          <div className="create-row">
+            <input
+              id="new-project-name"
+              name="name"
+              value={name}
+              maxLength={200}
+              required
+              disabled={creating}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <button type="submit" disabled={creating || name.trim() === ""}>
+              {creating ? "Creating" : "Create"}
+            </button>
+          </div>
+          {createError !== null ? <p className="form-error">{createError}</p> : null}
+        </form>
+        {notice !== null ? <p className="form-error">{notice}</p> : null}
+        {active.length === 0 ? <p className="quiet">No active projects.</p> : null}
+        <ProjectChoices projects={active} selectedId={selectedId} onSelect={select} />
+        {archived.length > 0 ? (
+          <details className="archived">
+            <summary>Archived</summary>
+            <ProjectChoices projects={archived} selectedId={selectedId} onSelect={select} />
+          </details>
+        ) : null}
+      </section>
+      <section className="project-detail">
+        {projects.length === 0 ? <EmptyLibrary /> : null}
+        {projects.length > 0 && selected === null ? (
+          <div className="invitation">
+            <h2>Choose a project</h2>
+            <p>Opening one here does not change the project selected in another tab.</p>
+          </div>
+        ) : null}
+        {selected !== null ? <ProjectEditor key={selected.id} project={selected} onSave={onSave} /> : null}
+      </section>
+    </div>
+  );
+}
+
+function ProjectChoices({
+  projects,
+  selectedId,
+  onSelect,
+}: {
+  projects: Project[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <ul>
+      {projects.map((project) => (
+        <li key={project.id}>
+          <button
+            type="button"
+            className={project.id === selectedId ? "project-option selected" : "project-option"}
+            aria-current={project.id === selectedId ? "true" : undefined}
+            onClick={() => onSelect(project.id)}
+          >
+            {project.name}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EmptyLibrary() {
+  return (
+    <div className="invitation">
+      <h2>Start with a reference</h2>
+      <p>Name the project, then add an image, a link, or a note. You do not need a brief yet.</p>
+      <p>Source and creator can stay unknown.</p>
+    </div>
+  );
+}
+
+function ProjectEditor({
+  project,
+  onSave,
+}: {
+  project: Project;
+  onSave: ProjectScreenProps["onSave"];
+}) {
+  const [draft, setDraft] = useState<ProjectDraft>(() => draftFromProject(project));
+  const [baseRevision, setBaseRevision] = useState(project.revision);
+  const [overrideRevision, setOverrideRevision] = useState<number | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [message, setMessage] = useState<string | null>(null);
+  const dirty = !sameDraft(draft, draftFromProject(project));
+  const expectedRevision = overrideRevision ?? baseRevision;
+
+  function edit(patch: Partial<ProjectDraft>): void {
+    setDraft({ ...draft, ...patch });
+    setSaveState("idle");
+    setMessage(null);
+  }
+
+  async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!dirty && overrideRevision === null) {
+      return;
+    }
+    await commit(draft, expectedRevision);
+  }
+
+  async function commit(next: ProjectDraft, revision: number, status?: Project["status"]): Promise<void> {
+    setSaveState("saving");
+    setMessage(null);
+    try {
+      const saved = await onSave(project.id, revision, {
+        name: next.name,
+        brief: next.brief,
+        audience: next.audience,
+        purpose: next.purpose,
+        constraints: next.constraints,
+        ...(status === undefined ? {} : { status }),
+      });
+      setDraft(draftFromProject(saved));
+      setBaseRevision(saved.revision);
+      setOverrideRevision(null);
+      setSaveState("saved");
+      setMessage(null);
+    } catch (error) {
+      setSaveState("error");
+      if (error instanceof ProjectRequestError && error.code === "conflict") {
+        if (error.currentRevision !== undefined) {
+          setOverrideRevision(error.currentRevision);
+        }
+        setMessage(
+          "This project changed in another session. Your draft is still here. Save again to use the newer revision.",
+        );
+        return;
+      }
+      setMessage(error instanceof ProjectRequestError ? error.message : "Save failed");
+    }
+  }
+
+  async function changeStatus(status: "active" | "archived"): Promise<void> {
+    if (dirty) {
+      setSaveState("error");
+      setMessage(status === "archived" ? "Save the draft before archiving." : "Save the draft before reopening.");
+      return;
+    }
+    await commit(draftFromProject(project), project.revision, status);
+  }
+
+  return (
+    <form className="project-form" onSubmit={(event) => void save(event)}>
+      <div className="detail-heading">
+        <h2>{project.status === "archived" ? "Archived project" : "Project"}</h2>
+        <p className="save-state" data-save-state={saveState}>
+          {saveState === "saving" ? "Saving" : null}
+          {saveState === "saved" ? "Saved" : null}
+          {saveState === "error" ? "Save failed" : null}
+        </p>
+      </div>
+      <label htmlFor="project-name">Name</label>
+      <input
+        id="project-name"
+        value={draft.name}
+        maxLength={200}
+        required
+        disabled={saveState === "saving"}
+        onChange={(event) => edit({ name: event.target.value })}
+      />
+      <label htmlFor="project-brief">Brief</label>
+      <textarea
+        id="project-brief"
+        value={draft.brief}
+        maxLength={20000}
+        rows={6}
+        disabled={saveState === "saving"}
+        onChange={(event) => edit({ brief: event.target.value })}
+      />
+      <details>
+        <summary>Audience, purpose, and constraints</summary>
+        <label htmlFor="project-audience">Audience</label>
+        <textarea
+          id="project-audience"
+          value={draft.audience}
+          maxLength={4000}
+          rows={3}
+          disabled={saveState === "saving"}
+          onChange={(event) => edit({ audience: event.target.value })}
+        />
+        <label htmlFor="project-purpose">Purpose</label>
+        <textarea
+          id="project-purpose"
+          value={draft.purpose}
+          maxLength={4000}
+          rows={3}
+          disabled={saveState === "saving"}
+          onChange={(event) => edit({ purpose: event.target.value })}
+        />
+        <label htmlFor="project-constraints">Constraints</label>
+        <textarea
+          id="project-constraints"
+          value={draft.constraints}
+          maxLength={8000}
+          rows={3}
+          disabled={saveState === "saving"}
+          onChange={(event) => edit({ constraints: event.target.value })}
+        />
+      </details>
+      <div className="form-actions">
+        <button type="submit" disabled={saveState === "saving" || (!dirty && overrideRevision === null)}>
+          {overrideRevision === null ? "Save" : "Save draft"}
+        </button>
+        {project.status === "active" ? (
+          <button type="button" disabled={saveState === "saving"} onClick={() => void changeStatus("archived")}>
+            Archive
+          </button>
+        ) : (
+          <button type="button" disabled={saveState === "saving"} onClick={() => void changeStatus("active")}>
+            Reopen
+          </button>
+        )}
+      </div>
+      {message !== null ? <p className={saveState === "error" ? "form-error" : "form-note"}>{message}</p> : null}
+      <section className="invitation compact" aria-label="References">
+        <h3>References</h3>
+        <p>Add an image, a link, or a note. Source and creator can stay unknown.</p>
+      </section>
+    </form>
+  );
+}
+
+function draftFromProject(project: Project): ProjectDraft {
+  return {
+    name: project.name,
+    brief: project.brief,
+    audience: project.audience,
+    purpose: project.purpose,
+    constraints: project.constraints,
+  };
+}
+
+function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
+  return (
+    left.name === right.name &&
+    left.brief === right.brief &&
+    left.audience === right.audience &&
+    left.purpose === right.purpose &&
+    left.constraints === right.constraints
+  );
+}

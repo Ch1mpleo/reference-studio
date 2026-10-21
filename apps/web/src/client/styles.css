@@ -45,9 +45,175 @@ body {
 }
 
 .shell {
-  width: min(40rem, calc(100% - 2rem));
+  width: min(72rem, calc(100% - 1.5rem));
   margin: 0 auto;
-  padding: 4.5rem 0 3rem;
+  padding: 1.5rem 0 3rem;
+}
+
+.topbar {
+  display: grid;
+  gap: 1rem;
+}
+
+.topbar h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.connection {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+}
+
+.connection p,
+.connection dl,
+.connection button {
+  margin: 0;
+}
+
+.connection dl {
+  grid-template-columns: auto auto;
+  justify-content: start;
+  gap: 1.25rem;
+}
+
+.workspace-body {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.project-list,
+.project-detail,
+.invitation {
+  padding: 1rem 1.1rem 1.15rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+}
+
+.project-list ul {
+  list-style: none;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.create-project label,
+.project-form label {
+  display: block;
+  margin-top: 0.85rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.create-row,
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+input,
+textarea {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.project-option {
+  width: 100%;
+  margin: 0;
+  text-align: left;
+  border-radius: 0.7rem;
+}
+
+.project-option.selected {
+  border-color: var(--accent);
+}
+
+.invitation h2,
+.project-form h2,
+.invitation h3 {
+  margin: 0;
+}
+
+.invitation p,
+.quiet,
+.form-note {
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.invitation.compact {
+  margin-top: 1.2rem;
+  padding: 0.85rem 0.9rem;
+  background: var(--bg);
+}
+
+.form-error {
+  margin: 0.7rem 0 0;
+  color: var(--danger);
+}
+
+.detail-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.save-state {
+  margin: 0;
+  min-height: 1.2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.save-state[data-save-state="error"] {
+  color: var(--danger);
+}
+
+.save-state[data-save-state="saved"] {
+  color: var(--ok);
+}
+
+.archived {
+  margin-top: 1rem;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (min-width: 800px) {
+  .topbar {
+    grid-template-columns: 1fr minmax(16rem, 22rem);
+    align-items: end;
+  }
+
+  .workspace-body {
+    grid-template-columns: 18rem 1fr;
+    align-items: start;
+  }
 }
 
 .eyebrow {
@@ -119,7 +285,7 @@ dd {
 }
 
 button {
-  margin-top: 1.2rem;
+  margin: 0;
   padding: 0.55rem 0.9rem;
   border: 1px solid var(--line);
   border-radius: 999px;

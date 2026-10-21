@@ -6,7 +6,7 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 - Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0.
 - Active milestone: M1 — projects and the reference library.
-- Next task: M1.1 — project creation, editing, selection, and archiving.
+- Next task: M1.2 — image, link, and note ingestion.
 
 ## Milestone 0 — Foundation
 
@@ -88,12 +88,28 @@ Run on Windows 11 with Node v26.2.0 and npm 11.13.0.
 
 - Forging `Sec-Fetch-Site` is outside the browser threat model. Other local programs use the bearer token.
 - An idempotency key is stored only after a write commits. A rejected request does not consume the key.
-- `refreshKey` tells the interface to refetch. The project screen that consumes it arrives in M1.1.
+- `refreshKey` tells the project screen to refetch.
+- Node 24 remains unverified.
+
+### M1.1 — Projects
+
+The workspace lists projects, creates one from a name, and edits its name and brief. Audience, purpose, and constraints stay inside a disclosure. Archive and reopen use the same revisioned update. The selected project is stored in `sessionStorage`, so one tab does not change another tab's selection. There is no server-side active project. An empty library invites an image, a link, or a note without a questionnaire. Those add controls arrive with ingestion. A conflicting save keeps the draft and asks for another save against the newer revision. “Saved” appears only after the service accepts the write.
+
+### Checks
+
+- `npm run check` — passed.
+- `npm test` — passed. 9 files, 41 tests. Coverage includes tab-local selection, a retained draft after a revision conflict, and idempotency-key reuse when a response is lost.
+- `npm run test:e2e` — passed. 2 Edge tests still connect, retry, and reconnect.
+- Dev browser check — passed on a temporary data directory. Created “Atlas”, saved the brief “North light and quiet type.”, archived it, reopened it, and reloaded the page with the brief intact and the same tab still selected. At 1025px the list and detail sit side by side. At 390px they stack, with no horizontal overflow. Light and dark color schemes both apply.
+
+### Known limitations
+
+- Adding an image, link, or note is invited but not yet implemented.
 - Node 24 remains unverified.
 
 ## Later milestones
 
-M1.1 through M6 are not started. M1.0 is in place.
+M1.2 through M6 are not started.
 
 ## Commands
 

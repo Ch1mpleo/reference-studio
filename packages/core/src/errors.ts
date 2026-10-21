@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export const SERVICE_ERROR_CODES = [
   "validation",
   "not_found",
@@ -34,13 +36,15 @@ export class ServiceError extends Error {
   }
 }
 
-export type ServiceErrorBody = {
-  error: {
-    code: ServiceErrorCode;
-    message: string;
-    details?: unknown;
-  };
-};
+export const serviceErrorBodySchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.unknown().optional(),
+  }),
+});
+
+export type ServiceErrorBody = z.infer<typeof serviceErrorBodySchema>;
 
 export function serviceErrorBody(error: ServiceError): ServiceErrorBody {
   const body: ServiceErrorBody = {

@@ -3,6 +3,7 @@ export {
   SERVICE_ERROR_CODES,
   ServiceError,
   serviceErrorBody,
+  serviceErrorBodySchema,
   serviceErrorStatus,
 } from "./errors.js";
 export type { ServiceErrorBody, ServiceErrorCode } from "./errors.js";
