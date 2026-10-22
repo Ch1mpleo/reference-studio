@@ -4,9 +4,9 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4.
 - Active milestone: M1 — projects and the reference library.
-- Next task: M1.4 — asset roles.
+- Next task: M1.5 — backup and restore.
 
 ## Milestone 0 — Foundation
 
@@ -144,9 +144,28 @@ Title, source, creator, tags, and observations are shared facts on the reference
 - Animated images are rejected. Images larger than 20 MB or 12000 pixels on a side are rejected.
 - Node 24 remains unverified.
 
+### M1.4 — Asset roles
+
+A new placement still starts as inspiration, with empty usage notes and no crop. Changing it to candidate or approved is a separate placement save. Usage notes and a crop belong to that placement. A crop is `{x, y, width, height}` as fractions of the original image, from the top left, and only an image can have one. Availability stays on the reference: images start available because the bytes are stored, and links and notes start unknown. Marking availability available or unknown changes that shared fact in every project and does not change any placement role. An approved asset role does not approve a direction and does not create a snapshot. The card says so, and there is no snapshot table.
+
+### Checks
+
+- `npm run check` — passed.
+- `npm test` — passed. 16 files, 63 tests. Coverage includes an explicit approved role with usage notes and a crop, a crop that leaves the image, a crop on a note, idempotent replay, payload mismatch, a revision conflict, a placement from another project left unchanged, shared availability, and no snapshot table.
+- `npm run test:e2e` — passed. 2 Edge tests still connect, retry, and reconnect.
+- Dev browser check — passed on a temporary data directory. Created “Atlas”, added a note, and saved the role Approved with usage notes “Hero”. The card read “Note · Approved · Available” after availability was set, and it said “This asset role is not an approved direction.” After reload, that role, the notes, and availability remained. Added a PNG and saved a candidate crop of 0.1, 0.2, 0.3 by 0.4. Created “Harbor”, searched, and added the same note. Harbor stayed Inspiration with the shared Available availability and without Atlas’s usage notes. At 390px the list and detail stack, with no horizontal overflow. At a wide window they sit side by side. Light and dark color schemes both apply.
+
+### Known limitations
+
+- The crop is recorded as numbers. It is not drawn on the image yet.
+- An approved asset role is not an approved direction. Direction snapshots arrive in M5.
+- Placement interpretation and the canvas rectangle are still unused. They arrive with directions and the board.
+- Animated images are rejected. Images larger than 20 MB or 12000 pixels on a side are rejected.
+- Node 24 remains unverified.
+
 ## Later milestones
 
-M1.4 through M6 are not started.
+M1.5 through M6 are not started.
 
 ## Commands
 

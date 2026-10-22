@@ -295,6 +295,7 @@ function ProjectEditor({
       onAddLink={collection.addLink}
       onAddNote={collection.addNote}
       onSaveDetails={collection.saveDetails}
+      onSavePlacement={collection.savePlacement}
       onPlace={collection.place}
     />
     </>

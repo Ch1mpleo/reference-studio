@@ -12,8 +12,10 @@ import {
   listProjectReferences,
   placeReference,
   ReferenceRequestError,
+  updatePlacement,
   updateReference,
   uploadProjectImage,
+  type PlacementUseInput,
   type ReferenceDetailsInput,
 } from "./referenceApi.js";
 
@@ -24,6 +26,7 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
   addLink: (input: CreateLinkReference) => Promise<ProjectReference>;
   addNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   saveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+  savePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
   place: (referenceId: string) => Promise<ProjectReference>;
 } {
   const [references, setReferences] = useState<ProjectReference[]>([]);
@@ -100,6 +103,17 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     [],
   );
 
+  const savePlacement = useCallback(
+    async (placementId: string, input: PlacementUseInput): Promise<ProjectReference> => {
+      const saved = await updatePlacement(projectId, placementId, input);
+      generation.current += 1;
+      setReferences((current) => current.map((item) => (item.placementId === saved.placementId ? saved : item)));
+      setNotice(null);
+      return saved;
+    },
+    [projectId],
+  );
+
   const place = useCallback(
     async (referenceId: string): Promise<ProjectReference> => {
       const item = await placeReference(projectId, referenceId);
@@ -109,5 +123,5 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     [projectId, remember],
   );
 
-  return { references, notice, addImage, addLink, addNote, saveDetails, place };
+  return { references, notice, addImage, addLink, addNote, saveDetails, savePlacement, place };
 }

@@ -8,6 +8,7 @@ type Draft = {
   creator: string;
   observations: string;
   tags: string;
+  availability: LibraryReference["availability"];
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -31,6 +32,7 @@ export function ReferenceDetails({
   const creatorId = `reference-creator-${reference.id}`;
   const tagsId = `reference-tags-${reference.id}`;
   const observationsId = `reference-observations-${reference.id}`;
+  const availabilityId = `reference-availability-${reference.id}`;
 
   function edit(patch: Partial<Draft>): void {
     setDraft({ ...draft, ...patch });
@@ -69,6 +71,7 @@ export function ReferenceDetails({
         creator: draft.creator,
         observations: draft.observations,
         tags: draft.tags.split(","),
+        availability: draft.availability,
       });
       setDraft(draftFrom(saved));
       setBaseRevision(saved.revision);
@@ -89,7 +92,7 @@ export function ReferenceDetails({
     <details className="reference-details">
       <summary>Edit shared details</summary>
       <p className="reference-meta">
-        Title, source, creator, tags, and observations belong to this reference. They stay the same in every project.
+        Title, source, creator, tags, observations, and availability belong to this reference. They stay the same in every project.
       </p>
       <form onSubmit={(event) => void save(event)}>
         <label htmlFor={titleId}>Title</label>
@@ -127,6 +130,22 @@ export function ReferenceDetails({
           disabled={saveState === "saving"}
           onChange={(event) => edit({ tags: event.target.value })}
         />
+        <label htmlFor={availabilityId}>Availability</label>
+        <select
+          id={availabilityId}
+          value={draft.availability}
+          disabled={saveState === "saving"}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === "available" || value === "unknown") {
+              edit({ availability: value });
+            }
+          }}
+        >
+          <option value="unknown">Unknown</option>
+          <option value="available">Available</option>
+        </select>
+        <p className="form-note">Unknown stays unknown. Available means the material is on hand.</p>
         <label htmlFor={observationsId}>Observations</label>
         <textarea
           id={observationsId}
@@ -159,6 +178,7 @@ function draftFrom(reference: LibraryReference): Draft {
     creator: reference.creator ?? "",
     observations: reference.observations,
     tags: reference.tags.join(", "),
+    availability: reference.availability,
   };
 }
 
@@ -168,6 +188,7 @@ function sameDraft(left: Draft, right: Draft): boolean {
     left.sourceUrl === right.sourceUrl &&
     left.creator === right.creator &&
     left.observations === right.observations &&
-    left.tags === right.tags
+    left.tags === right.tags &&
+    left.availability === right.availability
   );
 }

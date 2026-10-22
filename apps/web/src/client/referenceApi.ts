@@ -13,9 +13,11 @@ import {
   projectReferenceSchema,
   referenceSearchResultSchema,
   serviceErrorBodySchema,
+  updatePlacementRequestSchema,
   updateReferenceRequestSchema,
   type CreateLinkReference,
   type CreateNoteReference,
+  type ImageCrop,
   type ImageFields,
   type LibraryReference,
   type ProjectReference,
@@ -41,6 +43,14 @@ export type ReferenceDetailsInput = {
   creator: string;
   observations: string;
   tags: string[];
+  availability: LibraryReference["availability"];
+};
+
+export type PlacementUseInput = {
+  expectedRevision: number;
+  role: ProjectReference["role"];
+  usageNotes: string;
+  crop?: ImageCrop | null;
 };
 
 export type ReferenceSearchInput = {
@@ -97,6 +107,21 @@ export async function addProjectLink(projectId: string, input: CreateLinkReferen
   const response = await send(`/api/projects/${projectId}/references/links`, linkRequestForStorage(parsed), {
     json: input,
   });
+  return parseContract(projectReferenceSchema, await response.json(), "Reference was invalid.");
+}
+
+export async function updatePlacement(
+  projectId: string,
+  placementId: string,
+  input: PlacementUseInput,
+): Promise<ProjectReference> {
+  const parsed = parseContract(updatePlacementRequestSchema, input, "Placement is invalid.");
+  const response = await send(
+    `/api/projects/${projectId}/placements/${placementId}`,
+    parsed,
+    { json: input },
+    "PATCH",
+  );
   return parseContract(projectReferenceSchema, await response.json(), "Reference was invalid.");
 }
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { CONTRACT_VERSION } from "./ids.js";
 
-export const STUDIO_ENTITY_TYPES = ["project", "reference"] as const;
+export const STUDIO_ENTITY_TYPES = ["project", "reference", "placement"] as const;
 
 export const studioEventSchema = z.discriminatedUnion("type", [
   z.object({

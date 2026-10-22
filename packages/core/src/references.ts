@@ -117,6 +117,23 @@ const assetSummarySchema = z.object({
   height: z.number().int().positive(),
 });
 
+const cropUnit = z.number().finite().min(0).max(1);
+
+/** Fractions of the original image, from the top left. Not canvas coordinates. */
+export const imageCropSchema = z
+  .object({
+    x: cropUnit,
+    y: cropUnit,
+    width: z.number().finite().positive().max(1),
+    height: z.number().finite().positive().max(1),
+  })
+  .strict()
+  .refine((crop) => crop.x + crop.width <= 1 + 1e-9 && crop.y + crop.height <= 1 + 1e-9, {
+    message: "The crop must stay inside the image.",
+  });
+
+export type ImageCrop = z.infer<typeof imageCropSchema>;
+
 export const libraryReferenceSchema = z.object({
   id: z.uuid(),
   kind: z.enum(REFERENCE_KINDS),
@@ -139,6 +156,9 @@ export type LibraryReference = z.infer<typeof libraryReferenceSchema>;
 export const projectReferenceSchema = z.object({
   placementId: z.uuid(),
   role: z.enum(PLACEMENT_ROLES),
+  usageNotes: z.string(),
+  crop: imageCropSchema.nullable(),
+  revision: z.number().int().positive(),
   reference: libraryReferenceSchema,
 });
 
@@ -193,6 +213,7 @@ export const updateReferenceRequestSchema = z
     creator: editableCreator.optional(),
     observations: z.string().max(20_000).optional(),
     tags: z.array(z.string().trim().max(40)).max(40).optional(),
+    availability: z.enum(REFERENCE_AVAILABILITY).optional(),
   })
   .strict()
   .refine(
@@ -201,7 +222,8 @@ export const updateReferenceRequestSchema = z
       value.sourceUrl !== undefined ||
       value.creator !== undefined ||
       value.observations !== undefined ||
-      value.tags !== undefined,
+      value.tags !== undefined ||
+      value.availability !== undefined,
     { message: "Update must change at least one field." },
   )
   .refine((value) => value.tags === undefined || normalizeTags(value.tags).length <= MAX_REFERENCE_TAGS, {
@@ -221,6 +243,21 @@ export const createPlacementRequestSchema = z
   .strict();
 
 export type CreatePlacementRequest = z.infer<typeof createPlacementRequestSchema>;
+
+export const updatePlacementRequestSchema = z
+  .object({
+    expectedRevision: z.number().int().positive(),
+    role: z.enum(PLACEMENT_ROLES).optional(),
+    usageNotes: z.string().max(20_000).optional(),
+    crop: imageCropSchema.nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.role !== undefined || value.usageNotes !== undefined || value.crop !== undefined,
+    { message: "Update must change at least one field." },
+  );
+
+export type UpdatePlacementRequest = z.infer<typeof updatePlacementRequestSchema>;
 
 export const referenceSearchQuerySchema = z.object({
   q: z.string().trim().max(200).default(""),

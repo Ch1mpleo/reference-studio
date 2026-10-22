@@ -4,6 +4,9 @@ import { addProjectLink, resetReferenceRequestMemory } from "./referenceApi.js";
 const reference = {
   placementId: "00000000-0000-4000-8000-000000000010",
   role: "inspiration",
+  usageNotes: "",
+  crop: null,
+  revision: 1,
   reference: {
     id: "00000000-0000-4000-8000-000000000011",
     kind: "link",

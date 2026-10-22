@@ -13,9 +13,10 @@ import {
   type MotionMark,
   type ProjectReference,
 } from "@reference-studio/core";
+import { PlacementUse } from "./PlacementUse.js";
 import { ReferenceDetails } from "./ReferenceDetails.js";
 import { ReferenceSearch } from "./ReferenceSearch.js";
-import { ReferenceRequestError, type ReferenceDetailsInput } from "./referenceApi.js";
+import { ReferenceRequestError, type PlacementUseInput, type ReferenceDetailsInput } from "./referenceApi.js";
 
 type AddState = "idle" | "adding" | "added" | "error";
 
@@ -28,6 +29,7 @@ export function ReferenceCollection({
   onAddLink,
   onAddNote,
   onSaveDetails,
+  onSavePlacement,
   onPlace,
 }: {
   references: ProjectReference[];
@@ -36,6 +38,7 @@ export function ReferenceCollection({
   onAddLink: (input: CreateLinkReference) => Promise<ProjectReference>;
   onAddNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   onSaveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+  onSavePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
   onPlace: (referenceId: string) => Promise<ProjectReference>;
 }) {
   const [state, setState] = useState<AddState>("idle");
@@ -135,7 +138,7 @@ export function ReferenceCollection({
       {references.length > 0 ? (
         <ul className="reference-list">
           {references.map((item) => (
-            <ReferenceCard key={item.placementId} item={item} onSave={onSaveDetails} />
+            <ReferenceCard key={item.placementId} item={item} onSave={onSaveDetails} onSavePlacement={onSavePlacement} />
           ))}
         </ul>
       ) : null}
@@ -476,9 +479,11 @@ function MotionFields({
 function ReferenceCard({
   item,
   onSave,
+  onSavePlacement,
 }: {
   item: ProjectReference;
   onSave: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+  onSavePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
 }) {
   const reference = item.reference;
   return (
@@ -493,12 +498,16 @@ function ReferenceCard({
       ) : null}
       <div>
         <p className="reference-meta">
-          {reference.kind === "image" ? "Image" : null}
-          {reference.kind === "link" ? "Link" : null}
-          {reference.kind === "note" ? "Note" : null}
-          {" · Inspiration"}
+          {kindLabel(reference.kind)}
+          {" · "}
+          {roleLabel(item.role)}
+          {" · "}
+          {reference.availability === "available" ? "Available" : "Unknown"}
         </p>
         <h4>{reference.title}</h4>
+        {item.role === "approved" ? (
+          <p className="form-note">This asset role is not an approved direction.</p>
+        ) : null}
         {reference.creator !== null ? <p className="reference-meta">{reference.creator}</p> : null}
         {reference.sourceUrl !== null ? (
           <a href={reference.sourceUrl} rel="noreferrer noopener" target="_blank">
@@ -507,16 +516,43 @@ function ReferenceCard({
         ) : null}
         {reference.tags.length > 0 ? <p className="reference-meta">{reference.tags.join(", ")}</p> : null}
         {reference.observations !== "" ? <p>{reference.observations}</p> : null}
+        {item.usageNotes !== "" ? <p className="reference-meta">Use: {item.usageNotes}</p> : null}
+        {item.crop !== null ? (
+          <p className="reference-meta">
+            Crop {item.crop.x}, {item.crop.y}, {item.crop.width} by {item.crop.height}
+          </p>
+        ) : null}
         {reference.motion !== null ? (
           <p className="reference-meta">
             {formatMotionRange(reference.motion)}
             {reference.motion.behavior === "" ? "" : ` ${reference.motion.behavior}`}
           </p>
         ) : null}
+        <PlacementUse item={item} onSave={onSavePlacement} />
         <ReferenceDetails reference={reference} onSave={onSave} />
       </div>
     </li>
   );
+}
+
+function kindLabel(kind: LibraryReference["kind"]): string {
+  if (kind === "image") {
+    return "Image";
+  }
+  if (kind === "link") {
+    return "Link";
+  }
+  return "Note";
+}
+
+function roleLabel(role: ProjectReference["role"]): string {
+  if (role === "candidate") {
+    return "Candidate";
+  }
+  if (role === "approved") {
+    return "Approved";
+  }
+  return "Inspiration";
 }
 
 function imageProblem(file: File): string | null {

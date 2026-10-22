@@ -8,6 +8,9 @@ import { ReferenceCollection } from "./ReferenceCollection.js";
 const created = {
   placementId: "00000000-0000-4000-8000-000000000010",
   role: "inspiration",
+  usageNotes: "",
+  crop: null,
+  revision: 1,
   reference: {
     id: "00000000-0000-4000-8000-000000000011",
     kind: "link",
@@ -51,6 +54,7 @@ describe("ReferenceCollection", () => {
         onAddLink: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
         onPlace: vi.fn(),
       }),
     );
@@ -89,6 +93,7 @@ describe("ReferenceCollection", () => {
         onAddLink,
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
         onPlace: vi.fn(),
       }),
     );

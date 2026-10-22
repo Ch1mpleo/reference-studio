@@ -687,3 +687,199 @@ describe("reference details and search", () => {
     expect(thumbnail.rawPayload.subarray(0, 4).toString("ascii")).toBe("RIFF");
   });
 });
+
+describe("asset roles", () => {
+  it("changes a placement role explicitly and leaves the other project and the reference revision alone", async () => {
+    const { app, database, hub } = await startApp();
+    const atlas = await createProject(app, "Atlas", "project-atlas");
+    const harbor = await createProject(app, "Harbor", "project-harbor");
+    const form = multipart(PNG_1X1, "window.png", { title: "Window" });
+    const image = await app.inject({
+      method: "POST",
+      url: `/api/projects/${atlas}/references/images`,
+      headers: agentHeaders("image-window", { "content-type": form.contentType }),
+      payload: form.payload,
+    });
+    expect(image.statusCode).toBe(201);
+    const created = image.json() as {
+      placementId: string;
+      role: string;
+      usageNotes: string;
+      crop: unknown;
+      revision: number;
+      reference: { id: string; revision: number; availability: string };
+    };
+    expect(created).toMatchObject({
+      role: "inspiration",
+      usageNotes: "",
+      crop: null,
+      revision: 1,
+      reference: { availability: "available", revision: 1 },
+    });
+    const referenceId = created.reference.id;
+    const placed = await app.inject({
+      method: "POST",
+      url: `/api/projects/${harbor}/placements`,
+      headers: agentHeaders("place-harbor", { "content-type": "application/json" }),
+      payload: { referenceId },
+    });
+    expect(placed.statusCode).toBe(201);
+    const harborPlacementId = (placed.json() as { placementId: string }).placementId;
+    const note = await app.inject({
+      method: "POST",
+      url: `/api/projects/${atlas}/references/notes`,
+      headers: agentHeaders("note-role", { "content-type": "application/json" }),
+      payload: { body: "North light", title: "", sourceUrl: "", creator: "", motion: null },
+    });
+    expect(note.statusCode).toBe(201);
+    const notePlacementId = (note.json() as { placementId: string }).placementId;
+
+    const anonymous = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${atlas}/placements/${created.placementId}`,
+      headers: { host, "content-type": "application/json" },
+      payload: { expectedRevision: 1, role: "approved" },
+    });
+    expect(anonymous.statusCode).toBe(401);
+    const foreign = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${harbor}/placements/${created.placementId}`,
+      headers: agentHeaders("foreign-role", { "content-type": "application/json" }),
+      payload: { expectedRevision: 1, role: "candidate" },
+    });
+    expect(foreign.statusCode).toBe(404);
+
+    const events: StudioEvent[] = [];
+    const unsubscribe = hub.subscribe((event) => events.push(event));
+    const crop = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 };
+    const approved = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${atlas}/placements/${created.placementId}`,
+      headers: agentHeaders("role-approved", { "content-type": "application/json" }),
+      payload: { expectedRevision: 1, role: "approved", usageNotes: "Hero", crop },
+    });
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json()).toMatchObject({
+      role: "approved",
+      usageNotes: "Hero",
+      crop,
+      revision: 2,
+      reference: { id: referenceId, revision: 1, availability: "available" },
+    });
+    expect(approved.body).not.toContain("snapshot");
+    const replay = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${atlas}/placements/${created.placementId}`,
+      headers: agentHeaders("role-approved", { "content-type": "application/json" }),
+      payload: { expectedRevision: 1, role: "approved", usageNotes: "Hero", crop },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ revision: 2, role: "approved" });
+    const mismatch = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${atlas}/placements/${created.placementId}`,
+      headers: agentHeaders("role-approved", { "content-type": "application/json" }),
+      payload: { expectedRevision: 2, role: "candidate", usageNotes: "Hero", crop },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json()).toMatchObject({ error: { details: { reason: "idempotency_mismatch" } } });
+    const stale = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${atlas}/placements/${created.placementId}`,
+      headers: agentHeaders("role-stale", { "content-type": "application/json" }),
+      payload: { expectedRevision: 1, role: "candidate" },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({
+      error: {
+        details: {
+          currentRevision: 2,
+          expectedRevision: 1,
+          recordType: "placement",
+          recordId: created.placementId,
+        },
+      },
+    });
+    const unchanged = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${atlas}/placements/${created.placementId}`,
+      headers: agentHeaders("role-same", { "content-type": "application/json" }),
+      payload: { expectedRevision: 2, role: "approved" },
+    });
+    expect(unchanged.statusCode).toBe(200);
+    expect(unchanged.json()).toMatchObject({ revision: 2, role: "approved", usageNotes: "Hero" });
+
+    const outside = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${atlas}/placements/${created.placementId}`,
+      headers: agentHeaders("crop-outside", { "content-type": "application/json" }),
+      payload: { expectedRevision: 2, crop: { x: 0.8, y: 0, width: 0.3, height: 0.2 } },
+    });
+    expect(outside.statusCode).toBe(400);
+    expect(outside.body).toContain("inside the image");
+    const noteCrop = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${atlas}/placements/${notePlacementId}`,
+      headers: agentHeaders("crop-note", { "content-type": "application/json" }),
+      payload: { expectedRevision: 1, crop: { x: 0, y: 0, width: 1, height: 1 } },
+    });
+    expect(noteCrop.statusCode).toBe(400);
+    expect(noteCrop.json()).toMatchObject({ error: { message: "A crop belongs to an image." } });
+
+    const availability = await app.inject({
+      method: "PATCH",
+      url: `/api/references/${referenceId}`,
+      headers: agentHeaders("availability-unknown", { "content-type": "application/json" }),
+      payload: { expectedRevision: 1, availability: "unknown" },
+    });
+    expect(availability.statusCode).toBe(200);
+    expect(availability.json()).toMatchObject({ availability: "unknown", revision: 2 });
+
+    const atlasList = await app.inject({
+      method: "GET",
+      url: `/api/projects/${atlas}/references`,
+      headers: agentHeaders(),
+    });
+    const atlasItems = (atlasList.json() as { references: Array<{ placementId: string; role: string; usageNotes: string; crop: unknown; revision: number; reference: { revision: number; availability: string } }> }).references;
+    const atlasImage = atlasItems.find((item) => item.placementId === created.placementId);
+    const atlasNote = atlasItems.find((item) => item.placementId === notePlacementId);
+    expect(atlasImage).toMatchObject({
+      role: "approved",
+      usageNotes: "Hero",
+      crop,
+      revision: 2,
+      reference: { revision: 2, availability: "unknown" },
+    });
+    expect(atlasNote).toMatchObject({ role: "inspiration", usageNotes: "", crop: null, revision: 1 });
+    const harborList = await app.inject({
+      method: "GET",
+      url: `/api/projects/${harbor}/references`,
+      headers: agentHeaders(),
+    });
+    expect(harborList.json()).toMatchObject({
+      references: [
+        {
+          placementId: harborPlacementId,
+          role: "inspiration",
+          usageNotes: "",
+          crop: null,
+          revision: 1,
+          reference: { id: referenceId, availability: "unknown", revision: 2 },
+        },
+      ],
+    });
+    const stored = database
+      .prepare("SELECT role, usage_notes, interpretation FROM placements WHERE id = ?")
+      .get(harborPlacementId) as { role: string; usage_notes: string; interpretation: string };
+    expect(stored).toEqual({ role: "inspiration", usage_notes: "", interpretation: "" });
+    const tables = database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'snapshots'")
+      .all();
+    expect(tables).toEqual([]);
+    expect(events.filter((event) => event.type === "changed" && event.entity === "placement")).toEqual([
+      expect.objectContaining({ entityId: created.placementId, projectId: atlas, revision: 2 }),
+    ]);
+    expect(events.filter((event) => event.type === "changed" && event.entity === "reference")).toHaveLength(2);
+    unsubscribe();
+  });
+});

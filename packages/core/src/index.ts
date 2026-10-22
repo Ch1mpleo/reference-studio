@@ -42,6 +42,7 @@ export {
   formatMotionRange,
   formatMotionTimestamp,
   httpUrlSchema,
+  imageCropSchema,
   imageEdgeMessage,
   imageFieldSchema,
   imageRequestForStorage,
@@ -61,6 +62,7 @@ export {
   referenceSearchResultSchema,
   projectReferenceListSchema,
   projectReferenceSchema,
+  updatePlacementRequestSchema,
   titleFromFilename,
   titleFromNote,
   titleFromUrl,
@@ -70,6 +72,7 @@ export type {
   CreateLinkReference,
   CreateNoteReference,
   CreatePlacementRequest,
+  ImageCrop,
   ImageFields,
   ImageUploadRequest,
   LibraryReference,
@@ -78,6 +81,7 @@ export type {
   ProjectReferenceList,
   ReferenceSearchQuery,
   ReferenceSearchResult,
+  UpdatePlacementRequest,
   UpdateReferenceRequest,
 } from "./references.js";
 export { browserSessionResponseSchema } from "./session.js";

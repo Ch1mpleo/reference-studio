@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   createLinkReferenceSchema,
+  imageCropSchema,
   imageEdgeMessage,
   normalizeTags,
   parseMotionTimestamp,
   readReferenceCursor,
   referenceCursor,
+  updatePlacementRequestSchema,
   updateReferenceRequestSchema,
   titleFromFilename,
   titleFromNote,
@@ -84,6 +86,33 @@ describe("reference contracts", () => {
     expect(updateReferenceRequestSchema.safeParse({ expectedRevision: 1 }).success).toBe(false);
   });
 
+  it("keeps a crop inside the original image and requires an explicit placement change", () => {
+    expect(imageCropSchema.parse({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 })).toEqual({
+      x: 0.1,
+      y: 0.2,
+      width: 0.3,
+      height: 0.4,
+    });
+    expect(imageCropSchema.safeParse({ x: 0, y: 0, width: 1, height: 1 }).success).toBe(true);
+    const outside = imageCropSchema.safeParse({ x: 0.8, y: 0, width: 0.3, height: 0.2 });
+    expect(outside.success).toBe(false);
+    if (!outside.success) {
+      expect(outside.error.issues.some((issue) => issue.message.includes("inside the image"))).toBe(true);
+    }
+    expect(imageCropSchema.safeParse({ x: 0, y: 0, width: 0, height: 0.2 }).success).toBe(false);
+    expect(updatePlacementRequestSchema.safeParse({ expectedRevision: 1 }).success).toBe(false);
+    expect(updatePlacementRequestSchema.parse({
+      expectedRevision: 1,
+      role: "approved",
+      usageNotes: "Hero",
+      crop: null,
+    })).toMatchObject({ role: "approved", usageNotes: "Hero", crop: null });
+    expect(updateReferenceRequestSchema.parse({
+      expectedRevision: 2,
+      availability: "unknown",
+    }).availability).toBe("unknown");
+  });
+
   it("accepts a reference change event", () => {
     const event = changedEvent({
       entity: "reference",
@@ -93,5 +122,12 @@ describe("reference contracts", () => {
     });
     const parsed = studioEventSchema.parse(event);
     expect(parsed.type === "changed" && parsed.entity).toBe("reference");
+    const placement = changedEvent({
+      entity: "placement",
+      entityId: "00000000-0000-4000-8000-000000000003",
+      projectId: "00000000-0000-4000-8000-000000000001",
+      revision: 2,
+    });
+    expect(studioEventSchema.parse(placement)).toMatchObject({ entity: "placement", revision: 2 });
   });
 });
