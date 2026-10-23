@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import type { UpdateProjectRequest } from "@reference-studio/core";
 import { downloadProjectBackup } from "./projectApi.js";
 import { ProjectScreen } from "./ProjectScreen.js";
+import { StudioPreview } from "./StudioPreview.js";
 import { useProjectLibrary } from "./useProjectLibrary.js";
 import { useServiceConnection, type ServiceState } from "./useServiceConnection.js";
 
@@ -23,9 +25,21 @@ const copy: Record<ServiceState, { title: string; detail: string }> = {
   },
 };
 
+function useLocationHash(): string {
+  const [hash, setHash] = useState(() => window.location.hash);
+  useEffect(() => {
+    const update = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
+  return hash;
+}
+
 export function App() {
   const connection = useServiceConnection();
   const library = useProjectLibrary(connection);
+  const hash = useLocationHash();
+  const preview = hash === "#/studio";
   const status = copy[connection.state];
   const libraryVisible =
     connection.state === "ready" ||
@@ -37,7 +51,12 @@ export function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">Reference Studio</p>
-          <h1>Projects</h1>
+          <h1>{preview ? "Interface" : "Projects"}</h1>
+          {import.meta.env.DEV && !preview ? (
+            <a className="preview-link" href="#/studio">
+              Interface preview
+            </a>
+          ) : null}
         </div>
         <section className="connection" aria-live="polite">
           <div className="status-row">
@@ -60,7 +79,8 @@ export function App() {
           </button>
         </section>
       </header>
-      {libraryVisible ? (
+      {preview ? <StudioPreview /> : null}
+      {!preview && libraryVisible ? (
         <ProjectScreen
           projects={library.projects}
           notice={library.notice}

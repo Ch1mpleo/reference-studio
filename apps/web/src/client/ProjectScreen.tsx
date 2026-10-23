@@ -99,7 +99,7 @@ export function ProjectScreen({
               disabled={creating}
               onChange={(event) => setName(event.target.value)}
             />
-            <button type="submit" disabled={creating || name.trim() === ""}>
+            <button type="submit" aria-busy={creating} disabled={creating || name.trim() === ""}>
               {creating ? "Creating" : "Create"}
             </button>
           </div>
@@ -347,10 +347,14 @@ function ProjectEditor({
         />
       </details>
       <div className="form-actions">
-        <button type="submit" disabled={saveState === "saving" || (!dirty && overrideRevision === null)}>
+        <button
+          type="submit"
+          aria-busy={saveState === "saving"}
+          disabled={saveState === "saving" || (!dirty && overrideRevision === null)}
+        >
           {overrideRevision === null ? "Save" : "Save draft"}
         </button>
-        <button type="button" disabled={backupState === "saving"} onClick={() => void downloadBackup()}>
+        <button type="button" aria-busy={backupState === "saving"} disabled={backupState === "saving"} onClick={() => void downloadBackup()}>
           {backupState === "saving" ? "Downloading" : "Download backup"}
         </button>
         {project.status === "active" ? (

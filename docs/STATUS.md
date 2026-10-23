@@ -4,9 +4,9 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6.
 - Active milestone: M1 — projects and the reference library.
-- Next task: M1.6 — Studio interface primitives.
+- Next task: M1 acceptance — one collect, find, reuse, backup, and restore scenario. M2 is not started.
 
 ## Milestone 0 — Foundation
 
@@ -53,9 +53,9 @@ Node 24 remains unverified. A CI check is recommended for reproducibility. The r
 
 ## Design and motion scope — 2026-10-21
 
-The user confirmed both project handoff systems and Studio's own consistent interface systems. [DESIGN_AND_MOTION.md](DESIGN_AND_MOTION.md) owns the requirements; implementation remains pending:
+The user confirmed both project handoff systems and Studio's own consistent interface systems. [DESIGN_AND_MOTION.md](DESIGN_AND_MOTION.md) owns the requirements. The M1 interface sample is in place. Later extension work remains:
 
-- [ ] **M1 extension:** review a small Studio interface sample and establish shared visual tokens/control states as library screens are built; capture motion reference links and timestamps through link/note references.
+- [x] **M1 extension:** review a small Studio interface sample and establish shared visual tokens/control states as library screens are built; capture motion reference links and timestamps through link/note references.
 - [ ] **M2 extension — records:** direction-scoped draft design/motion records and essential-field editing.
 - [ ] **M2 extension — playground:** a real dropdown fixture, two-variant comparison, sliders/numeric inputs appropriate to the selected animation model, repeat/reverse actions, and instant/reduced-motion comparison.
 - [ ] **M2 extension — contextual comparison:** verify neutral variant labels, context-based recommendations, explicit selection/approval states, and evidence-backed usability findings against the comparison policy in DESIGN_AND_MOTION.md.
@@ -186,9 +186,32 @@ A new placement still starts as inspiration, with empty usage notes and no crop.
 - Animated images are rejected. Images larger than 20 MB or 12000 pixels on a side are rejected.
 - Node 24 remains unverified.
 
+### M1.6 — Studio interface
+
+Studio chrome uses one set of semantic tokens in `apps/web/src/client/styles.css`: color, type, spacing, radii, elevation, layering, and motion. Light values keep the existing library palette. Dark overrides those color and elevation tokens. Older names such as `--bg` and `--ink` alias the semantic tokens, so the library screens keep their layout. Project art does not restyle these controls.
+
+Motion has two roles. Instant is 0ms for selection, typing, filtering, and save feedback. Panel is 160ms for dialogs and panels, and closing one reverses it. `prefers-reduced-motion: reduce` removes transitions and animation. A preview switch shows that reduced case and says the operating system preference still applies.
+
+The development preview is `#/studio`. It shows the library control states (selected, empty, invalid, disabled, busy, saved, and error), a menu, a dialog, and a panel that can be closed while it opens. The “Interface preview” link is development-only. Create, Save, and Download backup use `aria-busy` while a write is in progress. Dialogs and menus stay in the preview until a library screen needs them. Target-project motion recipes are separate records and do not change these values.
+
+### Checks
+
+- `npm run check` — passed.
+- `npm test` — passed. 20 files, 77 tests. Coverage includes instant and panel durations, a reduced-motion duration of 0, panel open and close, dialog close returning focus, menu Escape returning focus, and the preview switch setting the panel duration to 0ms.
+- `npm run test:e2e` — passed before the dialog Escape handler. 2 Edge tests still connect, retry, and reconnect. The preview link is absent from production builds.
+- Dev browser check — passed on a temporary data directory. The preview opened a panel at 160ms and closed it. Escape closed the role menu and the dialog and returned focus. The reduced-motion switch set the panel transition to 0s. At 390px the sample stacks, with no horizontal overflow. At 1100px the columns are 288px and the remainder. A 640px viewport at device scale 2 and a 480px-tall window both scroll without horizontal overflow. Light is `rgb(243, 239, 230)` with accent `#234e48`. Dark is `rgb(20, 19, 17)` with accent `#9fd9ce`. Returning to the library created “Atlas”. The browser tool’s Tab key did not move focus, so the painted focus ring was not measured. The `:focus-visible` rule is loaded.
+
+### Known limitations
+
+- This is Studio chrome. It is not a design system for a target project.
+- Dialogs and menus are exercised in the preview. Library screens do not open them yet.
+- The connection card stays above the preview.
+- The browser tool could not produce a `:focus-visible` match, so the focus ring was confirmed in CSS and not as a painted outline.
+- Node 24 remains unverified.
+
 ## Later milestones
 
-M1.6 through M6 are not started.
+The M1 acceptance scenario is not closed. M2 through M6 are not started.
 
 ## Commands
 
