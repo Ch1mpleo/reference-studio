@@ -46,13 +46,15 @@ export function StudioDialog({ open, title, onClose, children }: StudioDialogPro
         onClose();
       }}
     >
-      <h2 id={titleId}>{title}</h2>
-      {children}
-      <div className="form-actions">
-        <button type="button" data-dialog-close onClick={onClose}>
-          Close
+      <header className="studio-dialog-header">
+        <h2 id={titleId}>{title}</h2>
+        <button type="button" className="sample-icon-button" data-dialog-close aria-label="Close" onClick={onClose}>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 4 12 12M12 4 4 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
         </button>
-      </div>
+      </header>
+      <div className="studio-dialog-body">{children}</div>
     </dialog>
   );
 }

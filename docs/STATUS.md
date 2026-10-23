@@ -234,7 +234,7 @@ Download showed “Downloaded”. The zip was format version 1 and included the 
 
 ### M2.0a — Representative sample, awaiting review
 
-The specimen now uses the ascii-reveal demo's glass: translucent cards and pills, inset hairline rings, a solid primary, and a static glyph field behind the frame. Opaque panels and blue selected rings were removed after review because they read as a separate wireframe. The library screens still use the M1.6 warm theme. Light defaults apply on `.studio-sample`, the operating-system dark scheme applies when no theme is chosen, and the Light and Dark controls override it.
+The specimen shell now uses the viewport up to 1440px. Selects, the reduced-motion checkbox, external links, the inspector scrollbar, and the dialog use the same glass control anatomy as the rest of the sample. Native widgets were the layout mismatch.
 
 The specimen shows an image, a link, a note, a missing image, shared fields beside placement fields, and a conflict on the selected placement. Preview controls can show an empty collection, a static loading card, plain decoration, reduced motion, and save failed, saving, or saved. Add reference opens a tabbed dialog and does not write to the service. Loading is a static skeleton, not the ASCII Reveal package. That pairing is M2.0c.
 

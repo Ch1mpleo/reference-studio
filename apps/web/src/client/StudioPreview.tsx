@@ -1,4 +1,5 @@
-import { useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioMenu } from "./StudioMenu.js";
 import { harborArt, northStairArt } from "./specimenArt.js";
@@ -318,13 +319,17 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
     >
       <header className="sample-topbar">
         <p className="sample-wordmark">Reference Studio</p>
-        <label className="sample-switcher">
-          <span className="visually-hidden">Project</span>
-          <select value={project} onChange={(event) => setProject(event.target.value)}>
-            <option>Atlas</option>
-            <option>Harbor</option>
-          </select>
-        </label>
+        <div className="sample-switcher">
+          <SampleSelect
+            label="Project"
+            value={project}
+            options={[
+              { value: "Atlas", label: "Atlas" },
+              { value: "Harbor", label: "Harbor" },
+            ]}
+            onChange={setProject}
+          />
+        </div>
         <div className="sample-views" role="group" aria-label="View">
           <button type="button" aria-pressed="true">Collection</button>
         </div>
@@ -410,16 +415,13 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
                 </button>
               ) : null}
             </form>
-            <details className="sample-disclosure">
-              <summary>Filter{kind !== "all" ? " · 1" : ""}</summary>
-              <div className="sample-filter-row" role="group" aria-label="Kind">
-                {(["all", "image", "link", "note"] as const).map((value) => (
-                  <button key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}>
-                    {value === "all" ? "All" : kindLabel(value)}
-                  </button>
-                ))}
-              </div>
-            </details>
+            <div className="sample-views sample-filters" role="group" aria-label="Kind">
+              {(["all", "image", "link", "note"] as const).map((value) => (
+                <button key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}>
+                  {value === "all" ? "All" : kindLabel(value)}
+                </button>
+              ))}
+            </div>
             {filtersActive ? (
               <button type="button" className="is-ghost" onClick={clearFilters}>Clear filters</button>
             ) : null}
@@ -484,12 +486,14 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
           <input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} />
           Preview reduced motion
         </label>
-        <div className="sample-control-row" role="group" aria-label="Theme">
+        <div className="sample-views" role="group" aria-label="Theme">
           {(["system", "light", "dark"] as const).map((choice) => (
             <button key={choice} type="button" aria-pressed={themeChoice === choice} onClick={() => setThemeChoice(choice)}>
               {choice === "system" ? "System" : choice === "light" ? "Light" : "Dark"}
             </button>
           ))}
+        </div>
+        <div className="sample-control-row" role="group" aria-label="Collection state">
           <button type="button" aria-pressed={plain} onClick={() => setPlain((current) => !current)}>Plain</button>
           <button type="button" aria-pressed={emptyCollection} onClick={() => setEmptyCollection((current) => !current)}>
             Empty collection
@@ -566,13 +570,15 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
             <div role="tabpanel" id="sample-panel-image" aria-labelledby="sample-tab-image" hidden={addTab !== "image"}>
               <div className="sample-field">
                 <label htmlFor="sample-image-file">Image file</label>
-                <input
-                  id="sample-image-file"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(event) => setImageFileName(event.currentTarget.files?.[0]?.name ?? null)}
-                />
-                {imageFileName !== null ? <p className="sample-note">{imageFileName}</p> : null}
+                <div className="sample-file">
+                  <input
+                    id="sample-image-file"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) => setImageFileName(event.currentTarget.files?.[0]?.name ?? null)}
+                  />
+                  <span>{imageFileName ?? "Choose an image"}</span>
+                </div>
               </div>
               <Field id="sample-image-title" label="Title" optional value={imageTitle} onChange={setImageTitle} />
             </div>
@@ -637,11 +643,7 @@ function SampleCardView({
       <p className="sample-kicker">{kindLabel(card.kind)} · {roleLabel(draft.role)}</p>
       <p className="sample-card-title">{card.title}</p>
       {card.kind === "link" ? (
-        <a className="sample-url" href={card.source} target="_blank" rel="noreferrer">
-          {card.source}
-          <ExternalIcon />
-          <span className="visually-hidden"> (opens in a new tab)</span>
-        </a>
+        <SourceLink href={card.source} />
       ) : card.kind === "note" ? (
         <p className="sample-excerpt">{card.observations}</p>
       ) : (
@@ -706,10 +708,7 @@ function Inspector({
           )}
         </div>
         {card.source !== "" ? (
-          <a className="sample-url" href={card.source} target="_blank" rel="noreferrer">
-            {card.source}
-            <ExternalIcon />
-          </a>
+          <SourceLink href={card.source} />
         ) : (
           <p className="sample-note">Source unknown</p>
         )}
@@ -729,20 +728,23 @@ function Inspector({
           <h3>Use in {project}</h3>
           <p className="sample-note">Role, usage notes, and crop belong to this project.</p>
           <div className="sample-field">
-            <label htmlFor={roleId}>Role</label>
-            <select
+            <label id={`${roleId}-label`} htmlFor={roleId}>Role</label>
+            <SampleSelect
               id={roleId}
+              labelledBy={`${roleId}-label`}
+              label="Role"
               value={draft.role}
               disabled={saving}
-              onChange={(event) => {
-                const value = event.target.value;
+              field
+              options={[
+                { value: "inspiration", label: "Inspiration" },
+                { value: "candidate", label: "Candidate" },
+                { value: "approved", label: "Approved asset" },
+              ]}
+              onChange={(value) => {
                 if (value === "inspiration" || value === "candidate" || value === "approved") onChange({ role: value });
               }}
-            >
-              <option value="inspiration">Inspiration</option>
-              <option value="candidate">Candidate</option>
-              <option value="approved">Approved asset</option>
-            </select>
+            />
           </div>
           {draft.role === "approved" ? (
             <p className="sample-note">Approved marks the asset for this project. It does not approve a direction.</p>
@@ -796,6 +798,143 @@ function EmptyCollection({ onAdd }: { onAdd: () => void }) {
       <h2>Add your first reference</h2>
       <p>An image, a link, or a note can start the collection.</p>
       <button type="button" className="is-primary" onClick={onAdd}>Add reference</button>
+    </div>
+  );
+}
+
+function SourceLink({ href }: { href: string }) {
+  let label = href;
+  try {
+    label = new URL(href).host;
+  } catch {
+    label = href;
+  }
+  return (
+    <a className="sample-link" href={href} target="_blank" rel="noreferrer">
+      <span className="sample-link-text">{label}</span>
+      <ExternalIcon />
+      <span className="visually-hidden"> (opens in a new tab)</span>
+    </a>
+  );
+}
+
+function SampleSelect({
+  id,
+  label,
+  labelledBy,
+  value,
+  options,
+  disabled = false,
+  field = false,
+  onChange,
+}: {
+  id?: string;
+  label: string;
+  labelledBy?: string;
+  value: string;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+  field?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listId = useId();
+  const current = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const selected = listRef.current?.querySelector<HTMLElement>("[role='option'][aria-selected='true']");
+    selected?.focus();
+    function onPointerDown(event: PointerEvent): void {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (rootRef.current?.contains(target) || listRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent): void {
+      const items = [...(listRef.current?.querySelectorAll<HTMLElement>("[role='option']") ?? [])];
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const index = active === null ? -1 : items.indexOf(active);
+      if (event.key === "ArrowDown" && items.length > 0) {
+        event.preventDefault();
+        items[index < 0 ? 0 : (index + 1) % items.length]?.focus();
+        return;
+      }
+      if (event.key === "ArrowUp" && items.length > 0) {
+        event.preventDefault();
+        items[index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length]?.focus();
+        return;
+      }
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpen(false);
+      buttonRef.current?.focus();
+    }
+    function onScroll(): void {
+      setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
+
+  const rect = open ? buttonRef.current?.getBoundingClientRect() : undefined;
+  const portal = rootRef.current?.closest(".studio-sample");
+  const list = open && rect !== undefined && portal instanceof HTMLElement ? (
+        <ul
+          ref={listRef}
+          id={listId}
+      className="sample-select-list"
+      role="listbox"
+      aria-label={label}
+      style={{ top: rect.bottom + 6, left: rect.left, minWidth: rect.width }}
+    >
+      {options.map((option) => (
+        <li key={option.value} role="none">
+          <button
+            type="button"
+            role="option"
+            aria-selected={option.value === value}
+            onClick={() => {
+              onChange(option.value);
+              setOpen(false);
+              buttonRef.current?.focus();
+            }}
+          >
+            {option.label}
+          </button>
+        </li>
+      ))}
+    </ul>
+  ) : null;
+
+  return (
+    <div className={field ? "sample-select is-field" : "sample-select"} ref={rootRef}>
+      <button
+        ref={buttonRef}
+        id={id}
+        type="button"
+        className="sample-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-labelledby={labelledBy}
+        aria-label={labelledBy === undefined ? label : undefined}
+        disabled={disabled}
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+      >
+        <span>{current?.label ?? value}</span>
+        <ChevronIcon />
+      </button>
+      {list !== null && portal instanceof HTMLElement ? createPortal(list, portal) : null}
     </div>
   );
 }
@@ -855,6 +994,14 @@ function MotionField({ id, value, onChange }: { id: string; value: string; onCha
         <p className="sample-note">Optional. Leave this blank when you did not observe motion.</p>
       </div>
     </details>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg className="sample-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4.5 6.5 8 10l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
