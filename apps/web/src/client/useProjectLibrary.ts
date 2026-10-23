@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Project, UpdateProjectRequest } from "@reference-studio/core";
-import { createProject, listProjects, ProjectRequestError, updateProject } from "./projectApi.js";
+import { createProject, listProjects, ProjectRequestError, restoreProject, updateProject } from "./projectApi.js";
 import type { ServiceState } from "./useServiceConnection.js";
 
 export type ProjectLibrary = {
   projects: Project[];
   notice: string | null;
   create: (name: string) => Promise<Project>;
+  restore: (file: File) => Promise<Project>;
   save: (id: string, input: UpdateProjectRequest) => Promise<Project>;
 };
 
@@ -52,6 +53,13 @@ export function useProjectLibrary(connection: {
     return project;
   }, []);
 
+  const restore = useCallback(async (file: File): Promise<Project> => {
+    const project = await restoreProject(file);
+    setProjects((current) => [project, ...current.filter((item) => item.id !== project.id)]);
+    setNotice(null);
+    return project;
+  }, []);
+
   const save = useCallback(async (id: string, input: UpdateProjectRequest): Promise<Project> => {
     const project = await updateProject(id, input);
     setProjects((current) => current.map((item) => (item.id === project.id ? project : item)));
@@ -59,5 +67,5 @@ export function useProjectLibrary(connection: {
     return project;
   }, []);
 
-  return { projects, notice, create, save };
+  return { projects, notice, create, restore, save };
 }

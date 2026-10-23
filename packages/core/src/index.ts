@@ -86,3 +86,17 @@ export type {
 } from "./references.js";
 export { browserSessionResponseSchema } from "./session.js";
 export type { BrowserSessionResponse } from "./session.js";
+export {
+  BACKUP_FORMAT,
+  BACKUP_FORMAT_VERSION,
+  MAX_BACKUP_BYTES,
+  MAX_BACKUP_ENTRIES,
+  MAX_BACKUP_MANIFEST_BYTES,
+  backupAssetPath,
+  backupManifestSchema,
+  backupTooLargeMessage,
+  backupUploadRequestSchema,
+  backupVersionMessage,
+  readBackupManifest,
+} from "./backup.js";
+export type { BackupManifest, BackupUploadRequest } from "./backup.js";

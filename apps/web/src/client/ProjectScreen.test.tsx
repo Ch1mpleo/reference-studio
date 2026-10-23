@@ -55,11 +55,14 @@ describe("ProjectScreen", () => {
         notice: null,
         refreshKey: 0,
         onCreate: vi.fn(),
+        onRestore: vi.fn(),
+        onDownload: vi.fn(),
         onSave: vi.fn(),
       }),
     );
 
     expect(view.container.textContent).toContain("add an image, a link, or a note");
+    expect(view.container.querySelector("#restore-backup")).not.toBeNull();
     expect(view.container.querySelector("#project-audience")).toBeNull();
     expect(view.container.querySelector("#new-project-name")).not.toBeNull();
 
@@ -76,6 +79,8 @@ describe("ProjectScreen", () => {
         notice: null,
         refreshKey: 0,
         onCreate: created,
+        onRestore: vi.fn(),
+        onDownload: vi.fn(),
         onSave: vi.fn(),
       }),
     );
@@ -110,6 +115,8 @@ describe("ProjectScreen", () => {
         notice: null,
         refreshKey: 0,
         onCreate: vi.fn(),
+        onRestore: vi.fn(),
+        onDownload: vi.fn(),
         onSave,
       }),
     );
@@ -127,6 +134,44 @@ describe("ProjectScreen", () => {
     expect(onSave).toHaveBeenCalledWith(project.id, 1, expect.objectContaining({ brief: "North light" }));
     expect(view.container.querySelector<HTMLTextAreaElement>("#project-brief")?.value).toBe("North light");
     expect(view.container.textContent).toContain("Your draft is still here");
+
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("keeps the open project when restore fails", async () => {
+    sessionStorage.setItem(selectedProjectKey, project.id);
+    const onRestore = vi.fn(async () => {
+      throw new ProjectRequestError("This file is not a Reference Studio backup.", "validation");
+    });
+    const view = await render(
+      createElement(ProjectScreen, {
+        projects: [project],
+        notice: null,
+        refreshKey: 0,
+        onCreate: vi.fn(),
+        onRestore,
+        onDownload: vi.fn(),
+        onSave: vi.fn(),
+      }),
+    );
+    const input = view.container.querySelector<HTMLInputElement>("#restore-backup");
+    if (input === null) {
+      throw new Error("Expected the restore control.");
+    }
+    const file = new File([new Uint8Array([1, 2, 3])], "notes.zip", { type: "application/zip" });
+    await act(async () => {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(onRestore).toHaveBeenCalledOnce();
+    expect(view.container.textContent).toContain("This file is not a Reference Studio backup.");
+    expect(view.container.textContent).not.toContain("Restored");
+    expect(view.container.querySelector(".project-option.selected")?.textContent).toBe("Atlas");
 
     await act(async () => {
       view.root.unmount();

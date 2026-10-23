@@ -1,4 +1,5 @@
 import type { UpdateProjectRequest } from "@reference-studio/core";
+import { downloadProjectBackup } from "./projectApi.js";
 import { ProjectScreen } from "./ProjectScreen.js";
 import { useProjectLibrary } from "./useProjectLibrary.js";
 import { useServiceConnection, type ServiceState } from "./useServiceConnection.js";
@@ -65,6 +66,8 @@ export function App() {
           notice={library.notice}
           refreshKey={connection.refreshKey}
           onCreate={library.create}
+          onRestore={library.restore}
+          onDownload={downloadProjectBackup}
           onSave={(id, expectedRevision, patch) =>
             library.save(id, { ...patch, expectedRevision } satisfies UpdateProjectRequest)
           }

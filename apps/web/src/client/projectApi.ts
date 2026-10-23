@@ -44,6 +44,56 @@ export async function createProject(name: string): Promise<Project> {
   return parseContract(projectSchema, await response.json(), "Project was invalid.");
 }
 
+export async function downloadProjectBackup(projectId: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/projects/${projectId}/backup`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+  } catch (error) {
+    throw error;
+  }
+  if (!response.ok) {
+    throw await readError(response);
+  }
+  const filename = filenameFromDisposition(response.headers.get("content-disposition"));
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function restoreProject(file: File): Promise<Project> {
+  const bytes = await file.arrayBuffer();
+  const contentSha256 = await sha256Hex(bytes);
+  const body = new FormData();
+  body.set("file", file, file.name);
+  const key = idempotencyKey({ contentSha256 });
+  let response: Response;
+  try {
+    response = await fetch("/api/projects/restore", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "idempotency-key": key },
+      body,
+    });
+  } catch (error) {
+    throw error;
+  }
+  keyMemory = null;
+  if (!response.ok) {
+    throw await readError(response);
+  }
+  return parseContract(projectSchema, await response.json(), "Project was invalid.");
+}
+
 export async function updateProject(id: string, input: UpdateProjectRequest): Promise<Project> {
   const body = parseContract(updateProjectRequestSchema, input, "Project update is invalid.");
   const response = await request(`/api/projects/${id}`, {
@@ -106,6 +156,16 @@ async function readError(response: Response): Promise<ProjectRequestError> {
   }
   const currentRevision = readCurrentRevision(parsed.data.error.details);
   return new ProjectRequestError(parsed.data.error.message, parsed.data.error.code, currentRevision);
+}
+
+function filenameFromDisposition(header: string | null): string {
+  const match = header?.match(/filename="([A-Za-z0-9.-]+)"/);
+  return match?.[1] ?? "project-backup.zip";
+}
+
+async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((part) => part.toString(16).padStart(2, "0")).join("");
 }
 
 function readCurrentRevision(details: unknown): number | undefined {

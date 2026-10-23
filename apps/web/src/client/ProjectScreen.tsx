@@ -20,18 +20,31 @@ type ProjectScreenProps = {
   notice: string | null;
   refreshKey: number;
   onCreate: (name: string) => Promise<Project>;
+  onRestore: (file: File) => Promise<Project>;
+  onDownload: (projectId: string) => Promise<void>;
   onSave: (id: string, expectedRevision: number, patch: ProjectPatch) => Promise<Project>;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-export function ProjectScreen({ projects, notice, refreshKey, onCreate, onSave }: ProjectScreenProps) {
+export function ProjectScreen({
+  projects,
+  notice,
+  refreshKey,
+  onCreate,
+  onRestore,
+  onDownload,
+  onSave,
+}: ProjectScreenProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     typeof sessionStorage === "undefined" ? null : readSelectedProjectId(sessionStorage),
   );
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const selected = projects.find((project) => project.id === selectedId) ?? null;
   const active = projects.filter((project) => project.status === "active");
   const archived = projects.filter((project) => project.status === "archived");
@@ -39,6 +52,21 @@ export function ProjectScreen({ projects, notice, refreshKey, onCreate, onSave }
   function select(id: string | null): void {
     setSelectedId(id);
     writeSelectedProjectId(sessionStorage, id);
+  }
+
+  async function restore(file: File): Promise<void> {
+    setRestoring(true);
+    setRestoreError(null);
+    setRestoreMessage(null);
+    try {
+      const project = await onRestore(file);
+      setRestoreMessage("Restored");
+      select(project.id);
+    } catch (error) {
+      setRestoreError(error instanceof ProjectRequestError ? error.message : "The backup could not be restored.");
+    } finally {
+      setRestoring(false);
+    }
   }
 
   async function submitProject(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -77,6 +105,29 @@ export function ProjectScreen({ projects, notice, refreshKey, onCreate, onSave }
           </div>
           {createError !== null ? <p className="form-error">{createError}</p> : null}
         </form>
+        <div className="restore-project">
+          <label htmlFor="restore-backup">Restore backup</label>
+          <input
+            id="restore-backup"
+            name="backup"
+            type="file"
+            accept=".zip,application/zip"
+            disabled={restoring}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (file !== undefined) {
+                void restore(file);
+              }
+            }}
+          />
+          {restoreMessage !== null ? (
+            <p className="save-state" data-save-state="saved">
+              {restoreMessage}
+            </p>
+          ) : null}
+          {restoreError !== null ? <p className="form-error">{restoreError}</p> : null}
+        </div>
         {notice !== null ? <p className="form-error">{notice}</p> : null}
         {active.length === 0 ? <p className="quiet">No active projects.</p> : null}
         <ProjectChoices projects={active} selectedId={selectedId} onSelect={select} />
@@ -96,7 +147,13 @@ export function ProjectScreen({ projects, notice, refreshKey, onCreate, onSave }
           </div>
         ) : null}
         {selected !== null ? (
-          <ProjectEditor key={selected.id} project={selected} refreshKey={refreshKey} onSave={onSave} />
+          <ProjectEditor
+            key={selected.id}
+            project={selected}
+            refreshKey={refreshKey}
+            onSave={onSave}
+            onDownload={onDownload}
+          />
         ) : null}
       </section>
     </div>
@@ -144,10 +201,12 @@ function ProjectEditor({
   project,
   refreshKey,
   onSave,
+  onDownload,
 }: {
   project: Project;
   refreshKey: number;
   onSave: ProjectScreenProps["onSave"];
+  onDownload: ProjectScreenProps["onDownload"];
 }) {
   const collection = useProjectReferences(project.id, refreshKey);
   const [draft, setDraft] = useState<ProjectDraft>(() => draftFromProject(project));
@@ -155,6 +214,8 @@ function ProjectEditor({
   const [overrideRevision, setOverrideRevision] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [backupState, setBackupState] = useState<SaveState>("idle");
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const dirty = !sameDraft(draft, draftFromProject(project));
   const expectedRevision = overrideRevision ?? baseRevision;
 
@@ -162,6 +223,19 @@ function ProjectEditor({
     setDraft({ ...draft, ...patch });
     setSaveState("idle");
     setMessage(null);
+  }
+
+  async function downloadBackup(): Promise<void> {
+    setBackupState("saving");
+    setBackupMessage(null);
+    try {
+      await onDownload(project.id);
+      setBackupState("saved");
+      setBackupMessage("Downloaded");
+    } catch (error) {
+      setBackupState("error");
+      setBackupMessage(error instanceof ProjectRequestError ? error.message : "The backup could not be downloaded.");
+    }
   }
 
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -276,6 +350,9 @@ function ProjectEditor({
         <button type="submit" disabled={saveState === "saving" || (!dirty && overrideRevision === null)}>
           {overrideRevision === null ? "Save" : "Save draft"}
         </button>
+        <button type="button" disabled={backupState === "saving"} onClick={() => void downloadBackup()}>
+          {backupState === "saving" ? "Downloading" : "Download backup"}
+        </button>
         {project.status === "active" ? (
           <button type="button" disabled={saveState === "saving"} onClick={() => void changeStatus("archived")}>
             Archive
@@ -287,6 +364,11 @@ function ProjectEditor({
         )}
       </div>
       {message !== null ? <p className={saveState === "error" ? "form-error" : "form-note"}>{message}</p> : null}
+      {backupMessage !== null ? (
+        <p className="save-state" data-save-state={backupState}>
+          {backupMessage}
+        </p>
+      ) : null}
     </form>
     <ReferenceCollection
       references={collection.references}

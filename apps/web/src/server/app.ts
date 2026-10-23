@@ -3,9 +3,11 @@ import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 import multipart from "@fastify/multipart";
 import {
+  backupTooLargeMessage,
   browserSessionResponseSchema,
   healthResponse,
   imageTooLargeMessage,
+  MAX_BACKUP_BYTES,
   MAX_IMAGE_BYTES,
   readyEvent,
   ServiceError,
@@ -24,6 +26,7 @@ import {
 import type { AppConfig } from "./config.js";
 import { EventHub } from "./events.js";
 import { defaultMigrationsDir, migrate } from "./migrate.js";
+import { registerBackupRoutes } from "./backup.js";
 import { registerProjectRoutes } from "./projects.js";
 import { registerReferenceRoutes } from "./references.js";
 import { issueSessionCookie } from "./session.js";
@@ -49,7 +52,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   await app.register(multipart, {
     throwFileSizeLimit: true,
     limits: {
-      fileSize: MAX_IMAGE_BYTES,
+      fileSize: MAX_BACKUP_BYTES,
       files: 1,
       fields: 8,
       fieldSize: 24_000,
@@ -97,6 +100,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
 
   registerProjectRoutes(app, dependencies.database, hub);
   registerReferenceRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
+  registerBackupRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
 
   app.get("/api/events", (request, reply) => {
     reply.hijack();
@@ -164,7 +168,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
     if (error instanceof ServiceError) {
       return reply.code(error.status).send(serviceErrorBody(error));
     }
-    const transport = transportError(error);
+    const transport = transportError(error, request.url);
     if (transport !== undefined) {
       return reply.code(transport.status).send(transport.body);
     }
@@ -182,6 +186,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
 
 function transportError(
   error: unknown,
+  url: string,
 ): { status: number; body: ReturnType<typeof serviceErrorBody> } | undefined {
   if (typeof error !== "object" || error === null || !("code" in error)) {
     return undefined;
@@ -198,16 +203,19 @@ function transportError(
       body: serviceErrorBody(new ServiceError("unsupported_media", "Unsupported media type.")),
     };
   }
+  const restore = (url.split("?")[0] ?? url) === "/api/projects/restore";
   if (error.code === "FST_REQ_FILE_TOO_LARGE" || error.code === "FST_ERR_CTP_BODY_TOO_LARGE") {
     return {
       status: 400,
-      body: serviceErrorBody(new ServiceError("validation", imageTooLargeMessage())),
+      body: serviceErrorBody(
+        new ServiceError("validation", restore ? backupTooLargeMessage() : imageTooLargeMessage()),
+      ),
     };
   }
   if (error.code === "FST_FILES_LIMIT") {
     return {
       status: 400,
-      body: serviceErrorBody(new ServiceError("validation", "Send one image.")),
+      body: serviceErrorBody(new ServiceError("validation", restore ? "Send one backup." : "Send one image.")),
     };
   }
   if (error.code === "FST_FIELDS_LIMIT" || error.code === "FST_PARTS_LIMIT") {

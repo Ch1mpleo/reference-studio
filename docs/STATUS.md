@@ -4,9 +4,9 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5.
 - Active milestone: M1 — projects and the reference library.
-- Next task: M1.5 — backup and restore.
+- Next task: M1.6 — Studio interface primitives.
 
 ## Milestone 0 — Foundation
 
@@ -163,9 +163,32 @@ A new placement still starts as inspiration, with empty usage notes and no crop.
 - Animated images are rejected. Images larger than 20 MB or 12000 pixels on a side are rejected.
 - Node 24 remains unverified.
 
+### M1.5 — Backup and restore
+
+`GET /api/projects/:projectId/backup` downloads a version 1 zip named from the project. The archive contains `backup.json` and the original images for that project. It does not contain thumbnails or data-directory paths. The manifest keeps the exported record ids as provenance and reserves empty `systems`, `variants`, `evidence`, and `snapshots` sections. A project that already has a direction or a canvas position is refused, so this format does not drop those records.
+
+`POST /api/projects/restore` accepts the zip upload, not a local path. The idempotency hash is the SHA-256 of the raw zip bytes. Restore validates the zip before it writes anything: traversal, Windows paths, symbolic links, encryption, Zip64, declared size, hashes, image bytes, and references. It creates a new project and new reference and placement ids at revision 1. The same image bytes reuse the existing asset row. Files are written before the database transaction. If the transaction fails, new unreferenced files are removed and an image already used by another project is left in place. An unknown format or a newer format version returns an error that names the version this studio reads. The project list can download the open project and restore a backup even when the library is empty. "Downloaded" and "Restored" appear only after the service accepts. A failed restore keeps the current selection.
+
+### Checks
+
+- `npm run check` — passed.
+- `npm test` — passed. 18 files, 73 tests. Coverage includes a round trip of an image, link, and note with role, crop, usage notes, tags, motion, and archived state; new ids; asset reuse; idempotent replay; payload mismatch; format and version rejection; traversal, Windows paths, symbolic links, encryption, Zip64, and expansion limits; a failed restore that keeps the original project and its file; and removal of an image written for a restore that did not commit.
+- `npm run test:e2e` — passed. 2 Edge tests still connect, retry, and reconnect.
+- Dev browser check — passed on a temporary data directory. Created "Atlas", added the note "Quiet stone and north light.", and downloaded `atlas-backup.zip`. Restoring that zip selected a second Atlas with a new id, the same note, and a new reference id. The original Atlas still had its own copy. An unreadable file showed "This backup could not be read." and left the selection in place. After reload, both projects and the note remained. At 390px the list and detail stack, with no horizontal overflow. At 1100px they sit side by side. Light and dark color schemes both apply.
+
+### Known limitations
+
+- This format cannot store directions, canvas positions, systems, variants, evidence, or snapshots yet. Export and restore say so instead of dropping them.
+- Thumbnails are rebuilt during restore. They are not stored in the archive.
+- Restore always creates a new project. It does not replace the project the archive came from.
+- The crop is recorded as numbers. It is not drawn on the image yet.
+- An approved asset role is not an approved direction. Direction snapshots arrive in M5.
+- Animated images are rejected. Images larger than 20 MB or 12000 pixels on a side are rejected.
+- Node 24 remains unverified.
+
 ## Later milestones
 
-M1.5 through M6 are not started.
+M1.6 through M6 are not started.
 
 ## Commands
 
