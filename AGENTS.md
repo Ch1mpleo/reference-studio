@@ -5,10 +5,19 @@ Reference Studio is a local visual workspace, portable creative-workflow skill, 
 ## Start with the task
 
 - For implementation, read [product boundaries](docs/PRODUCT.md) and [current progress](docs/STATUS.md), then inspect only the relevant source and scoped rules below.
+- For Studio UI, CSS, components, canvas chrome, loading presentation, or interface motion, also read [design.md](design.md): the visual foundation, affected component recipes, and implementation/acceptance guidance.
 - The product document records agreed intent; source and package manifests describe current implementation. Planned features are not proof that those features exist.
 - Questions, reviews, and diagnoses are read-only unless the user asks for changes. For an authorized change, implement and verify it without repeated permission requests.
 - Preserve unrelated edits and approved content. Resolve routine implementation choices from existing patterns; ask only when missing product intent materially changes the result.
 - Follow an existing task plan when present. Update `docs/STATUS.md` for validated task completion, meaningful findings, and remaining work; do not create a second task database or claim a milestone from a build alone.
+
+## Studio design implementation
+
+- [design.md](design.md) is the canonical Studio design specification. Use its tokens, materials, component anatomy/states, responsive rules, and interaction behavior; the execution plan owns task order and STATUS owns verification evidence.
+- Build the cohesive modern interface described there: the surrounding components must fit the ASCII loading treatment in resting, loading, and loaded states. Review upstream loader source when integrating it; keep the artwork and controls readable and usable.
+- Reuse the existing client primitives and semantic token source. Apply the relevant recipe to real screens and the living interface preview; do not independently invent a second palette or component system for each milestone.
+- Keep Studio styles scoped away from target-project previews and records. This root `design.md` is distinct from future project/revision-specific `design.md` exports.
+- Record accepted visual feedback and justified design deviations in `design.md`; record checks and limitations in STATUS. A document or plan approval does not prove that a rendered sample has been reviewed or a feature implemented.
 
 ## Confidence before implementation
 

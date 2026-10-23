@@ -6,6 +6,7 @@ alwaysApply: false
 
 # Web client
 
+- Read [the Studio design specification](../../design.md) before visual/interface changes. Follow its foundation, affected component recipes, and acceptance guidance; keep design values there rather than duplicating them in this rule or the task plan.
 - Use functional React components and plain CSS tokens, following `apps/web/src/client/App.tsx` and `styles.css`. This is a Vite client, not Next.js: do not introduce Server Components, Server Actions, `next/image`, or `use client` directives.
 - Keep persisted project state in the application service. Local state owns transient interaction such as selection, panels, and in-progress edits; do not turn local storage into a second project database.
 - Parse external responses with shared core schemas. Reuse the existing connection hook for service/SSE lifecycle; clean up listeners and prevent obsolete requests from overwriting newer state.

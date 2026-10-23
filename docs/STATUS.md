@@ -213,6 +213,22 @@ The development preview is `#/studio`. It shows the library control states (sele
 
 The M1 acceptance scenario is not closed. M2 through M6 are not started.
 
+### M2 planning review — 2026-10-23
+
+- Reviewed the current client, semantic styles, loading hooks, CodeGraph index, package manifests, and existing browser coverage against the user-supplied [ASCII Reveal demo](https://quanhoangindex.github.io/ascii-reveal/) and [source](https://github.com/quanhoangindex/ascii-reveal). The library supplies optional reveal/loading effects; Studio still owns its components and design system.
+- Updated the [Cursor execution plan](C:/Users/vieta/.cursor/plans/reference_studio_build_f8ad424b.plan.md), preserving existing task IDs. Reconciled delivered M1 todos and stale scaffold/test descriptions; the integrated M1 acceptance gate remains pending.
+- Planned M2.0a–M2.0c for a reviewed neutral light/dark, sans/monospace interface sample, shared style and workspace hierarchy changes, truthful loading states, and bounded ASCII presentation. Current warm/serif styling, prominent connection card, form-heavy collection, and missing explicit initial-load state are the main adaptation points. Exact visual values remain sample proposals.
+- Added M2.10 for responsive, keyboard/focus, reduced-motion, populated-board performance, and functional regression checks. Studio effects must preserve immediate editing/manipulation and remain separate from target-project systems and fixture playback.
+- Clarified direction ownership before persisted canvas frames and backup-format extension when new records become writable. Existing version 1 backups cannot represent directions or board geometry.
+- This is documentation and planning only. No application code or dependencies changed, no M2 implementation was completed, and application tests/builds were not rerun. Plan structure, task-ID preservation, local links, and documentation diffs were checked. Next execution task remains the integrated M1 acceptance scenario, followed by the M2.0a visual sample.
+- Follow-up clarification: the user wants Studio's modern surrounding interface to match the supplied site's ASCII effect as one cohesive design. Expanded the plan into 15 detailed specification sections: exact light/dark color tokens, typography, spacing/radii/materials, responsive layouts, component anatomy and states, keyboard/focus behavior, cards/inspector/editing, board/playground recipes, and interface motion. Soft rounded surfaces, pill controls, fine borders, and restrained monospace detail carry the style even when idle. Loader internals are left to upstream source review; M2.0c now verifies visual pairing and integration rather than prescribing a new animation engine. Numerical token contrast checks are static design validation, not rendered accessibility evidence.
+
+### Canonical Studio design document — 2026-10-23
+
+- Added root [design.md](../design.md) as the canonical Studio design specification, moving the detailed baseline out of the Cursor plan. It retains the exact tokens and component recipes and adds theme/style resolution, component/state/draft contracts, concrete desktop/phone/loading/playground compositions, and review/change guidance.
+- Updated AGENTS.md, the scoped client rule, and DESIGN_AND_MOTION.md to route Studio UI work to that file. The Cursor plan now links to it and continues to own execution order; STATUS continues to own delivered behavior and evidence. This root design specification is separate from future project-specific design.md exports.
+- Documentation only: no UI implementation, dependencies, or milestone completion changed. Checked document links/anchors, specification extraction, preserved Cursor todo IDs/frontmatter, balanced code fences, and whitespace diffs. Application tests/builds were not rerun. Next implementation task remains the integrated M1 acceptance scenario followed by M2.0a.
+
 ## Commands
 
 - `npm run dev` — service on `127.0.0.1:4317` and the interface on `http://127.0.0.1:5173`.

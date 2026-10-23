@@ -113,6 +113,8 @@ The coding agent implements reusable components and animation helpers in the tar
 
 ## Studio's own implementation plan
 
+The repository's root [design.md](../design.md) now owns Studio's detailed visual specification: exact tokens, component recipes, layout, materials, motion, and visual pairing with the ASCII loader. Read it for Studio UI implementation and record accepted Studio visual decisions there. This document continues to own the broader design/motion product scope and target-project systems; the root file is separate from future exported target-project `design.md` documents.
+
 Start with a small foundation in the existing React client:
 
 - A central CSS token source for semantic colors, type, spacing, shape, focus, and layering; support the existing light/dark behavior.
@@ -127,7 +129,7 @@ Candidate behavior for the first board:
 - Selection, text entry, repeated tagging, and saving feedback remain immediate.
 - Panels and dialogs follow consistent entry/exit behavior, with no waiting for a transition before a useful action.
 
-Choose Studio's exact visual values and motion character through a small reviewed interface sample. Do not turn the current connection-status screen into an approved brand system by default.
+Use the exact baseline values in [design.md](../design.md) to build the next small reviewed interface sample, then record accepted visual feedback there. The user accepted the planning baseline; rendered sample review and implementation checks remain separate evidence.
 
 Keep these implementation primitives inside `apps/web/src/client` initially. Shared domain schemas belong in `packages/core`; target-project systems are records, not imported global Studio styles. Extract a shared UI package only when another actual first-party surface needs the same implementation.
 
