@@ -29,6 +29,29 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
       setOpen(false);
     }
     function onKeyDown(event: KeyboardEvent): void {
+      const items = [...(rootRef.current?.querySelectorAll<HTMLElement>("[role='menuitem']") ?? [])];
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const index = active === null ? -1 : items.indexOf(active);
+      if (event.key === "ArrowDown" && items.length > 0) {
+        event.preventDefault();
+        items[index < 0 ? 0 : (index + 1) % items.length]?.focus();
+        return;
+      }
+      if (event.key === "ArrowUp" && items.length > 0) {
+        event.preventDefault();
+        items[index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length]?.focus();
+        return;
+      }
+      if (event.key === "Home" && items.length > 0) {
+        event.preventDefault();
+        items[0]?.focus();
+        return;
+      }
+      if (event.key === "End" && items.length > 0) {
+        event.preventDefault();
+        items[items.length - 1]?.focus();
+        return;
+      }
       if (event.key !== "Escape") {
         return;
       }

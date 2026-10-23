@@ -5,8 +5,8 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 ## Current position
 
 - Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance.
-- Active milestone: M1 is accepted. M2 has not started.
-- Next task: M2.0a — representative Studio sample. It has not been started.
+- Active milestone: M2.0a sample is built and waiting for visual review. The library screens still use the M1.6 theme.
+- Next task: Review the `#/studio` sample, then apply the accepted tokens in M2.0b. M2.0a stays open until that review is recorded.
 
 ## Milestone 0 — Foundation
 
@@ -230,9 +230,34 @@ Download showed “Downloaded”. The zip was format version 1 and included the 
 - The browser tool’s Tab key still does not move focus, so the painted focus ring was not measured on this pass.
 - Node 24 remains unverified.
 
+## Milestone 2 — Studio sample
+
+### M2.0a — Representative sample, awaiting review
+
+The specimen now uses the ascii-reveal demo's glass: translucent cards and pills, inset hairline rings, a solid primary, and a static glyph field behind the frame. Opaque panels and blue selected rings were removed after review because they read as a separate wireframe. The library screens still use the M1.6 warm theme. Light defaults apply on `.studio-sample`, the operating-system dark scheme applies when no theme is chosen, and the Light and Dark controls override it.
+
+The specimen shows an image, a link, a note, a missing image, shared fields beside placement fields, and a conflict on the selected placement. Preview controls can show an empty collection, a static loading card, plain decoration, reduced motion, and save failed, saving, or saved. Add reference opens a tabbed dialog and does not write to the service. Loading is a static skeleton, not the ASCII Reveal package. That pairing is M2.0c.
+
+Motion roles are instant 0ms, feedback 100ms, menu 120ms, panel 160ms, and dialog 160ms. Menus move with the arrow keys, Home, and End.
+
+### Checks
+
+- `npm run check` — passed.
+- `npm test -- apps/web/src/client/StudioPreview.test.tsx apps/web/src/client/studioMotion.test.ts` — passed. 2 files, 5 tests. Coverage includes panel reversal, dialog and menu focus return, menu arrow movement, reduced-motion duration, theme selection, and separate shared and placement fields.
+- Dev browser check — the glass restyle was reviewed on the running Vite server at `http://127.0.0.1:5173/#/studio`. Dark and light both use the demo's glass cards, solid primary pill, and hairline frame. At 1440px the rail, collection, and inspector sit in that frame. At 390px the page does not scroll sideways; Open details sits under the top bar (`top` 137 matches the bar bottom) and shows Back. Light background is `rgb(246, 246, 247)`.
+
+### Known limitations
+
+- The sample has not been accepted. The glass values are on the specimen until that review.
+- The glyph field is a static backdrop so the glass can read. It is not the ASCII Reveal package and it does not animate.
+- The card artwork is original specimen drawing, not a project reference.
+- Paste, drop, and service saves stay on the library screen. The specimen does not perform them.
+- Keyboard focus painting is still limited by the browser tool, as in M1.6. The focus rule is loaded.
+- Node 24 remains unverified.
+
 ## Later milestones
 
-The M1 gate is closed. M2 through M6 are not started.
+The M1 gate is closed. M2.0a is waiting for visual review. M2.0b onward is not started.
 
 ### M2 planning review — 2026-10-23
 

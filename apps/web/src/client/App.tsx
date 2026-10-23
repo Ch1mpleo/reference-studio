@@ -46,13 +46,29 @@ export function App() {
     connection.state === "reconnecting" ||
     connection.health !== null;
 
+  if (preview) {
+    return (
+      <main className="studio-preview-route">
+        <StudioPreview
+          connection={{
+            state: connection.state,
+            detail: status.detail,
+            contractVersion: connection.health?.contractVersion ?? null,
+            live: connection.live,
+            onRetry: connection.retry,
+          }}
+        />
+      </main>
+    );
+  }
+
   return (
     <main className="shell">
       <header className="topbar">
         <div>
           <p className="eyebrow">Reference Studio</p>
-          <h1>{preview ? "Interface" : "Projects"}</h1>
-          {import.meta.env.DEV && !preview ? (
+          <h1>Projects</h1>
+          {import.meta.env.DEV ? (
             <a className="preview-link" href="#/studio">
               Interface preview
             </a>
@@ -79,8 +95,7 @@ export function App() {
           </button>
         </section>
       </header>
-      {preview ? <StudioPreview /> : null}
-      {!preview && libraryVisible ? (
+      {libraryVisible ? (
         <ProjectScreen
           projects={library.projects}
           notice={library.notice}

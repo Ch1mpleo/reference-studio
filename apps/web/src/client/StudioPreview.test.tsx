@@ -15,7 +15,7 @@ async function render(node: ReactNode): Promise<{ container: HTMLElement; root: 
 }
 
 function buttonNamed(container: ParentNode, name: string): HTMLButtonElement {
-  const button = [...container.querySelectorAll("button")].find((item) => item.textContent === name);
+  const button = [...container.querySelectorAll("button")].find((item) => item.textContent?.replace(/\s+/g, " ").trim() === name);
   if (!(button instanceof HTMLButtonElement)) {
     throw new Error(`Expected a ${name} button.`);
   }
@@ -73,6 +73,11 @@ describe("Studio preview", () => {
     expect(view.container.querySelector("[role='menuitem']")).toBe(document.activeElement);
 
     await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    });
+    expect(document.activeElement?.textContent?.trim()).toBe("Candidate");
+
+    await act(async () => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     });
     expect(menuButton.getAttribute("aria-expanded")).toBe("false");
@@ -98,6 +103,30 @@ describe("Studio preview", () => {
     });
     expect(preview?.getAttribute("data-reduced-motion")).toBe("true");
     expect(preview instanceof HTMLElement ? preview.style.getPropertyValue("--motion-panel") : "").toBe("0ms");
+
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("keeps the collection specimen on its own theme and separates shared fields from placement", async () => {
+    const view = await render(createElement(StudioPreview));
+    const sample = view.container.querySelector(".studio-sample");
+    expect(sample?.getAttribute("data-studio-theme")).toBeNull();
+    expect(view.container.querySelector("[data-fields='shared']")).not.toBeNull();
+    expect(view.container.querySelector("[data-fields='placement']")).not.toBeNull();
+    expect(view.container.querySelector("[data-image='missing']")).not.toBeNull();
+    expect(view.container.querySelector("img")?.getAttribute("alt")).toContain("Specimen");
+
+    await act(async () => {
+      buttonNamed(view.container, "Dark").click();
+    });
+    expect(sample?.getAttribute("data-studio-theme")).toBe("dark");
+
+    await act(async () => {
+      buttonNamed(view.container, "Light").click();
+    });
+    expect(sample?.getAttribute("data-studio-theme")).toBe("light");
 
     await act(async () => {
       view.root.unmount();

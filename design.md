@@ -31,38 +31,42 @@ The reference site and source were inspected during the 2026-10-23 plan review. 
 
 ### 1. Design language and hierarchy
 
-The interface should share the demo's polished modern feeling: soft rounded cards, layered charcoal/off-white surfaces, fine boundaries, crisp sans-serif content, pill controls, and restrained monospaced detail. Images remain the strongest color. The modern components should visually belong with the ASCII loader even in a resting screenshot. ASCII is an accent within this language; do not turn the application into a terminal dashboard.
+The interface should share the demo's polished modern feeling: glass cards, a hairline ruled frame, crisp sans-serif content, pill controls, and a quiet glyph field behind the glass. Images remain the strongest color. The modern components should visually belong with the ASCII loader even in a resting screenshot. ASCII is an accent within this language; do not turn the application into a terminal dashboard.
 
 Use three visual levels:
 1. **Material:** original reference imagery, the selected experiment, or the active direction is the focal point.
 2. **Tools:** project navigation, toolbar, inspector, and forms use restrained surfaces with readable labels.
 3. **Instrumentation:** counts, revision labels, coordinates, section indices, dividers, and sparse glyphs use small monospace details.
 
-Use a neutral solid pill primary action, blue for selection/focus and links, and semantic colors only for actual status. One primary action per local task area. Aesthetic preferences never use success/error colors as quality rankings. No marketing hero, oversized brand lockup, rainbow brand mark, CRT scanlines, neon bloom, glitching controls, or animated wallpaper.
+Use a neutral solid pill for the one primary action. Blue is for focus and links. Selection is a brighter glass edge, the same treatment as the demo's pressed segment, not a blue wash. Semantic colors are only for actual status. Aesthetic preferences never use success/error colors as quality rankings. No marketing hero, oversized brand lockup, rainbow brand mark, CRT scanlines, neon bloom, glitching controls, or animated wallpaper.
 
 ### 2. Semantic color tokens
 
-Implement the following in the existing `styles.css`. Default follows OS preference; `data-studio-theme="light|dark"` on a Studio scope overrides it for preview/testing. Do not let that attribute select target preview styles. Values are opaque unless expressly labeled decorative.
+Implement the following on the Studio scope in `styles.css`. Default follows OS preference; `data-studio-theme="light|dark"` on a Studio scope overrides it for preview/testing. Do not let that attribute select target preview styles. Surfaces are the ascii-reveal demo's glass, not opaque panels. The library keeps its current theme until that glass is accepted on the specimen.
 
 ```css
-/* Dark */
+/* Dark — ascii-reveal demo */
 --color-bg: #08080a;
---color-surface: #141418;
---color-surface-raised: #1c1c22;
---color-surface-hover: #24242c;
---color-field: #101014;
+--color-surface: rgb(20 20 26 / 44%);          /* glass */
+--color-surface-raised: rgb(255 255 255 / 8.5%); /* glass-strong */
+--color-surface-hover: rgb(255 255 255 / 12%);
+--color-field: rgb(0 0 0 / 34%);               /* sunken */
 --color-ink: #ededef;
 --color-muted: #a3a3ac;
---color-subtle: #8e8e99;
---color-line: #303038;         /* decorative sections only */
---color-control-line: #777783; /* boundaries needed to identify a control */
---color-accent: #8cabff;       /* links, active indicators */
---color-focus: #8cabff;
---color-selected-bg: #18233a;
---color-selected-line: #8cabff;
+--color-subtle: #878791;                       /* faint */
+--color-line: rgb(255 255 255 / 9%);
+--color-line-strong: rgb(255 255 255 / 20%);
+--color-control-line: rgb(255 255 255 / 11%);  /* glass-line, an inset ring */
+--color-glass-hi: rgb(255 255 255 / 20%);
+--color-glass-shadow: rgb(0 0 0 / 60%);
+--color-backdrop: rgb(255 255 255 / 20%);
+--color-accent: #5b8cff;
+--color-focus: #5b8cff;
+--color-selected-bg: rgb(255 255 255 / 8.5%);
+--color-selected-line: rgb(255 255 255 / 20%);
 --color-solid: #ededef;
 --color-on-solid: #08080a;
---color-success: #80d9ac;
+--color-success: #3dd68c;
 --color-warning: #eac170;
 --color-danger: #ff9ca9;
 --color-danger-bg: #321a22;
@@ -71,24 +75,28 @@ Implement the following in the existing `styles.css`. Default follows OS prefere
 --color-scrim: rgb(0 0 0 / 64%);
 --color-decoration: rgb(237 237 239 / 7%);
 
-/* Light */
+/* Light — ascii-reveal demo */
 --color-bg: #f6f6f7;
---color-surface: #ffffff;
---color-surface-raised: #ffffff;
---color-surface-hover: #ededf1;
---color-field: #ffffff;
+--color-surface: rgb(255 255 255 / 50%);
+--color-surface-raised: rgb(255 255 255 / 72%);
+--color-surface-hover: rgb(255 255 255 / 82%);
+--color-field: rgb(0 0 0 / 4.5%);
 --color-ink: #141416;
 --color-muted: #5f5f68;
---color-subtle: #666670;
---color-line: #dcdce2;
---color-control-line: #80808c;
---color-accent: #2858df;
---color-focus: #2858df;
---color-selected-bg: #eaf0ff;
---color-selected-line: #2858df;
+--color-subtle: #8a8a93;
+--color-line: rgb(0 0 0 / 8%);
+--color-line-strong: rgb(0 0 0 / 22%);
+--color-control-line: rgb(0 0 0 / 7%);
+--color-glass-hi: rgb(255 255 255 / 95%);
+--color-glass-shadow: rgb(30 30 60 / 14%);
+--color-backdrop: rgb(0 0 0 / 20%);
+--color-accent: #2f62f0;
+--color-focus: #2f62f0;
+--color-selected-bg: rgb(255 255 255 / 72%);
+--color-selected-line: rgb(0 0 0 / 22%);
 --color-solid: #141416;
 --color-on-solid: #ffffff;
---color-success: #146c43;
+--color-success: #0e8a55;
 --color-warning: #805600;
 --color-danger: #b4233b;
 --color-danger-bg: #fff0f3;
@@ -99,24 +107,24 @@ Implement the following in the existing `styles.css`. Default follows OS prefere
 ```
 
 Rules:
-- Text on surface/background uses ink, muted, or subtle; never reduce the opacity of an entire text/control subtree. Muted remains readable, not decorative gray.
-- Input borders and essential icon outlines use control-line. Decorative separators may use line. Selected borders and focus indicators use their own roles.
-- Primary buttons use solid/on-solid. Pressed backgrounds invert no semantics: dark primary `#d0d0d8`, light primary `#303038`; hover dark `#ffffff`, light `#24242c`. Keep matching on-solid foreground.
-- Secondary and ghost actions use ink over their neutral surfaces; hover uses surface-hover. Destructive actions use danger text and an explicit verb; the final confirmation action may use a solid danger surface only after a verified foreground/background pair is added.
-- Disabled controls retain their surface and use subtle text with a dashed or unchanged boundary plus native disabled semantics; disabled is never a selected style. Disabled contrast is not used to justify low contrast on enabled controls.
-- Selected tint belongs behind metadata/control rows or a narrow card accent, never as a blue wash over an image.
+- Text on surface/background uses ink, muted, or subtle. Muted remains readable, not decorative gray.
+- Glass controls use no solid stroke. Their edge is `box-shadow: inset 0 0 0 1px var(--color-control-line), inset 0 1px 0 var(--color-glass-hi)` plus `backdrop-filter: blur(14px) saturate(160%)`. Decorative separators use line. Focus uses the accent ring and stays separate from selection.
+- Primary buttons use solid/on-solid, `box-shadow: none`, and hover `color-mix(in srgb, var(--color-solid) 88%, var(--color-bg))`.
+- Secondary actions are glass pills. Ghost actions are transparent with no resting ring. Destructive actions use danger text and an explicit verb.
+- Disabled controls use opacity 0.65 with the same glass or solid fill. Disabled is never a dashed wireframe and never a selected style.
+- Selected cards and pressed segments use the brighter glass fill and line-strong edge. Do not put a blue wash or blue ring on a card or a pressed button.
 - Verify actual rendered combinations at >=4.5:1 for normal text, >=3:1 for large text and essential control/focus graphics. Record failures and token fixes; alpha decorative colors are exempt only when they convey no information.
 
 ### 3. Type, iconography, and numeric information
 
 ```css
---font-sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
---font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+--font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+--font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 --type-page: 600 24px/32px var(--font-sans);
 --type-section: 600 18px/26px var(--font-sans);
---type-card: 600 15px/22px var(--font-sans);
+--type-card: 600 17px/24px var(--font-sans);
 --type-body: 400 15px/24px var(--font-sans);
---type-control: 500 14px/20px var(--font-sans);
+--type-control: 500 13px/16px var(--font-sans);
 --type-caption: 400 13px/20px var(--font-sans);
 --type-meta: 400 12px/18px var(--font-mono);
 --type-numeric: 500 13px/20px var(--font-mono);
@@ -150,7 +158,7 @@ Rules:
 
 - Standard controls: horizontal padding 12px, 8px icon gap. Small controls only in dense desktop toolbars; touch hit areas remain at least 44x44px without overlapping neighboring targets.
 - Card padding 12px; inspector section padding 16px; dialog padding 24px (16px on phones). Card/grid gaps 16px desktop and 12px phone.
-- Reference cards use a 16px radius (20px for spacious preview/sample cards); headers and rails use ruled sections. Use a faint inset highlight on raised cards, dark `inset 0 1px 0 rgb(255 255 255 / 5%)`, light `inset 0 1px 0 rgb(255 255 255 / 80%)`. An optional soft top-to-bottom surface gradient stays within the neutral palette, never shifts the image colors. Surfaces use a 1px line boundary, no glow. Menus/popovers use raised surface, 1px control-line, dark shadow `0 12px 32px rgb(0 0 0 / 32%)` or light `0 12px 32px rgb(20 20 22 / 12%)`. Flat rail and card surfaces do not receive that shadow.
+- Reference cards use a 20px radius, 24px padding, and 14px media radius. Their material is glass: surface fill, 1px glass-line, inset highlight, `0 24px 48px -28px` glass shadow, and `backdrop-filter: blur(16px) saturate(160%)`. A sheen overlay (`linear-gradient(150deg, rgb(255 255 255 / 10%), transparent 34%)`) sits inside the radius and does not catch clicks. Menus use the same glass at 16px radius. Flat rails stay quiet; selection there is a glass pill, not a blue outline.
 - Match the reference's layered/glass feeling through subtle neutral surface separation, hairline boundaries, and inset highlights. A compact toolbar or popover may use 92% surface opacity and at most 8px backdrop blur with an opaque fallback. Large collections and board nodes use opaque equivalents with the same visual hierarchy; blur is not necessary to achieve the material.
 - Focus is a 2px solid focus outline with 2px offset; reserve room so it is not clipped. It sits outside selection borders and remains visible on tinted and image backgrounds.
 - Modal dialogs use the native top layer; numeric layer tokens order only ordinary app layers. Do not attempt to out-z-index the native dialog. A tooltip for a modal control stays within the modal's accessible subtree/top-layer context.
@@ -197,7 +205,7 @@ The implementing agent reviews the upstream source/types and working demo for lo
 ### 8. Buttons, links, badges, tabs
 
 **Button**
-- Native button with variants primary, secondary, ghost, danger; sizes small/default/touch. Primary actions and compact standalone secondary actions use radius-pill, matching the demo; dense form fields retain radius-control. Do not force every field or panel into a pill. Default is secondary. Primary uses solid/on-solid, secondary surface + control-line, ghost transparent with no resting border, danger danger text plus visible label.
+- Native button with variants primary, secondary, ghost, danger; sizes small/default/touch. Primary and secondary are pills. Primary is solid/on-solid with no shadow, padding 12px 18px, 14px medium type. Secondary is a glass pill: padding 11px 16px, 13px medium type, inset glass-line and highlight, blur 14px. Ghost is transparent with no resting border. Dense fields stay at radius-control (12px) and use the sunken field fill with an inset line, not a heavy stroke. Do not draw a 1px charcoal outline around every control.
 - Hover changes background only; pressed uses darker/lighter neutral surface, no translateY or scale. Focus ring is immediate; disabled uses native disabled.
 - Busy keeps the existing width and label context (Save → Saving), aria-busy=true, and prevents duplicate activation. A static 12px progress mark or bounded spinner is allowed with a static reduced-motion alternative. Never scramble Saving.
 - Async success lives beside the action, not in a resizing button that moves neighboring controls. No checkmark implying an unsaved optimistic success.
@@ -212,14 +220,14 @@ The implementing agent reviews the upstream source/types and working demo for lo
 - Draft, Selected, Approved direction are distinct labels. Do not render Approved direction until the M5 record exists.
 
 **View tabs/segmented controls**
-- 36px high neutral group with 4px inset, 999px outer radius and pill-shaped segments, selected surface-raised and 1px line. Selected text ink; unselected muted. Use proper tabs only when switching associated panels, including roving focus/arrow keys; use buttons with aria-pressed for independent presentation options.
+- Glass track with 3px inset, 999px outer radius, and pill segments. The selected segment is brighter glass with an inset highlight and a 1px glass-line, the same as the demo's segmented control. Selected text is ink; unselected text is muted. There is no blue selected ring. Use proper tabs only when switching associated panels, including roving focus/arrow keys; use buttons with aria-pressed for independent presentation options.
 - Keyboard view changes preserve selected IDs and unsaved drafts. Hidden A/B fixture does not reset its values. Selection uses a label/border, not a glyph animation.
 
 ### 9. Fields, search, filters, and parameter controls
 
 **Field recipe**
 - Visible 13px sans label, 8px gap to 36px input, helper/error 4px below. Field group gap 16px. Required markers have an explanation; optional fields say Optional only where useful.
-- Input surface field; 1px control-line; radius-control; padding 8px 12px. Textarea min-height 96px, vertically resizable. Readonly fields look selectable; disabled fields cannot masquerade as editable.
+- Input surface is the sunken field; inset 1px line; 12px radius; padding 8px 12px. Textarea min-height 96px, vertically resizable. Readonly fields look selectable; disabled fields cannot masquerade as editable.
 - Hover retains geometry; focus uses the shared ring, invalid uses danger border plus linked error text via aria-describedby/aria-invalid. Error text states the fix; placeholder is an example, never the only label.
 - Dirty fields keep their values on network/conflict failures. Validation runs on submit and subsequently for affected dirty fields; avoid red errors on untouched empty fields.
 - Keep native select for simple roles/kinds initially. A searchable combobox is added only for a demonstrated dataset need and requires full keyboard behavior.
@@ -242,7 +250,7 @@ The implementing agent reviews the upstream source/types and working demo for lo
 2. Content block: kind/role line in 12px mono, two-line title, optional one-line creator/source summary, no full form.
 3. Open details button with a clear accessible name; optional selection checkbox separate from the button. More actions appear on focus as well as hover and remain available on touch.
 - Article/list-item shell is noninteractive. Put the main Open details action around the title or in its own button; never wrap nested menu/checkbox/link controls in another button.
-- Rest border line; hover control-line; selected 2px selected-line with an inset implementation that does not move layout. Focus is the separate outer ring. Selected state is independent of keyboard focus.
+- Rest border is the glass line. Hover and selected use line-strong. Selected does not add a blue 2px ring and does not move layout. Focus is the separate outer accent ring. Selected state is independent of keyboard focus.
 - Missing image: same reserved geometry, image-unavailable icon, readable message; keep title and source. No invented imagery or eternal skeleton. A note/link uses a kind icon and readable excerpt, without pretending to be an image.
 - Cards do not lift, tilt, zoom images, blur, or scramble on hover. Image click in collection opens details; zoom/original view is a separate named action.
 - List rows expose the same selection/actions and ownership facts, with sortable behavior only if implemented. Row actions cannot require a context menu.
@@ -364,7 +372,7 @@ The implementing agent reviews the upstream source/types and working demo for lo
 
 ### 17. Concrete composition examples
 
-**1440px populated collection:** a 56px top bar sits over a 216px project rail, flexible central collection, and 320px inspector. Give the central collection 24px padding and a toolbar with title/count at left and one Add reference at right; search/filter tools form a second row only when needed. Cards use 16px gaps, 16px corner radius, a contained 4:3 media frame, and a 12px content inset. The selected card's thin accent perimeter leads to the inspector; the reference image remains the most colorful element. Diagnostics stay behind the compact connection trigger. If the available central width cannot fit a useful grid, move to the documented compact arrangement rather than shrinking cards below their readable minimum.
+**1440px populated collection:** a hairline frame, at most 1200px wide, holds the top bar, a project rail, the central collection, and the inspector. The top bar is a blurred strip. Cards use 20px gaps, 20px corner radius, 24px padding, a 14px-radius 4:3 media frame, and the glass sheen. The selected card's stronger glass edge leads to the inspector; the reference image remains the most colorful element. A static, low-density glyph field sits behind the frame so the glass has something to blur; it does not animate and does not cover type. Diagnostics stay behind the compact connection pill.
 
 **390px review:** the same type and surface hierarchy remains recognizable. Top bar shows project context and compact connection status; workspace padding is 16px. A full-width Add reference action is permitted in the collection toolbar, with no duplicate top-bar Add. Reference cards stack. Open details enters a full-width detail panel with Back and a reachable save area. Returning restores the previous list position and selection. Shared and placement fields remain distinct and wrap naturally. The user can add/search/review/edit without operating a canvas.
 
@@ -380,8 +388,6 @@ Use the existing `#/studio` specimen as the place to review implementations of t
 
 Before calling a component ready, check its applicable states, ordinary and long content, image failure, keyboard focus/activation, phone layout, both themes, and reduced motion. Review its resting appearance beside loading/loaded versions where loading applies. Check the populated composition as well as the isolated component; token accuracy alone does not establish good hierarchy.
 
-The specified opaque color pairs passed a numerical contrast check during planning (92 combinations, minimum normal-text ratio 4.75:1). This covers those declared pairs only. Actual compositing, selected/pressed variants, native controls, fonts, focus placement, and rendered accessibility require browser verification. Do not copy that result into STATUS as proof of checks not run.
+The first opaque token pairs were a planning check only. Glass surfaces composite over the page, so those ratios do not describe the rendered specimen. Actual compositing, selected/pressed variants, native controls, fonts, focus placement, and rendered accessibility require browser verification.
 
-When a value or recipe changes, update its owning section and affected specimen. Record the rationale in a short design decision note here if it is an accepted visual decision; put implementation progress and executed checks in STATUS. Do not add a parallel checklist of milestone completion to this file. Continue to use the Cursor plan's task IDs.
-
-Current decision baseline: the user accepted the detailed execution plan and asked for this canonical design document. The selected direction is the cohesive modern appearance surrounding ASCII Reveal. Studio's rendered redesign, individual specimen approval, browser validation, and later board/playground recipes remain implementation work. This statement is evidence of intent, not implementation completion.
+Current decision baseline: the user accepted the detailed execution plan and asked for this canonical design document, then rejected the opaque outlined specimen because it did not match the ascii-reveal demo. The specimen's buttons, segments, cards, fields, and frame now follow that demo's glass recipes. Studio's rendered sample still needs visual review. Library restyle, individual specimen approval, and later board/playground recipes remain implementation work.
