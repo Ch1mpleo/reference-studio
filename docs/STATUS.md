@@ -4,9 +4,9 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6.
-- Active milestone: M1 — projects and the reference library.
-- Next task: M1 acceptance — one collect, find, reuse, backup, and restore scenario. M2 is not started.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance.
+- Active milestone: M1 is accepted. M2 has not started.
+- Next task: M2.0a — representative Studio sample. It has not been started.
 
 ## Milestone 0 — Foundation
 
@@ -209,25 +209,46 @@ The development preview is `#/studio`. It shows the library control states (sele
 - The browser tool could not produce a `:focus-visible` match, so the focus ring was confirmed in CSS and not as a painted outline.
 - Node 24 remains unverified.
 
+### M1 acceptance
+
+One temporary production workspace collected an image, a timed link, and a note; found the note by tag; reused it in a second project; downloaded a backup; and restored that backup as a new project. The personal `.reference-studio/` directory was not used.
+
+Atlas was created with the brief “North light and quiet type.” It received `north.png`, the link `https://example.com/board` at 1:05 with observed motion “pan”, and the note “Quiet stone and north light.” The note’s shared title became “North stair”, with tags `north, type`. Its Atlas placement was saved as Approved with usage notes “Hero”, and the card said this is not an approved direction. Harbor was created empty. A tag search for `north` found “North stair” and added it. Harbor kept the same reference id, stayed Inspiration, and kept empty usage notes.
+
+Download showed “Downloaded”. The zip was format version 1 and included the brief, image, approved note, and link. Restore showed “Restored” and selected a new Atlas. The new project, reference, and placement ids differed from the original. The image asset id stayed `395408a5-00d1-40ff-8b12-ed67081e2cb0`, and its thumbnail rendered. Harbor was unchanged. Reload and a service restart on the same temporary directory kept both Atlas projects, Harbor, the brief, the approved note, the image, and the link. The restored Atlas was archived and reopened.
+
+### Checks
+
+- `npm run build` — passed. The gate used that production build on `127.0.0.1:4321`.
+- `npm test` — passed. 20 files, 77 tests. This rerun covers failed uploads, idempotent retries, payload mismatch, and revision conflicts. Those cases were not repeated in the browser.
+- Dev browser check — passed on the temporary production service, as recorded above. At 390px the library stacks, with no horizontal overflow. At 1100px the columns are 288px and the remainder. Light is `rgb(243, 239, 230)`. Dark is `rgb(20, 19, 17)`.
+- `npm run test:e2e` was not rerun for this gate. The two existing Edge scenarios still cover connection, retry, and restart only.
+
+### Known limitations
+
+- The browser tool has no file-upload action. The image and backup were submitted through the existing file inputs from bytes already in the page.
+- The browser tool’s Tab key still does not move focus, so the painted focus ring was not measured on this pass.
+- Node 24 remains unverified.
+
 ## Later milestones
 
-The M1 acceptance scenario is not closed. M2 through M6 are not started.
+The M1 gate is closed. M2 through M6 are not started.
 
 ### M2 planning review — 2026-10-23
 
 - Reviewed the current client, semantic styles, loading hooks, CodeGraph index, package manifests, and existing browser coverage against the user-supplied [ASCII Reveal demo](https://quanhoangindex.github.io/ascii-reveal/) and [source](https://github.com/quanhoangindex/ascii-reveal). The library supplies optional reveal/loading effects; Studio still owns its components and design system.
-- Updated the [Cursor execution plan](C:/Users/vieta/.cursor/plans/reference_studio_build_f8ad424b.plan.md), preserving existing task IDs. Reconciled delivered M1 todos and stale scaffold/test descriptions; the integrated M1 acceptance gate remains pending.
+- Updated the [Cursor execution plan](C:/Users/vieta/.cursor/plans/reference_studio_build_f8ad424b.plan.md), preserving existing task IDs. Reconciled delivered M1 todos and stale scaffold/test descriptions. At that review, the integrated M1 acceptance gate was still pending.
 - Planned M2.0a–M2.0c for a reviewed neutral light/dark, sans/monospace interface sample, shared style and workspace hierarchy changes, truthful loading states, and bounded ASCII presentation. Current warm/serif styling, prominent connection card, form-heavy collection, and missing explicit initial-load state are the main adaptation points. Exact visual values remain sample proposals.
 - Added M2.10 for responsive, keyboard/focus, reduced-motion, populated-board performance, and functional regression checks. Studio effects must preserve immediate editing/manipulation and remain separate from target-project systems and fixture playback.
 - Clarified direction ownership before persisted canvas frames and backup-format extension when new records become writable. Existing version 1 backups cannot represent directions or board geometry.
-- This is documentation and planning only. No application code or dependencies changed, no M2 implementation was completed, and application tests/builds were not rerun. Plan structure, task-ID preservation, local links, and documentation diffs were checked. Next execution task remains the integrated M1 acceptance scenario, followed by the M2.0a visual sample.
+- This is documentation and planning only. No application code or dependencies changed, no M2 implementation was completed, and application tests/builds were not rerun. Plan structure, task-ID preservation, local links, and documentation diffs were checked. At that review, the next execution task was the integrated M1 acceptance scenario, followed by the M2.0a visual sample.
 - Follow-up clarification: the user wants Studio's modern surrounding interface to match the supplied site's ASCII effect as one cohesive design. Expanded the plan into 15 detailed specification sections: exact light/dark color tokens, typography, spacing/radii/materials, responsive layouts, component anatomy and states, keyboard/focus behavior, cards/inspector/editing, board/playground recipes, and interface motion. Soft rounded surfaces, pill controls, fine borders, and restrained monospace detail carry the style even when idle. Loader internals are left to upstream source review; M2.0c now verifies visual pairing and integration rather than prescribing a new animation engine. Numerical token contrast checks are static design validation, not rendered accessibility evidence.
 
 ### Canonical Studio design document — 2026-10-23
 
 - Added root [design.md](../design.md) as the canonical Studio design specification, moving the detailed baseline out of the Cursor plan. It retains the exact tokens and component recipes and adds theme/style resolution, component/state/draft contracts, concrete desktop/phone/loading/playground compositions, and review/change guidance.
 - Updated AGENTS.md, the scoped client rule, and DESIGN_AND_MOTION.md to route Studio UI work to that file. The Cursor plan now links to it and continues to own execution order; STATUS continues to own delivered behavior and evidence. This root design specification is separate from future project-specific design.md exports.
-- Documentation only: no UI implementation, dependencies, or milestone completion changed. Checked document links/anchors, specification extraction, preserved Cursor todo IDs/frontmatter, balanced code fences, and whitespace diffs. Application tests/builds were not rerun. Next implementation task remains the integrated M1 acceptance scenario followed by M2.0a.
+- Documentation only: no UI implementation, dependencies, or milestone completion changed. Checked document links/anchors, specification extraction, preserved Cursor todo IDs/frontmatter, balanced code fences, and whitespace diffs. Application tests/builds were not rerun. At that documentation pass, the next implementation task was the integrated M1 acceptance scenario followed by M2.0a. The acceptance scenario is now recorded above.
 
 ## Commands
 
