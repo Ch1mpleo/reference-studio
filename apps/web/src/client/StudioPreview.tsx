@@ -1,9 +1,13 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
-import { createPortal } from "react-dom";
+import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { StudioButton } from "./StudioButton.js";
+import { StudioField } from "./StudioField.js";
+import { StudioReferenceCard } from "./StudioReferenceCard.js";
+import { StudioSelect } from "./StudioSelect.js";
 import { StudioDialog } from "./StudioDialog.js";
+import { StudioInspector } from "./StudioInspector.js";
 import { StudioMenu } from "./StudioMenu.js";
 import { harborArt, northStairArt } from "./specimenArt.js";
-import { studioMotionDuration } from "./studioMotion.js";
+import { studioMotionStyle } from "./studioMotion.js";
 import type { ServiceState } from "./useServiceConnection.js";
 
 type SampleConnection = {
@@ -173,7 +177,6 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   const [northSave, setNorthSave] = useState<SaveState>("conflict");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [submitted, setSubmitted] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
   const [emptyCollection, setEmptyCollection] = useState(false);
   const [showLoading, setShowLoading] = useState(false);
@@ -188,17 +191,10 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   const [noteMotion, setNoteMotion] = useState("");
   const [addMessage, setAddMessage] = useState<string | null>(null);
 
-  const panelDuration = studioMotionDuration("panel", reducedMotion);
-  const motionStyle = {
-    "--motion-instant": `${studioMotionDuration("instant", reducedMotion)}ms`,
-    "--motion-feedback": `${studioMotionDuration("feedback", reducedMotion)}ms`,
-    "--motion-menu": `${studioMotionDuration("menu", reducedMotion)}ms`,
-    "--motion-panel": `${panelDuration}ms`,
-    "--motion-dialog": `${studioMotionDuration("dialog", reducedMotion)}ms`,
-  } as CSSProperties;
+  const motionStyle = studioMotionStyle(reducedMotion);
   const selected = sampleCards.find((card) => card.id === selectedId) ?? null;
   const selectedDraft = selected === null ? null : (drafts[selected.id] ?? null);
-  const needle = submitted.trim().toLowerCase();
+  const needle = query.trim().toLowerCase();
   const visible = sampleCards.filter((card) => {
     if (kind !== "all" && card.kind !== kind) return false;
     if (needle === "") return true;
@@ -213,7 +209,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
     noteTitle !== "" ||
     noteBody !== "" ||
     noteMotion !== "";
-  const filtersActive = kind !== "all" || submitted !== "";
+  const filtersActive = kind !== "all" || query !== "";
 
   function repeatPanel(): void {
     setPanelOpen(false);
@@ -226,7 +222,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   }
 
   function closeDetails(): void {
-    setSelectedId(null);
+    if (window.matchMedia("(min-width: 960px)").matches) setSelectedId(null);
     setDetailsOpen(false);
   }
 
@@ -241,12 +237,10 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
 
   function submitSearch(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    setSubmitted(query);
   }
 
   function clearFilters(): void {
     setQuery("");
-    setSubmitted("");
     setKind("all");
   }
 
@@ -310,7 +304,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
 
   return (
     <div
-      className="studio-preview studio-sample"
+      className="studio-ui studio-preview studio-sample"
       data-reduced-motion={reducedMotion ? "true" : "false"}
       data-plain={plain ? "true" : "false"}
       data-details-open={detailsOpen ? "true" : "false"}
@@ -320,7 +314,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
       <header className="sample-topbar">
         <p className="sample-wordmark">Reference Studio</p>
         <div className="sample-switcher">
-          <SampleSelect
+          <StudioSelect
             label="Project"
             value={project}
             options={[
@@ -331,7 +325,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
           />
         </div>
         <div className="sample-views" role="group" aria-label="View">
-          <button type="button" aria-pressed="true">Collection</button>
+          <StudioButton type="button" aria-pressed="true">Collection</StudioButton>
         </div>
         <details className="sample-connection">
           <summary>
@@ -350,7 +344,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
               </div>
             </dl>
             <p>{status.detail}</p>
-            <button type="button" onClick={status.onRetry}>Check again</button>
+            <StudioButton type="button" onClick={status.onRetry}>Check again</StudioButton>
           </div>
         </details>
       </header>
@@ -372,18 +366,18 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
           <ul>
             {["Atlas", "Harbor"].map((name) => (
               <li key={name}>
-                <button
+                <StudioButton
                   type="button"
                   className={project === name ? "is-selected" : undefined}
                   aria-current={project === name ? "true" : undefined}
                   onClick={() => setProject(name)}
                 >
                   {name}
-                </button>
+                </StudioButton>
               </li>
             ))}
           </ul>
-          {projectNote !== null ? <p className="sample-note">{projectNote}</p> : null}
+          {projectNote !== null ? <p className="studio-help">{projectNote}</p> : null}
         </nav>
         <main className="sample-workspace">
           <span className="sample-joint sample-joint-nw" aria-hidden="true" />
@@ -397,10 +391,10 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
               <span className="sample-count">{emptyCollection ? 0 : visible.length}</span>
               <pre className="sample-texture" aria-hidden="true">{" .  .   \n        \n   :    \n        "}</pre>
             </div>
-            <button type="button" className="is-primary sample-add" onClick={() => { setConfirmDiscard(false); setDialog("add"); }}>
+            <StudioButton type="button" variant="primary" className="sample-add" onClick={() => { setConfirmDiscard(false); setDialog("add"); }}>
               <PlusIcon />
               Add reference
-            </button>
+            </StudioButton>
             <form className="sample-search" onSubmit={submitSearch}>
               <SearchIcon />
               <input
@@ -410,20 +404,20 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
                 onChange={(event) => setQuery(event.target.value)}
               />
               {query !== "" ? (
-                <button type="button" className="is-ghost sample-clear" onClick={() => { setQuery(""); setSubmitted(""); }}>
+                <StudioButton type="button" variant="ghost" className="sample-clear" onClick={() => { setQuery("");  }}>
                   Clear
-                </button>
+                </StudioButton>
               ) : null}
             </form>
             <div className="sample-views sample-filters" role="group" aria-label="Kind">
               {(["all", "image", "link", "note"] as const).map((value) => (
-                <button key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}>
+                <StudioButton key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}>
                   {value === "all" ? "All" : kindLabel(value)}
-                </button>
+                </StudioButton>
               ))}
             </div>
             {filtersActive ? (
-              <button type="button" className="is-ghost" onClick={clearFilters}>Clear filters</button>
+              <StudioButton type="button" variant="ghost" onClick={clearFilters}>Clear filters</StudioButton>
             ) : null}
           </div>
           {emptyCollection ? (
@@ -432,7 +426,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
             <div className="sample-empty">
               <h2>No matching references</h2>
               <p>Nothing matches the current search or filter.</p>
-              <button type="button" onClick={clearFilters}>Clear filters</button>
+              <StudioButton type="button" onClick={clearFilters}>Clear filters</StudioButton>
             </div>
           ) : (
             <div className="sample-grid">
@@ -453,7 +447,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
             </div>
           )}
         </main>
-        <aside className="sample-inspector" aria-label="Inspector">
+        <StudioInspector open={detailsOpen} onClose={closeDetails}>
           {selected === null || selectedDraft === null ? (
             <div className="sample-placeholder">
               <h2>Select a reference to inspect</h2>
@@ -475,84 +469,96 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
               onReview={() => setNorthSave("saved")}
             />
           )}
-        </aside>
+        </StudioInspector>
       </div>
       <section className="sample-controls" aria-label="Preview controls">
         <div className="sample-controls-heading">
+          <p className="studio-kicker">[02] Interface system</p>
           <h2>Preview controls</h2>
-          <p>These controls change the sample only. They do not write to a project or approve a direction.</p>
+          <p>Try the shared controls and their states. These samples do not write to a project or approve a direction.</p>
         </div>
-        <label className="preview-switch">
-          <input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} />
-          Preview reduced motion
-        </label>
-        <div className="sample-views" role="group" aria-label="Theme">
-          {(["system", "light", "dark"] as const).map((choice) => (
-            <button key={choice} type="button" aria-pressed={themeChoice === choice} onClick={() => setThemeChoice(choice)}>
-              {choice === "system" ? "System" : choice === "light" ? "Light" : "Dark"}
-            </button>
-          ))}
+        <div className="sample-specimen-grid">
+          <section className="sample-control-section" aria-label="Appearance samples">
+            <h3>Appearance</h3>
+            <div className="sample-views" role="group" aria-label="Theme">
+              {(["system", "light", "dark"] as const).map((choice) => (
+                <StudioButton key={choice} aria-pressed={themeChoice === choice} onClick={() => setThemeChoice(choice)}>
+                  {choice === "system" ? "System" : choice === "light" ? "Light" : "Dark"}
+                </StudioButton>
+              ))}
+            </div>
+            <label className="preview-switch">
+              <input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} />
+              Preview reduced motion
+            </label>
+            <p className="studio-help">The operating system preference also applies. Hover changes the surface; cards stay in place.</p>
+            <div className="sample-control-row" role="group" aria-label="Collection state">
+              <StudioButton aria-pressed={plain} onClick={() => setPlain((current) => !current)}>Plain</StudioButton>
+              <StudioButton aria-pressed={emptyCollection} onClick={() => setEmptyCollection((current) => !current)}>Empty collection</StudioButton>
+              <StudioButton aria-pressed={showLoading} onClick={() => setShowLoading((current) => !current)}>Loading card</StudioButton>
+            </div>
+          </section>
+          <section className="sample-control-section" aria-label="Feedback samples">
+            <h3>Feedback</h3>
+            <div className="sample-control-row" role="group" aria-label="Inspector state">
+              <StudioButton onClick={() => showInspectorState("conflict")}>Conflict</StudioButton>
+              <StudioButton onClick={() => showInspectorState("error")}>Save failed</StudioButton>
+              <StudioButton onClick={() => showInspectorState("saving")}>Saving state</StudioButton>
+              <StudioButton onClick={() => showInspectorState("saved")}>Saved state</StudioButton>
+            </div>
+            <StudioField id="sample-invalid" label="Source" defaultValue="not a link" error="Enter a full http(s) link." onChange={() => undefined} />
+            <div className="sample-control-row">
+              <StudioButton disabled>Disabled</StudioButton>
+              <StudioButton busy>Saving</StudioButton>
+            </div>
+          </section>
+          <section className="sample-control-section sample-control-wide" aria-label="Overlay samples">
+            <h3>Overlays &amp; interruption</h3>
+            <p className="studio-help">Open and close without waiting. Menus use arrow keys; dialogs return focus to their opener.</p>
+            <div className="sample-control-row">
+              <StudioButton onClick={() => setPanelOpen(true)}>Open panel</StudioButton>
+              <StudioButton onClick={() => setPanelOpen(false)}>Close panel</StudioButton>
+              <StudioButton onClick={repeatPanel}>Repeat panel</StudioButton>
+              <StudioButton onClick={() => { setConfirmDiscard(false); setDialog("note"); }}>Open dialog</StudioButton>
+              <StudioMenu label="Role" items={[
+                { id: "inspiration", label: "Inspiration", onSelect: () => setMenuChoice("Inspiration") },
+                { id: "candidate", label: "Candidate", onSelect: () => setMenuChoice("Candidate") },
+              ]} />
+              <span className="studio-meta">Sample role: {menuChoice}</span>
+            </div>
+            <div className={panelOpen ? "studio-panel is-open" : "studio-panel"} inert={!panelOpen}>
+              <div className="studio-panel-content" role="region" aria-label="Example panel">
+                <p>Closing this panel while it is opening reverses the motion.</p>
+                <StudioButton onClick={() => setPanelOpen(false)}>Close</StudioButton>
+              </div>
+            </div>
+          </section>
         </div>
-        <div className="sample-control-row" role="group" aria-label="Collection state">
-          <button type="button" aria-pressed={plain} onClick={() => setPlain((current) => !current)}>Plain</button>
-          <button type="button" aria-pressed={emptyCollection} onClick={() => setEmptyCollection((current) => !current)}>
-            Empty collection
-          </button>
-          <button type="button" aria-pressed={showLoading} onClick={() => setShowLoading((current) => !current)}>
-            Loading card
-          </button>
-        </div>
-        <div className="sample-control-row" role="group" aria-label="Inspector state">
-          <button type="button" aria-pressed={northSave === "conflict"} onClick={() => showInspectorState("conflict")}>Conflict</button>
-          <button type="button" aria-pressed={northSave === "error"} onClick={() => showInspectorState("error")}>Save failed</button>
-          <button type="button" aria-pressed={northSave === "saving"} onClick={() => showInspectorState("saving")}>Saving state</button>
-          <button type="button" aria-pressed={northSave === "saved"} onClick={() => showInspectorState("saved")}>Saved state</button>
-        </div>
-        <div className="sample-field">
-          <label htmlFor="sample-invalid">Source</label>
-          <input id="sample-invalid" aria-invalid="true" aria-describedby="sample-invalid-error" defaultValue="not a link" />
-          <p id="sample-invalid-error" className="sample-error">Enter a full http(s) link.</p>
-        </div>
-        <div className="sample-control-row">
-          <button type="button" disabled>Disabled</button>
-          <button type="button" aria-busy="true">Saving</button>
-          <button type="button" onClick={() => setPanelOpen(true)}>Open panel</button>
-          <button type="button" onClick={() => setPanelOpen(false)}>Close panel</button>
-          <button type="button" onClick={repeatPanel}>Repeat panel</button>
-          <button type="button" onClick={() => { setConfirmDiscard(false); setDialog("note"); }}>Open dialog</button>
-          <StudioMenu
-            label="Role"
-            items={[
-              { id: "inspiration", label: "Inspiration", onSelect: () => setMenuChoice("Inspiration") },
-              { id: "candidate", label: "Candidate", onSelect: () => setMenuChoice("Candidate") },
-            ]}
-          />
-          <span className="sample-meta">Sample role: {menuChoice}</span>
-          <a href="#/">Back to projects</a>
-        </div>
+        <a className="sample-back-link" href="#/">Back to projects</a>
       </section>
-      <div className={panelOpen ? "studio-panel is-open" : "studio-panel"} role="region" aria-label="Example panel" inert={!panelOpen}>
-        <p>Closing this panel while it is opening reverses the motion.</p>
-        <button type="button" onClick={() => setPanelOpen(false)}>Close</button>
-      </div>
       <StudioDialog
         open={dialog !== null}
         title={confirmDiscard ? "Discard changes" : dialog === "add" ? "Add reference" : "Reference note"}
         onClose={requestClose}
-      >
-        {confirmDiscard ? (
+        focusKey={confirmDiscard ? "discard" : dialog ?? "closed"}
+        description={confirmDiscard ? "The reference you started has not been added." : dialog === "add" ? "Collect an image, link, or note. Preview only; nothing is added to a project." : "A sample of Studio's shared dialog."}
+        footer={confirmDiscard ? (
           <>
-            <p>The reference you started has not been added.</p>
-            <div className="form-actions">
-              <button type="button" onClick={() => setConfirmDiscard(false)}>Keep editing</button>
-              <button type="button" onClick={discardAdd}>Discard changes</button>
-            </div>
+            <StudioButton data-dialog-initial-focus onClick={() => setConfirmDiscard(false)}>Keep editing</StudioButton>
+            <StudioButton variant="danger" onClick={discardAdd}>Discard changes</StudioButton>
           </>
         ) : dialog === "add" ? (
-          <form onSubmit={submitAdd}>
+          <>
+            <StudioButton variant="ghost" onClick={requestClose}>Cancel</StudioButton>
+            <StudioButton type="submit" form="sample-add-form" variant="primary"><PlusIcon />Add {kindLabel(addTab).toLowerCase()}</StudioButton>
+          </>
+        ) : <StudioButton variant="primary" onClick={requestClose}>Done</StudioButton>}
+      >
+        {confirmDiscard ? null : dialog === "add" ? (
+          <form id="sample-add-form" className="studio-dialog-form" onSubmit={submitAdd}>
             <div className="sample-tabs" role="tablist" aria-label="Reference kind">
               {(["image", "link", "note"] as const).map((tab) => (
-                <button
+                <StudioButton
                   key={tab}
                   id={`sample-tab-${tab}`}
                   type="button"
@@ -564,14 +570,15 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
                   onKeyDown={onTabKey}
                 >
                   {kindLabel(tab)}
-                </button>
+                </StudioButton>
               ))}
             </div>
             <div role="tabpanel" id="sample-panel-image" aria-labelledby="sample-tab-image" hidden={addTab !== "image"}>
-              <div className="sample-field">
+              <div className="studio-field">
                 <label htmlFor="sample-image-file">Image file</label>
                 <div className="sample-file">
                   <input
+                    data-dialog-initial-focus
                     id="sample-image-file"
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
@@ -580,28 +587,25 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
                   <span>{imageFileName ?? "Choose an image"}</span>
                 </div>
               </div>
-              <Field id="sample-image-title" label="Title" optional value={imageTitle} onChange={setImageTitle} />
+              <StudioField id="sample-image-title" label="Title" optional value={imageTitle} onChange={setImageTitle} />
             </div>
             <div role="tabpanel" id="sample-panel-link" aria-labelledby="sample-tab-link" hidden={addTab !== "link"}>
-              <Field id="sample-link-url" label="URL" value={linkUrl} onChange={setLinkUrl} />
-              <Field id="sample-link-title" label="Title" optional value={linkTitle} onChange={setLinkTitle} />
+              <StudioField id="sample-link-url" label="URL" value={linkUrl} onChange={setLinkUrl} />
+              <StudioField id="sample-link-title" label="Title" optional value={linkTitle} onChange={setLinkTitle} />
               <MotionField id="sample-link-motion" value={linkMotion} onChange={setLinkMotion} />
             </div>
             <div role="tabpanel" id="sample-panel-note" aria-labelledby="sample-tab-note" hidden={addTab !== "note"}>
-              <Field id="sample-note-title" label="Title" value={noteTitle} onChange={setNoteTitle} />
-              <div className="sample-field">
+              <StudioField id="sample-note-title" label="Title" value={noteTitle} onChange={setNoteTitle} />
+              <div className="studio-field">
                 <label htmlFor="sample-note-body">Note</label>
                 <textarea id="sample-note-body" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} />
               </div>
               <MotionField id="sample-note-motion" value={noteMotion} onChange={setNoteMotion} />
             </div>
-            <div className="form-actions">
-              <button type="submit" className="is-primary">Add {kindLabel(addTab).toLowerCase()}</button>
-            </div>
-            {addMessage !== null ? <p className="sample-note" role="status">{addMessage}</p> : null}
+            {addMessage !== null ? <p className="studio-help" role="status">{addMessage}</p> : null}
           </form>
         ) : (
-          <p>Dialogs take focus and return it on close. Escape closes this one.</p>
+          <p>Forms focus the first useful field. Escape closes the dialog and returns focus to its opener.</p>
         )}
       </StudioDialog>
     </div>
@@ -622,35 +626,24 @@ function SampleCardView({
   onOpen: () => void;
 }) {
   return (
-    <article className={selected ? "sample-card is-selected" : "sample-card"} aria-busy={loading ? true : undefined} data-image={card.missing ? "missing" : card.image ? "ready" : "none"}>
-      <div className="sample-media">
-        {loading ? (
-          <>
-            <span className="visually-hidden">Loading</span>
-            <pre className="sample-skeleton-glyphs" aria-hidden="true">{skeletonGlyphs}</pre>
-          </>
-        ) : card.missing ? (
-          <div className="sample-missing">
-            <MissingIcon />
-            <p>Image unavailable</p>
-          </div>
-        ) : card.image ? (
-          <img src={card.image} alt={`Specimen image, ${card.title}`} />
-        ) : (
-          <p className="sample-kind-mark">{kindLabel(card.kind)}</p>
-        )}
-      </div>
-      <p className="sample-kicker">{kindLabel(card.kind)} · {roleLabel(draft.role)}</p>
-      <p className="sample-card-title">{card.title}</p>
-      {card.kind === "link" ? (
-        <SourceLink href={card.source} />
-      ) : card.kind === "note" ? (
-        <p className="sample-excerpt">{card.observations}</p>
-      ) : (
-        <p className="sample-excerpt">{card.creator === "" ? "Source unknown" : card.creator}</p>
+    <StudioReferenceCard
+      title={card.title}
+      metadata={`${kindLabel(card.kind)} \u00b7 ${roleLabel(draft.role)}`}
+      selected={selected}
+      loading={loading}
+      imageState={card.missing ? "missing" : card.image ? "ready" : "none"}
+      onOpen={onOpen}
+      media={loading ? (
+        <><span className="visually-hidden">Loading</span><pre className="sample-skeleton-glyphs" aria-hidden="true">{skeletonGlyphs}</pre></>
+      ) : card.missing ? (
+        <div className="sample-missing"><MissingIcon /><p>Image unavailable</p></div>
+      ) : card.image ? (
+        <img src={card.image} alt={`Specimen image, ${card.title}`} />
+      ) : <p className="sample-kind-mark">{kindLabel(card.kind)}</p>}
+      summary={card.kind === "link" ? <SourceLink href={card.source} /> : (
+        <p className="studio-excerpt">{card.kind === "note" ? card.observations : card.creator || "Source unknown"}</p>
       )}
-      <button type="button" onClick={onOpen} aria-label={`Open details for ${card.title}`}>Open details</button>
-    </article>
+    />
   );
 }
 
@@ -686,15 +679,15 @@ function Inspector({
 
   return (
     <>
-      <header className="sample-inspector-header">
+      <header className="studio-inspector-header">
         <div>
-          <p className="sample-kicker">{kindLabel(card.kind)} · {roleLabel(draft.role)}</p>
+          <p className="studio-kicker">{kindLabel(card.kind)} · {roleLabel(draft.role)}</p>
           <h2>{draft.title}</h2>
         </div>
-        <button type="button" className="sample-back is-ghost" onClick={onClose}>Back</button>
-        <button type="button" className="sample-close is-ghost" onClick={onClose}>Close</button>
+        <StudioButton type="button" variant="ghost" className="studio-inspector-back" onClick={onClose}>Back</StudioButton>
+        <StudioButton type="button" variant="ghost" className="studio-inspector-close" onClick={onClose}>Close</StudioButton>
       </header>
-      <div className="sample-inspector-body">
+      <div className="studio-inspector-body">
         <div className="sample-preview-frame">
           {card.missing ? (
             <div className="sample-missing">
@@ -710,26 +703,26 @@ function Inspector({
         {card.source !== "" ? (
           <SourceLink href={card.source} />
         ) : (
-          <p className="sample-note">Source unknown</p>
+          <p className="studio-help">Source unknown</p>
         )}
         <section data-fields="shared">
           <h3>Shared reference</h3>
-          <p className="sample-note">Shared across projects. This sample keeps the draft locally.</p>
-          <Field id={titleId} label="Title" value={draft.title} onChange={(title) => onChange({ title })} />
-          <Field id={sourceId} label="Source" value={draft.source} onChange={(source) => onChange({ source })} />
-          <Field id={creatorId} label="Creator" value={draft.creator} onChange={(creator) => onChange({ creator })} />
-          <Field id={tagsId} label="Tags" value={draft.tags} onChange={(tags) => onChange({ tags })} />
-          <div className="sample-field">
+          <p className="studio-help">Shared across projects. This sample keeps the draft locally.</p>
+          <StudioField id={titleId} label="Title" value={draft.title} onChange={(title) => onChange({ title })} />
+          <StudioField id={sourceId} label="Source" value={draft.source} onChange={(source) => onChange({ source })} />
+          <StudioField id={creatorId} label="Creator" value={draft.creator} onChange={(creator) => onChange({ creator })} />
+          <StudioField id={tagsId} label="Tags" value={draft.tags} onChange={(tags) => onChange({ tags })} />
+          <div className="studio-field">
             <label htmlFor={observationsId}>Observations</label>
             <textarea id={observationsId} value={draft.observations} onChange={(event) => onChange({ observations: event.target.value })} />
           </div>
         </section>
         <section data-fields="placement">
           <h3>Use in {project}</h3>
-          <p className="sample-note">Role, usage notes, and crop belong to this project.</p>
-          <div className="sample-field">
+          <p className="studio-help">Role, usage notes, and crop belong to this project.</p>
+          <div className="studio-field">
             <label id={`${roleId}-label`} htmlFor={roleId}>Role</label>
-            <SampleSelect
+            <StudioSelect
               id={roleId}
               labelledBy={`${roleId}-label`}
               label="Role"
@@ -747,41 +740,41 @@ function Inspector({
             />
           </div>
           {draft.role === "approved" ? (
-            <p className="sample-note">Approved marks the asset for this project. It does not approve a direction.</p>
+            <p className="studio-help">Approved marks the asset for this project. It does not approve a direction.</p>
           ) : null}
-          <div className="sample-field">
+          <div className="studio-field">
             <label htmlFor={usageId}>Usage notes</label>
             <textarea id={usageId} value={draft.usage} disabled={saving} onChange={(event) => onChange({ usage: event.target.value })} />
           </div>
           {card.kind === "image" ? (
             <div className="sample-crop">
-              <p className="sample-note">Crop is a fraction of the original image, from the top left.</p>
-              <CropField id={`crop-x-${card.id}`} label="Crop x" value={draft.cropX} disabled={saving} onChange={(cropX) => onChange({ cropX })} />
-              <CropField id={`crop-y-${card.id}`} label="Crop y" value={draft.cropY} disabled={saving} onChange={(cropY) => onChange({ cropY })} />
-              <CropField id={`crop-width-${card.id}`} label="Crop width" value={draft.cropWidth} disabled={saving} onChange={(cropWidth) => onChange({ cropWidth })} />
-              <CropField id={`crop-height-${card.id}`} label="Crop height" value={draft.cropHeight} disabled={saving} onChange={(cropHeight) => onChange({ cropHeight })} />
+              <p className="studio-help">Crop is a fraction of the original image, from the top left.</p>
+              <StudioField inputMode="decimal" id={`crop-x-${card.id}`} label="Crop x" value={draft.cropX} disabled={saving} onChange={(cropX) => onChange({ cropX })} />
+              <StudioField inputMode="decimal" id={`crop-y-${card.id}`} label="Crop y" value={draft.cropY} disabled={saving} onChange={(cropY) => onChange({ cropY })} />
+              <StudioField inputMode="decimal" id={`crop-width-${card.id}`} label="Crop width" value={draft.cropWidth} disabled={saving} onChange={(cropWidth) => onChange({ cropWidth })} />
+              <StudioField inputMode="decimal" id={`crop-height-${card.id}`} label="Crop height" value={draft.cropHeight} disabled={saving} onChange={(cropHeight) => onChange({ cropHeight })} />
             </div>
           ) : null}
         </section>
         <details className="sample-provenance">
           <summary>Provenance</summary>
-          <p className="sample-meta">Revision 4 · Specimen · Not a project record</p>
+          <p className="studio-meta">Revision 4 · Specimen · Not a project record</p>
         </details>
       </div>
-      <footer className="sample-inspector-footer">
+      <footer className="studio-inspector-footer">
         {card.id === "north" && saveState === "conflict" ? (
           <p className="sample-conflict" role="status">This placement changed in another session. Your draft is still here.</p>
         ) : null}
         {card.id === "north" && saveState === "error" ? (
-          <p className="sample-error" role="status">Save failed. The draft is still here.</p>
+          <p className="studio-error" role="status">Save failed. The draft is still here.</p>
         ) : null}
         <div className="form-actions">
           {card.id === "north" && saveState === "conflict" ? (
-            <button type="button" onClick={onReview}>Review latest</button>
+            <StudioButton type="button" onClick={onReview}>Review latest</StudioButton>
           ) : null}
-          <button type="button" className="is-primary sample-save" aria-busy={saving ? true : undefined} disabled={saving} onClick={onSave}>
+          <StudioButton type="button" variant="primary" className="sample-save" aria-busy={saving ? true : undefined} disabled={saving} onClick={onSave}>
             {saving ? "Saving" : card.id === "north" && saveState === "conflict" ? "Save draft" : "Save use"}
-          </button>
+          </StudioButton>
           {showStatus && saveState === "saved" ? (
             <p className="sample-saved" role="status">Saved</p>
           ) : null}
@@ -797,7 +790,7 @@ function EmptyCollection({ onAdd }: { onAdd: () => void }) {
       <pre className="sample-motif" aria-hidden="true">{emptyMotif}</pre>
       <h2>Add your first reference</h2>
       <p>An image, a link, or a note can start the collection.</p>
-      <button type="button" className="is-primary" onClick={onAdd}>Add reference</button>
+      <StudioButton type="button" variant="primary" onClick={onAdd}>Add reference</StudioButton>
     </div>
   );
 }
@@ -818,196 +811,22 @@ function SourceLink({ href }: { href: string }) {
   );
 }
 
-function SampleSelect({
-  id,
-  label,
-  labelledBy,
-  value,
-  options,
-  disabled = false,
-  field = false,
-  onChange,
-}: {
-  id?: string;
-  label: string;
-  labelledBy?: string;
-  value: string;
-  options: { value: string; label: string }[];
-  disabled?: boolean;
-  field?: boolean;
-  onChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const listId = useId();
-  const current = options.find((option) => option.value === value);
-
-  useEffect(() => {
-    if (!open) return;
-    const selected = listRef.current?.querySelector<HTMLElement>("[role='option'][aria-selected='true']");
-    selected?.focus();
-    function onPointerDown(event: PointerEvent): void {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (rootRef.current?.contains(target) || listRef.current?.contains(target)) return;
-      setOpen(false);
-    }
-    function onKeyDown(event: globalThis.KeyboardEvent): void {
-      const items = [...(listRef.current?.querySelectorAll<HTMLElement>("[role='option']") ?? [])];
-      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      const index = active === null ? -1 : items.indexOf(active);
-      if (event.key === "ArrowDown" && items.length > 0) {
-        event.preventDefault();
-        items[index < 0 ? 0 : (index + 1) % items.length]?.focus();
-        return;
-      }
-      if (event.key === "ArrowUp" && items.length > 0) {
-        event.preventDefault();
-        items[index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length]?.focus();
-        return;
-      }
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      setOpen(false);
-      buttonRef.current?.focus();
-    }
-    function onScroll(): void {
-      setOpen(false);
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [open]);
-
-  const rect = open ? buttonRef.current?.getBoundingClientRect() : undefined;
-  const portal = rootRef.current?.closest(".studio-sample");
-  const list = open && rect !== undefined && portal instanceof HTMLElement ? (
-        <ul
-          ref={listRef}
-          id={listId}
-      className="sample-select-list"
-      role="listbox"
-      aria-label={label}
-      style={{ top: rect.bottom + 6, left: rect.left, minWidth: rect.width }}
-    >
-      {options.map((option) => (
-        <li key={option.value} role="none">
-          <button
-            type="button"
-            role="option"
-            aria-selected={option.value === value}
-            onClick={() => {
-              onChange(option.value);
-              setOpen(false);
-              buttonRef.current?.focus();
-            }}
-          >
-            {option.label}
-          </button>
-        </li>
-      ))}
-    </ul>
-  ) : null;
-
-  return (
-    <div className={field ? "sample-select is-field" : "sample-select"} ref={rootRef}>
-      <button
-        ref={buttonRef}
-        id={id}
-        type="button"
-        className="sample-select-trigger"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={listId}
-        aria-labelledby={labelledBy}
-        aria-label={labelledBy === undefined ? label : undefined}
-        disabled={disabled}
-        onClick={() => setOpen((currentOpen) => !currentOpen)}
-      >
-        <span>{current?.label ?? value}</span>
-        <ChevronIcon />
-      </button>
-      {list !== null && portal instanceof HTMLElement ? createPortal(list, portal) : null}
-    </div>
-  );
-}
-
-function Field({
-  id,
-  label,
-  value,
-  onChange,
-  optional = false,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  optional?: boolean;
-}) {
-  return (
-    <div className="sample-field">
-      <label htmlFor={id}>
-        {label}
-        {optional ? <span className="sample-optional"> Optional</span> : null}
-      </label>
-      <input id={id} value={value} onChange={(event) => onChange(event.target.value)} />
-    </div>
-  );
-}
-
-function CropField({
-  id,
-  label,
-  value,
-  disabled,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="sample-field">
-      <label htmlFor={id}>{label}</label>
-      <input id={id} inputMode="decimal" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
-    </div>
-  );
-}
-
 function MotionField({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
   return (
     <details className="sample-disclosure">
       <summary>Motion details</summary>
-      <div className="sample-field">
+      <div className="studio-field">
         <label htmlFor={id}>Observed motion</label>
         <textarea id={id} value={value} placeholder="0:12–0:18, slow pan" onChange={(event) => onChange(event.target.value)} />
-        <p className="sample-note">Optional. Leave this blank when you did not observe motion.</p>
+        <p className="studio-help">Optional. Leave this blank when you did not observe motion.</p>
       </div>
     </details>
   );
 }
 
-function ChevronIcon() {
-  return (
-    <svg className="sample-icon" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M4.5 6.5 8 10l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function PlusIcon() {
   return (
-    <svg className="sample-icon" viewBox="0 0 16 16" aria-hidden="true">
+    <svg className="studio-icon" viewBox="0 0 16 16" aria-hidden="true">
       <path d="M8 3.5v9M3.5 8h9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
@@ -1015,7 +834,7 @@ function PlusIcon() {
 
 function SearchIcon() {
   return (
-    <svg className="sample-icon" viewBox="0 0 16 16" aria-hidden="true">
+    <svg className="studio-icon" viewBox="0 0 16 16" aria-hidden="true">
       <circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
       <path d="M10.5 10.5 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
@@ -1024,7 +843,7 @@ function SearchIcon() {
 
 function ExternalIcon() {
   return (
-    <svg className="sample-icon" viewBox="0 0 16 16" aria-hidden="true">
+    <svg className="studio-icon" viewBox="0 0 16 16" aria-hidden="true">
       <path d="M6 4H4.5A1.5 1.5 0 0 0 3 5.5v6A1.5 1.5 0 0 0 4.5 13h6a1.5 1.5 0 0 0 1.5-1.5V10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       <path d="M8 8 13 3M9 3h4v4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>

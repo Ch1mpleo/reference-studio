@@ -48,7 +48,7 @@ export function App() {
 
   if (preview) {
     return (
-      <main className="studio-preview-route">
+      <div className="studio-preview-route">
         <StudioPreview
           connection={{
             state: connection.state,
@@ -58,7 +58,7 @@ export function App() {
             onRetry: connection.retry,
           }}
         />
-      </main>
+      </div>
     );
   }
 

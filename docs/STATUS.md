@@ -5,8 +5,8 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 ## Current position
 
 - Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance.
-- Active milestone: M2.0a sample is built and waiting for visual review. The library screens still use the M1.6 theme.
-- Next task: Review the `#/studio` sample, then apply the accepted tokens in M2.0b. M2.0a stays open until that review is recorded.
+- Active milestone: M2.0a sample interaction/composition refinement is implemented and browser-checked (2026-10-24), with shared controls ready for reuse. Human visual acceptance is still unrecorded. The library screens still use the M1.6 theme.
+- Next task: Review the refined `#/studio` sample, then migrate the library in M2.0b using the implemented controls and design.md section 19. M2.0a stays open until human review is recorded; M2.0c loader integration remains later work.
 
 ## Milestone 0 — Foundation
 
@@ -258,6 +258,22 @@ Motion roles are instant 0ms, feedback 100ms, menu 120ms, panel 160ms, and dialo
 ## Later milestones
 
 The M1 gate is closed. M2.0a is waiting for visual review. M2.0b onward is not started.
+
+### M2.0a refinement — 2026-10-24
+
+The user requested better easing, hover feedback, dialog/layout composition, and reusable guidance before continuing core flows. The upstream demo stylesheet was fetched again. `#/studio` now consumes shared `StudioButton`, `StudioField`, `StudioSelect`, `StudioReferenceCard`, and `StudioInspector` modules alongside the existing dialog/menu. `.studio-ui` owns the common theme/control scope; `.studio-sample` adds specimen decoration. The library has not been migrated by this pass.
+
+- Surface feedback follows the reference's 180ms easing; enabled action buttons press 1px/98% over 50ms and release over 120ms. Cards retain geometry while their neutral edge changes. Busy buttons prevent duplicate activation. OS and preview reduced motion remove both transitions and compression.
+- Dialogs have a title/description header, scrolling form body, and separate reachable footer. Closed dialogs are hidden. Initial focus reaches a useful field or safe discard action; dismissal restores the opener. Dirty per-tab values survive the confirmation. Near-opaque glass overlays prevent collection content from interfering with form text.
+- Compact inspectors use native modality, Back/Escape, retained selection, and opener focus. The scrolling body preserves each section's intrinsic height rather than compressing editor fields. Select options use the native popover top layer inside their owning dialog and follow the trigger on scroll/resize.
+- The phone top bar has two rows. Preview controls are grouped into Appearance, Feedback, and Overlays. Local specimen search filters immediately; the service-backed library search is unchanged. Static loading keeps the card's media geometry.
+- `design.md` revision 2 records the exact recipes, justified material/contrast adjustments, and module contracts. AGENTS.md and the client rule point subsequent agents to the shared-control reuse route, so feature work extends the system instead of inventing each control again.
+
+**Validation:** `npm run check` passed. `npm test` passed all 78 tests in 20 files outside the sandbox; its first sandbox run could not reach the startup-test child server. The full workspace build passed; the final web build also passed. `npx playwright test` passed all 9 production Edge scenarios against temporary data: existing connect/retry/restart plus card/press/reduction, dialog draft/focus recovery, select keyboard/Tab behavior, both-theme layouts at 1440/1100/800/390px, short dialogs, modal inspector/options/focus return, interrupted panels at 720px reflow width, and local filters/loading geometry/retained drafts. Browser-test process cleanup required execution outside the sandbox. `git diff --check` passed. The pre-existing package-lock.json edit was preserved.
+
+**Rendered evidence:** reviewed the resting desktop light/dark compositions, phone collection, and dialog captures in `test-results/`. Screenshot capture finishes finite transitions before recording resting appearance. A keyboard Tab trace verified a painted 2px solid focus outline; this resolves the earlier preview focus-painting verification limitation for the tested control.
+
+**Remaining:** human aesthetic acceptance is not inferred from passing tests. Loading remains a static specimen; upstream ASCII Reveal integration is M2.0c. The 720px check exercises 1440px/200% reflow geometry, not native browser zoom. Only installed Edge was exercised; this is not a full accessibility/contrast audit or an animation-performance recording. Geist is declared with system fallbacks and is not bundled. Library migration, populated board/playground acceptance, and Node 24 verification remain open.
 
 ### M2 planning review — 2026-10-23
 

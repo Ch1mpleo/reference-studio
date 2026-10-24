@@ -1,5 +1,12 @@
 /** Studio chrome motion. Target-project recipes are separate records and do not change these values. */
-const interfaceEase = "cubic-bezier(0.2, 0, 0, 1)";
+import type { CSSProperties } from "react";
+
+export const STUDIO_EASE = {
+  surface: "ease",
+  interface: "cubic-bezier(0.2, 0, 0, 1)",
+  press: "cubic-bezier(0.2, 0.7, 0.2, 1)",
+} as const;
+const interfaceEase = STUDIO_EASE.interface;
 
 export const STUDIO_MOTION = {
   instant: {
@@ -9,9 +16,21 @@ export const STUDIO_MOTION = {
   },
   feedback: {
     name: "feedback",
-    durationMs: 100,
-    easing: interfaceEase,
+    durationMs: 180,
+    easing: STUDIO_EASE.surface,
     description: "Background and border feedback. Text and focus stay immediate.",
+  },
+  press: {
+    name: "press",
+    durationMs: 50,
+    easing: STUDIO_EASE.press,
+    description: "A button sinks 1px and compresses to 98% while held. Never applied to cards or fields.",
+  },
+  release: {
+    name: "release",
+    durationMs: 120,
+    easing: STUDIO_EASE.press,
+    description: "A released button returns to rest from its current position.",
   },
   menu: {
     name: "menu",
@@ -40,4 +59,14 @@ export function studioMotionDuration(role: StudioMotionRole, reducedMotion: bool
     return STUDIO_MOTION.instant.durationMs;
   }
   return STUDIO_MOTION[role].durationMs;
+}
+
+/** Apply to the Studio scope; portals must remain inside it. OS reduction is also enforced by CSS. */
+export function studioMotionStyle(reducedMotion: boolean): CSSProperties {
+  return Object.fromEntries([
+    ...Object.keys(STUDIO_MOTION).map((role) => [
+      `--motion-${role}`, `${studioMotionDuration(role as StudioMotionRole, reducedMotion)}ms`,
+    ]),
+    ...Object.entries(STUDIO_EASE).map(([role, value]) => [`--ease-${role}`, value]),
+  ]) as CSSProperties;
 }

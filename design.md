@@ -27,7 +27,7 @@ The reference site and source were inspected during the 2026-10-23 plan review. 
 
 ## Detailed specification
 
-**Specification status:** execution baseline from the user-accepted plan, revision 1, 2026-10-23. User clarification: the priority is the modern surrounding interface and its cohesion with the existing reference loader; the implementing agent inspects the upstream repository for loader internals. Follow these values and recipes for M2.0a; change an exact value only for a documented accessibility issue, measured implementation limitation, or human visual feedback. Record accepted changes in the sample decision note. This specifies Studio chrome; it does not seed or constrain a target project's design-system records.
+**Specification status:** execution baseline, revision 2, 2026-10-24. The user requested refinement of `#/studio`, especially easing, card/button hover, dialog composition, and reusable rules before core-flow work continues. These refinements establish the implementation baseline below; they do not record human acceptance of the rendered result. Keep subsequent screens on these shared recipes. This specifies Studio chrome; it does not seed or constrain a target project's design-system records.
 
 ### 1. Design language and hierarchy
 
@@ -83,7 +83,7 @@ Implement the following on the Studio scope in `styles.css`. Default follows OS 
 --color-field: rgb(0 0 0 / 4.5%);
 --color-ink: #141416;
 --color-muted: #5f5f68;
---color-subtle: #8a8a93;
+--color-subtle: #686872;                       /* readable small metadata */
 --color-line: rgb(0 0 0 / 8%);
 --color-line-strong: rgb(0 0 0 / 22%);
 --color-control-line: rgb(0 0 0 / 7%);
@@ -112,6 +112,7 @@ Rules:
 - Primary buttons use solid/on-solid, `box-shadow: none`, and hover `color-mix(in srgb, var(--color-solid) 88%, var(--color-bg))`.
 - Secondary actions are glass pills. Ghost actions are transparent with no resting ring. Destructive actions use danger text and an explicit verb.
 - Disabled controls use opacity 0.65 with the same glass or solid fill. Disabled is never a dashed wireframe and never a selected style.
+- Overlay surface is `--color-overlay: color-mix(in srgb, var(--color-bg) 92%, var(--color-surface-raised))`. Use it for dialogs, modal inspectors, menus, and option lists. Thin translucent card material is insufficient for form text above a populated collection. Keep the inset highlight and blur; increase surface opacity rather than dimming the form text.
 - Selected cards and pressed segments use the brighter glass fill and line-strong edge. Do not put a blue wash or blue ring on a card or a pressed button.
 - Verify actual rendered combinations at >=4.5:1 for normal text, >=3:1 for large text and essential control/focus graphics. Record failures and token fixes; alpha decorative colors are exempt only when they convey no information.
 
@@ -143,9 +144,9 @@ Rules:
 --space-1: 4px; --space-2: 8px; --space-3: 12px;
 --space-4: 16px; --space-5: 20px; --space-6: 24px;
 --space-8: 32px; --space-10: 40px; --space-12: 48px;
---radius-control: 8px;
---radius-card: 16px;
---radius-panel: 16px;
+--radius-control: 12px;
+--radius-card: 20px;
+--radius-panel: 20px;
 --radius-dialog: 20px;
 --radius-pill: 999px;
 --control-small: 32px;
@@ -157,8 +158,8 @@ Rules:
 ```
 
 - Standard controls: horizontal padding 12px, 8px icon gap. Small controls only in dense desktop toolbars; touch hit areas remain at least 44x44px without overlapping neighboring targets.
-- Card padding 12px; inspector section padding 16px; dialog padding 24px (16px on phones). Card/grid gaps 16px desktop and 12px phone.
-- Reference cards use a 20px radius, 24px padding, and 14px media radius. Their material is glass: surface fill, 1px glass-line, inset highlight, `0 24px 48px -28px` glass shadow, and `backdrop-filter: blur(16px) saturate(160%)`. A sheen overlay (`linear-gradient(150deg, rgb(255 255 255 / 10%), transparent 34%)`) sits inside the radius and does not catch clicks. Menus use the same glass at 16px radius. Flat rails stay quiet; selection there is a glass pill, not a blue outline.
+- Reference-card padding 24px; inspector section padding 16px; dialog padding 24px (16px on phones). Collection gaps 20px desktop and 12px phone. Small utility panels may use 16px padding; do not use that exception to shrink reference cards.
+- Reference cards use a 20px radius, 24px padding, and 14px media radius. Their material is glass: surface fill, 1px glass-line, inset highlight, `0 24px 48px -28px` glass shadow, and `backdrop-filter: blur(16px) saturate(160%)`. A sheen overlay (`linear-gradient(150deg, rgb(255 255 255 / 10%), transparent 34%)`) sits inside the radius and does not catch clicks. Menus use the same highlight anatomy at 16px radius with the denser overlay surface. Flat rails stay quiet; selection there is a glass pill, not a blue outline.
 - Match the reference's layered/glass feeling through subtle neutral surface separation, hairline boundaries, and inset highlights. A compact toolbar or popover may use 92% surface opacity and at most 8px backdrop blur with an opaque fallback. Large collections and board nodes use opaque equivalents with the same visual hierarchy; blur is not necessary to achieve the material.
 - Focus is a 2px solid focus outline with 2px offset; reserve room so it is not clipped. It sits outside selection borders and remains visible on tinted and image backgrounds.
 - Modal dialogs use the native top layer; numeric layer tokens order only ordinary app layers. Do not attempt to out-z-index the native dialog. A tooltip for a modal control stays within the modal's accessible subtree/top-layer context.
@@ -168,7 +169,7 @@ Rules:
 - **>=1280px:** 56px top bar; 216px project rail; flexible central workspace with minimum 480px; 320px inspector when selected. Use CSS minmax(0,1fr) so content cannot force overflow. No fixed global content width limiting the board.
 - **960–1279px:** rail collapses to a project switcher in the top bar. Central workspace and 304px inspector remain side by side when space permits. Collection-only shell may use a centered max-width of 1440px.
 - **640–959px:** one central workspace; inspector is a modal side sheet width min(360px,100vw - 32px), entered through the selected item's Open details action. Never auto-open it just because keyboard selection moves. List remains available.
-- **<640px:** 56px top bar, 16px workspace padding, 44px touch controls. Details become a full-width route-like panel with Back; preserve selection and scroll on return. Project switcher and Add retain text labels. Toolbar wraps without an extra horizontal page scrollbar.
+- **<640px:** two-row top bar (wordmark/connection, project/view), 16px workspace padding, 44px touch controls. Details become a full-width modal panel with Back; preserve selection and collection scroll on return. The native dialog supplies modality and focus containment while its composition reads as a detail screen. Project switcher and Add retain text labels. Toolbar wraps without an extra horizontal page scrollbar.
 - **Short windows:** top bar stays 56px; inspector body scrolls independently, sticky action row remains reachable. Dialog max-height calc(100dvh - 32px); its content scrolls. At 200% zoom let width breakpoints reflow normally.
 - Top bar order: Studio wordmark (14px mono), project switcher/name, view switch, flexible spacer, connection indicator. Add reference belongs in the collection toolbar; avoid a duplicate in the top bar.
 - Project rail: current project name and More, short navigation list, direction list only when implemented. Archive/restore/project details live under labeled project controls, not a permanent wall of forms. Do not show future MCP/approval features as clickable destinations.
@@ -205,8 +206,8 @@ The implementing agent reviews the upstream source/types and working demo for lo
 ### 8. Buttons, links, badges, tabs
 
 **Button**
-- Native button with variants primary, secondary, ghost, danger; sizes small/default/touch. Primary and secondary are pills. Primary is solid/on-solid with no shadow, padding 12px 18px, 14px medium type. Secondary is a glass pill: padding 11px 16px, 13px medium type, inset glass-line and highlight, blur 14px. Ghost is transparent with no resting border. Dense fields stay at radius-control (12px) and use the sunken field fill with an inset line, not a heavy stroke. Do not draw a 1px charcoal outline around every control.
-- Hover changes background only; pressed uses darker/lighter neutral surface, no translateY or scale. Focus ring is immediate; disabled uses native disabled.
+- Native button with variants primary, secondary, ghost, danger. Default is 36px minimum; touch is 44px. Primary and secondary are pills. Primary is solid/on-solid with no shadow, padding 12px 18px, 14px medium type. Secondary is a glass pill: padding 10px 16px, 13px medium type, inset glass-line and highlight, blur 14px. Ghost is transparent with no resting border. Dense fields stay at radius-control (12px) and use the sunken field fill with an inset line, not a heavy stroke. Do not draw a 1px charcoal outline around every control.
+- Pointer hover brightens the surface and neutral inset edge over 180ms `ease`; apply hover only to enabled controls on hover-capable devices. Press sinks an action button 1px and compresses it to 98% over 50ms; release returns over 120ms with `cubic-bezier(0.2,0.7,0.2,1)`. This follows the reference's interaction treatment. Menu/option rows retain their geometry. Focus and text color change immediately. Native disabled/busy controls never hover or compress. Reduced motion removes compression as well as transitions.
 - Busy keeps the existing width and label context (Save → Saving), aria-busy=true, and prevents duplicate activation. A static 12px progress mark or bounded spinner is allowed with a static reduced-motion alternative. Never scramble Saving.
 - Async success lives beside the action, not in a resizing button that moves neighboring controls. No checkmark implying an unsaved optimistic success.
 
@@ -230,10 +231,10 @@ The implementing agent reviews the upstream source/types and working demo for lo
 - Input surface is the sunken field; inset 1px line; 12px radius; padding 8px 12px. Textarea min-height 96px, vertically resizable. Readonly fields look selectable; disabled fields cannot masquerade as editable.
 - Hover retains geometry; focus uses the shared ring, invalid uses danger border plus linked error text via aria-describedby/aria-invalid. Error text states the fix; placeholder is an example, never the only label.
 - Dirty fields keep their values on network/conflict failures. Validation runs on submit and subsequently for affected dirty fields; avoid red errors on untouched empty fields.
-- Keep native select for simple roles/kinds initially. A searchable combobox is added only for a demonstrated dataset need and requires full keyboard behavior.
+- Use `StudioSelect` for short role/project option sets so fields share the glass control recipe. It supports Arrow keys, Home/End, Enter/Space, Escape, outside dismissal, and Tab out. Its option list uses a native popover in the top layer, remains in the owning dialog's DOM subtree when modal, and follows its trigger while scrolling/resizing. Do not portal modal options into the inert page behind a dialog. A searchable combobox is added only for a demonstrated dataset need.
 
 **Search/filter recipe**
-- Search input has visible label or an explicit accessible label, a 16px search icon, and Clear only when nonempty. Enter submits keyword search, matching current behavior; pagination resets on a newly submitted query/filter.
+- Search input has visible label or an explicit accessible label, a 16px search icon, and Clear only when nonempty. The local specimen filters immediately as text changes. Service-backed library search still submits on Enter; preserve its request/retained-result behavior during migration. Pagination resets on a newly submitted query/filter.
 - Kind/tag filters use labeled fields in a disclosure. Applying them shows active filter chips with Remove names and one Clear filters action. Pending results retain the old list with Updating, no false zero-results state.
 - Zero results: No matching references, current query/filter summary, Clear filters. Empty collection instead invites Add reference. Retry is separate from Clear filters.
 
@@ -250,7 +251,7 @@ The implementing agent reviews the upstream source/types and working demo for lo
 2. Content block: kind/role line in 12px mono, two-line title, optional one-line creator/source summary, no full form.
 3. Open details button with a clear accessible name; optional selection checkbox separate from the button. More actions appear on focus as well as hover and remain available on touch.
 - Article/list-item shell is noninteractive. Put the main Open details action around the title or in its own button; never wrap nested menu/checkbox/link controls in another button.
-- Rest border is the glass line. Hover and selected use line-strong. Selected does not add a blue 2px ring and does not move layout. Focus is the separate outer accent ring. Selected state is independent of keyboard focus.
+- Rest border is the glass line. Pointer hover and focus-within use line-strong; animate the neutral edge over the shared 180ms feedback duration. Selected uses the raised glass surface and stronger edge. It does not add a blue ring or move layout. Focus on the actual control is a separate outer accent ring. Selected state is independent of keyboard focus.
 - Missing image: same reserved geometry, image-unavailable icon, readable message; keep title and source. No invented imagery or eternal skeleton. A note/link uses a kind icon and readable excerpt, without pretending to be an image.
 - Cards do not lift, tilt, zoom images, blur, or scramble on hover. Image click in collection opens details; zoom/original view is a separate named action.
 - List rows expose the same selection/actions and ownership facts, with sortable behavior only if implemented. Row actions cannot require a context menu.
@@ -278,8 +279,10 @@ The implementing agent reviews the upstream source/types and working demo for lo
 
 **Dialog/sheet**
 - Native dialog, labeled title and description, initial focus on the first useful field for forms or safe action for confirmations; never blindly put focus in a destructive action. Trap focus through native modality, Escape closes except while a critical committed operation genuinely cannot be interrupted.
-- Width: 480px form, 640px media/details; max-width calc(100vw - 32px). Header title + Close, body, footer with Cancel and one primary submit. Restore focus to opener; if removed, use the nearest stable workspace heading/control.
-- Dirty dismissal asks Keep editing / Discard changes in a focused confirmation; do not lose drafts on outside click. Data submission closes only after accepted success, or stays open with error. No nested modals except that narrowly scoped discard confirmation.
+- Width: 480px form, 640px media/details; max-width calc(100vw - 32px). Header title/description + Close, scrollable body, separate footer with Cancel and one primary submit. Header/body padding 24px, footer 16px 24px; phone padding 16px. Only the body scrolls, leaving title, close, and submit reachable in a short window. Link the footer submit to the form using its `form` attribute. Restore focus to opener; if removed, use the nearest stable workspace heading/control.
+- Dirty dismissal asks Keep editing / Discard changes in a focused confirmation; do not lose drafts on outside click. Reuse the current dialog for this confirmation and move focus to Keep editing. Returning restores the active form's useful field. `focusKey` identifies this content swap without reopening the modal or changing its original return-focus target. Data submission closes only after accepted success, or stays open with error.
+- A closed native dialog is `display:none`. Animate its open/closed opacity and 4px offset with CSS starting styles and discrete display/overlay transitions; unsupported transitions may close instantly. Native modality and focus change immediately. Do not retain a focusable exit copy or use timers to postpone closing.
+- Lock document scrolling while a Studio modal is open and reserve a stable scrollbar gutter. The body inside the dialog/inspector scrolls; dismissing it restores the collection at its prior position.
 - Side sheets use the same focus/dirty rules at tablet sizes. Phone full-width detail panels use Back and preserve scroll/selection.
 
 **Tooltip**
@@ -331,16 +334,20 @@ The implementing agent reviews the upstream source/types and working demo for lo
 
 ```css
 --motion-instant: 0ms;
---motion-feedback: 100ms;
+--motion-feedback: 180ms;
+--motion-press: 50ms;
+--motion-release: 120ms;
 --motion-menu: 120ms;
 --motion-panel: 160ms;
 --motion-dialog: 160ms;
 --ease-interface: cubic-bezier(0.2, 0, 0, 1);
+--ease-surface: ease;
+--ease-press: cubic-bezier(0.2, 0.7, 0.2, 1);
 ```
 
-- Feedback animates background/border opacity only; text input/selection/focus state is synchronous.
+- Feedback animates surface/edge/shadow only. The press/release roles apply only to action buttons. Text input, focus, selection intent, and save state remain synchronous. No `transition:all`, card lift, image zoom, or hover animation on disabled controls.
 - Menu enters with opacity + at most 4px offset; panel at most 8px; dialog opacity + 4px, no scale zoom. Entry never delays focus/action availability.
-- Keep mounted content during exit only if focus and semantics remain correct; once logically closed it is inert and inaccessible. On reversal continue from current visual state; no accumulated queues.
+- Keep mounted content during exit only if focus and semantics remain correct; once logically closed it is inert and inaccessible. Expandable panels use intrinsic grid rows (0fr/1fr) rather than guessed max-heights. On reversal continue from current visual state; no accumulated queues or delayed click handling.
 - OS reduce: all these durations 0ms, transforms absent, skeleton static. Runtime preference changes immediately finish active decoration/transitions.
 - Studio motion tokens and CSS stay synchronized with studioMotion.ts. Share one reduced-motion policy across library, preview, adapter, and panels; target recipes keep their own validated reduced behavior inside fixtures.
 
@@ -348,7 +355,7 @@ The implementing agent reviews the upstream source/types and working demo for lo
 
 - `styles.css`: semantic/theme tokens, primitive recipes, feature layout. Migrate current `--bg/--ink/--serif` aliases deliberately; remove serif consumers and literal radii only after replacing them. No second competing stylesheet theme.
 - Existing `StudioPreview`: living specimen of every recipe/state above, with realistic temporary imagery, long names, Vietnamese text, plain/reduced modes, keyboard-accessible controls. Preview controls must be labeled samples.
-- Existing `StudioMenu/StudioDialog`: extend behavior rather than replacing with a design framework. Create small planned `StudioButton`, `StudioField`, `StudioStatus`, `ReferenceCard`, `ReferenceInspector`, `AddReferenceDialog`, `StudioSkeleton`, and `StudioReveal` modules only when screens consume them; names are implementation targets, not shipped files.
+- Reuse implemented `StudioButton`, `StudioField`, `StudioSelect`, `StudioReferenceCard`, `StudioInspector`, `StudioMenu`, and `StudioDialog`; see section 19 for their contracts. Create additional status, ingestion, skeleton, or reveal modules only as screens consume them. Do not add a design framework or copy their presentation into each feature.
 - Hooks own request state and retained editor intent; service operations keep validation, persistence, revisions, idempotency, and events. The visual work cannot reimplement those in component-local storage.
 - Specimen coverage per component: rest, hover, keyboard focus, active/selected, disabled, busy, invalid, error/conflict, long content, phone, both themes, reduced motion. Mark nonapplicable states explicitly rather than fake them.
 - Review three compositions: populated collection + inspector; populated two-direction board; dropdown A/B playground. The sample first demonstrates the collection; later screens reuse the same tokens and control rules.
@@ -390,4 +397,23 @@ Before calling a component ready, check its applicable states, ordinary and long
 
 The first opaque token pairs were a planning check only. Glass surfaces composite over the page, so those ratios do not describe the rendered specimen. Actual compositing, selected/pressed variants, native controls, fonts, focus placement, and rendered accessibility require browser verification.
 
-Current decision baseline: the user accepted the detailed execution plan and asked for this canonical design document, then rejected the opaque outlined specimen because it did not match the ascii-reveal demo. The specimen's buttons, segments, cards, fields, and frame follow that demo's glass recipes. Controls the demo does not include — select, checkbox, external link, scrollbar, and dialog — use the same glass anatomy rather than native widgets. The shell uses the viewport up to 1440px so the rail and inspector are not crushed inside a 1200px marketing frame. Studio's rendered sample still needs visual review. Library restyle, individual specimen approval, and later board/playground recipes remain implementation work.
+Current decision baseline: the user accepted the detailed execution plan and asked for this canonical design document, then rejected the opaque outlined specimen because it did not match the ascii-reveal demo. The specimen's buttons, segments, cards, fields, and frame follow that demo's glass recipes. The shell uses the viewport up to 1440px so the rail and inspector are not crushed inside a 1200px marketing frame. On 2026-10-24 the user requested further interaction/composition refinement and reusable guidance. The current sample implements that refinement; human visual acceptance, the library migration, and later board/playground recipes remain separate work.
+
+Revision 2 decisions: the upstream stylesheet was fetched again and its 180ms surface feedback, 50ms press, and 1px/98% button compression informed this pass. Cards stay stationary to support repeated review. Form overlays use 92% background material because the card's alpha glass lets collection content interfere with form text. Light subtle text changed from `#8a8a93` to `#686872` for readable 12px metadata. The phone inspector uses native full-screen modality for focus containment and focus return while retaining the collection behind it. These are documented implementation decisions in response to the user's feedback, not a claim that the user reviewed these exact rendered values.
+
+### 19. Reuse route for subsequent core tasks
+
+`#/studio` is the living integration specimen, not an independent design implementation. New product views should consume these existing modules from `apps/web/src/client` and use the same scope/tokens in `styles.css`:
+
+- `StudioButton.tsx`: native attributes/ref, `variant="primary|secondary|ghost|danger"`, and `busy`. Busy also accepts `aria-busy` and blocks duplicate native activation; keep a meaningful visible label. The feature owns the request and result. Use one primary action per action group.
+- `StudioField.tsx`: visible label, optional marker, native input props, stable generated or supplied ID, helper/error associations, and `onChange(value)`. For textareas use the same `studio-field` anatomy and explicit label/error linkage; do not invent a second field style.
+- `StudioSelect.tsx`: labeled trigger and short option list, keyboard navigation and dismissal, viewport-constrained placement, native popover top layer. Its portal stays in the nearest dialog or Studio scope so theme and modality remain correct.
+- `StudioReferenceCard.tsx`: fixed-ratio media slot, metadata/title/summary, independent selected/loading states, and named Open details action. The caller supplies factual media/failure/loading content. No API calls, local persistence, or fake loading delay inside the card.
+- `StudioDialog.tsx`: controlled `open/onClose`, title/description, body children, optional footer, and `focusKey` for safe content swaps. Mark a special safe initial action with `data-dialog-initial-focus`; otherwise the first visible enabled input receives focus, with Close as fallback. The feature owns dirty confirmation and retained drafts.
+- `StudioInspector.tsx`: complementary desktop rail at 960px+, native modal sheet below that width. It handles modality, Escape, and opener restoration; its caller supplies the header/body/footer and retains record drafts. Closing compact details keeps selection and collection scroll. Do not render another inline editor on every card.
+- `StudioMenu.tsx`: command menu with arrow/Home/End movement, outside/Escape/Tab dismissal, and focus return. Use a select for values, a menu for commands, and tabs for associated panels.
+- `studioMotion.ts`: `STUDIO_MOTION`, `STUDIO_EASE`, and `studioMotionStyle(reduced)` own JS timing values. Apply the returned style to the `.studio-ui` root. CSS defaults mirror it for non-React consumers. Preview overrides and OS reduction both apply; a target recipe cannot change these values.
+
+Adopt `.studio-ui` once at the screen shell, use named variants, and keep feature CSS to arrangement, spacing, and supported responsive composition. `.studio-sample` adds specimen decoration only. Do not wrap target-product fixtures in this scope; isolate their CSS and playback. During M2.0b migrate the library deliberately; adding the class alone is not proof that its form-heavy layout follows this system.
+
+When a new state or control is necessary, extend the owning primitive and its specimen in the same task. Verify the actual composition, applicable interaction states, long/Vietnamese text, missing/loading media, both themes, keyboard, phone/short-window reflow, and reduced motion. Run `e2e/studio.spec.ts` for changed shared interactions alongside relevant feature checks. Update this document only for a justified recipe change; update STATUS with observed evidence and limitations. Future agents should follow this implementation without asking the user to redesign each UI part.

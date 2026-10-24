@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { StudioButton } from "./StudioButton.js";
 
 type StudioMenuItem = {
   id: string;
@@ -29,6 +30,11 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
       setOpen(false);
     }
     function onKeyDown(event: KeyboardEvent): void {
+      if (event.key === "Tab") {
+        setOpen(false);
+        buttonRef.current?.focus();
+        return;
+      }
       const items = [...(rootRef.current?.querySelectorAll<HTMLElement>("[role='menuitem']") ?? [])];
       const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const index = active === null ? -1 : items.indexOf(active);
@@ -68,24 +74,34 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
   }, [open]);
 
   return (
-    <div className="studio-menu" ref={rootRef}>
-      <button
+    <div className="studio-menu" ref={rootRef} onBlur={(event) => {
+      if (event.relatedTarget instanceof Node && rootRef.current?.contains(event.relatedTarget)) return;
+      setOpen(false);
+    }}>
+      <StudioButton
         ref={buttonRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(true);
+        }}
         onClick={() => setOpen((current) => !current)}
       >
         {label}
-      </button>
+      </StudioButton>
       {open ? (
         <ul id={menuId} className="studio-menu-list" role="menu">
           {items.map((item) => (
             <li key={item.id} role="none">
-              <button
+              <StudioButton
                 type="button"
                 role="menuitem"
+                tabIndex={-1}
                 onClick={() => {
                   item.onSelect();
                   setOpen(false);
@@ -93,7 +109,7 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
                 }}
               >
                 {item.label}
-              </button>
+              </StudioButton>
             </li>
           ))}
         </ul>
