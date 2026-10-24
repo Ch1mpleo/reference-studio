@@ -9,6 +9,8 @@ test.afterAll(async () => { await server.dispose(); });
 async function openStudio(page: Page) {
   await page.goto(`${server.origin}/#/studio`);
   await expect(page.getByRole("heading", { name: "References", exact: true })).toBeVisible();
+  await expect(page.locator(".sample-grid")).not.toHaveAttribute("aria-busy", "true");
+  await expect(page.locator(".studio-inspector-body[aria-busy='true']")).toHaveCount(0);
 }
 
 test("cards keep their geometry; buttons respond to hover and press and respect reduction", async ({ page }) => {
@@ -17,10 +19,11 @@ test("cards keep their geometry; buttons respond to hover and press and respect 
   await expect(page.locator("dialog")).toBeHidden();
   // Every inspector section keeps its intrinsic height inside the scrolling body.
   expect(await page.locator(".studio-inspector-body").evaluate((body) => {
-    const items = [...body.children].map((child) => child.getBoundingClientRect());
+    const content = body.querySelector(".studio-loading-region-content") ?? body;
+    const items = [...content.children].map((child) => child.getBoundingClientRect());
     return items.every((rect, index) => index === 0 || rect.top >= (items[index - 1]?.bottom ?? 0));
   })).toBe(true);
-  const card = page.locator(".studio-reference-card").nth(1);
+  const card = page.locator(".sample-grid .studio-reference-card").nth(1);
   const before = await card.boundingBox();
   await card.hover();
   await expect(card).toHaveCSS("transform", "none");
@@ -58,8 +61,10 @@ test("dialog focuses fields, preserves dirty tabs, confirms dismissal and return
   await add.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Add reference" });
-  await expect(page.locator("#sample-image-file")).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+  await expect(dialog.locator("form")).not.toHaveAttribute("aria-busy", "true");
   await dialog.getByRole("tab", { name: "Note", exact: true }).click();
+  await expect(dialog.locator("form")).not.toHaveAttribute("aria-busy", "true");
   await dialog.getByLabel("Title", { exact: true }).fill("North light");
   await dialog.getByRole("textbox", { name: "Note", exact: true }).fill("Keep this unsent draft.");
   await dialog.getByRole("tab", { name: "Image", exact: true }).click();
@@ -111,7 +116,7 @@ test("desktop and phone compositions fit both themes, including short dialogs", 
       await page.getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: theme, exact: true }).click();
       await page.evaluate(() => window.scrollTo(0, 0));
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      const cards = page.locator(".studio-reference-card");
+      const cards = page.locator(".sample-grid .studio-reference-card");
       await expect(cards).toHaveCount(5);
       if (width === 1440 || width === 390) {
         await page.screenshot({ path: info.outputPath(`${width}-${theme.toLowerCase()}.png`), fullPage: true, animations: "disabled" });
@@ -181,7 +186,7 @@ test("local filters and loading samples retain card geometry and inspector draft
   await openStudio(page);
   const inspector = page.getByRole("complementary", { name: "Inspector" });
   await inspector.getByRole("textbox", { name: "Title", exact: true }).fill("A retained local draft");
-  const card = page.locator(".studio-reference-card").first();
+  const card = page.locator(".sample-grid .studio-reference-card").first();
   const mediaBefore = await card.locator(".studio-card-media").boundingBox();
   await page.getByRole("button", { name: "Loading card", exact: true }).click();
   await expect(card).toHaveAttribute("aria-busy", "true");
@@ -189,10 +194,10 @@ test("local filters and loading samples retain card geometry and inspector draft
   await page.getByRole("button", { name: "Loading card", exact: true }).click();
   await expect(card).not.toHaveAttribute("aria-busy", "true");
   await page.getByRole("textbox", { name: "Search references" }).fill("Harbor morning");
-  await expect(page.locator(".studio-reference-card")).toHaveCount(1);
+  await expect(page.locator(".sample-grid .studio-reference-card")).toHaveCount(1);
   await page.getByRole("textbox", { name: "Search references" }).fill("No matching title");
-  await expect(page.locator(".studio-reference-card")).toHaveCount(0);
+  await expect(page.locator(".sample-grid .studio-reference-card")).toHaveCount(0);
   await page.getByRole("button", { name: "Clear filters", exact: true }).last().click();
-  await expect(page.locator(".studio-reference-card")).toHaveCount(5);
+  await expect(page.locator(".sample-grid .studio-reference-card")).toHaveCount(5);
   await expect(inspector.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("A retained local draft");
 });

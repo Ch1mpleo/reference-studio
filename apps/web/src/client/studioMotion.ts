@@ -1,5 +1,22 @@
 /** Studio chrome motion. Target-project recipes are separate records and do not change these values. */
-import type { CSSProperties } from "react";
+import { useSyncExternalStore, type CSSProperties } from "react";
+
+const reducedQuery = "(prefers-reduced-motion: reduce)";
+function subscribeReducedMotion(notify: () => void): () => void {
+  const media = window.matchMedia(reducedQuery);
+  media.addEventListener("change", notify);
+  return () => media.removeEventListener("change", notify);
+}
+
+/** Canvas effects need the same live preference policy as CSS, including runtime changes. */
+export function useStudioReducedMotion(previewReduced = false): boolean {
+  const systemReduced = useSyncExternalStore(
+    subscribeReducedMotion,
+    () => window.matchMedia(reducedQuery).matches,
+    () => true,
+  );
+  return previewReduced || systemReduced;
+}
 
 export const STUDIO_EASE = {
   surface: "ease",

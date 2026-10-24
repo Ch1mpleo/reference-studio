@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { StudioButton } from "./StudioButton.js";
+import { isPreviewSurfaceClick } from "./studioPreviewActivation.js";
 
 type StudioDialogProps = {
   open: boolean;
@@ -9,9 +10,10 @@ type StudioDialogProps = {
   description?: string;
   footer?: ReactNode;
   focusKey?: string;
+  onPreviewReload?: () => void;
 };
 
-export function StudioDialog({ open, title, onClose, children, description, footer, focusKey }: StudioDialogProps) {
+export function StudioDialog({ open, title, onClose, children, description, footer, focusKey, onPreviewReload }: StudioDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -36,7 +38,7 @@ export function StudioDialog({ open, title, onClose, children, description, foot
     if (!open) return;
     const dialog = dialogRef.current;
     const candidates = dialog?.querySelectorAll<HTMLElement>("[data-dialog-initial-focus], input:not(:disabled), textarea:not(:disabled)");
-    const initial = [...(candidates ?? [])].find((element) => !element.closest("[hidden]"));
+    const initial = [...(candidates ?? [])].find((element) => !element.closest("[hidden], [inert]"));
     (initial ?? dialog?.querySelector<HTMLElement>("[data-dialog-close]"))?.focus();
   }, [open, focusKey]);
 
@@ -69,7 +71,7 @@ export function StudioDialog({ open, title, onClose, children, description, foot
           </svg>
         </StudioButton>
       </header>
-      <div className="studio-dialog-body">{children}</div>
+      <div className="studio-dialog-body" onClick={(event) => { if (onPreviewReload && isPreviewSurfaceClick(event)) onPreviewReload(); }}>{children}</div>
       {footer ? <footer className="studio-dialog-footer">{footer}</footer> : null}
     </dialog>
   );

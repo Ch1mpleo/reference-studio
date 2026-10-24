@@ -27,7 +27,7 @@ export function StudioInspector({ open, onClose, children }: { open: boolean; on
   if (desktop) return <aside className="studio-inspector" aria-label="Inspector">{children}</aside>;
   return (
     <dialog ref={dialogRef} className="studio-inspector" aria-label="Reference details" onCancel={(event) => { event.preventDefault(); onClose(); }}>
-      {children}
+      {open ? children : null}
     </dialog>
   );
 }

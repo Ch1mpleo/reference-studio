@@ -1,8 +1,17 @@
 // @vitest-environment happy-dom
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { StudioPreview } from "./StudioPreview.js";
+
+// Browser scenarios exercise real canvas painting; these tests cover control/focus contracts.
+vi.mock("ascii-reveal", async () => {
+  const React = await import("react");
+  return {
+    AsciiReveal: ({ children, className }: { children?: ReactNode; className?: string }) => React.createElement("div", { className }, children),
+    AsciiSkeleton: ({ className }: { className?: string }) => React.createElement("span", { className, "data-ascii-skeleton": "", "aria-hidden": true }),
+  };
+});
 
 async function render(node: ReactNode): Promise<{ container: HTMLElement; root: Root }> {
   const container = document.createElement("div");

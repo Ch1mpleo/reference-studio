@@ -6,8 +6,14 @@ import { StudioSelect } from "./StudioSelect.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioInspector } from "./StudioInspector.js";
 import { StudioMenu } from "./StudioMenu.js";
+import { StudioLoadingPreview } from "./StudioLoadingPreview.js";
+import type { StudioLoadingMode, StudioLoadingState } from "./StudioLoadingMedia.js";
+import { StudioLoadingRegion } from "./StudioLoadingRegion.js";
+import { useStudioPreviewRequest } from "./useStudioPreviewRequest.js";
+import { STUDIO_LOADING_DEFAULTS, type StudioLoadingOptions } from "./studioLoadingOptions.js";
+import { isPreviewSurfaceClick } from "./studioPreviewActivation.js";
 import { harborArt, northStairArt } from "./specimenArt.js";
-import { studioMotionStyle } from "./studioMotion.js";
+import { studioMotionStyle, useStudioReducedMotion } from "./studioMotion.js";
 import type { ServiceState } from "./useServiceConnection.js";
 
 type SampleConnection = {
@@ -122,7 +128,6 @@ const sampleCards: SampleCard[] = [
 ];
 
 const emptyMotif = ["+------------------+", "|                  |", "|        ...       |", "|                  |", "+------------------+"].join("\n");
-const skeletonGlyphs = [".  :   .  ", "         :", ".        .", "    :     "].join("\n");
 
 function draftFrom(card: SampleCard): Draft {
   return {
@@ -179,7 +184,14 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
   const [emptyCollection, setEmptyCollection] = useState(false);
-  const [showLoading, setShowLoading] = useState(false);
+  const [loadingState, setLoadingState] = useState<StudioLoadingState>("loaded");
+  const [loadingMode, setLoadingMode] = useState<StudioLoadingMode>("reveal");
+  const [loadingOptions, setLoadingOptions] = useState<StudioLoadingOptions>({ ...STUDIO_LOADING_DEFAULTS });
+  const [replay, setReplay] = useState(0);
+  const [previewDelay, setPreviewDelay] = useState(1200);
+  const collectionRequest = useStudioPreviewRequest({ query: "", kind: "all" as KindFilter }, previewDelay);
+  const detailRequest = useStudioPreviewRequest<string | null>("north", previewDelay);
+  const dialogRequest = useStudioPreviewRequest<string | null>(null, previewDelay, false);
   const [addTab, setAddTab] = useState<AddTab>("image");
   const [imageTitle, setImageTitle] = useState("");
   const [imageFileName, setImageFileName] = useState<string | null>(null);
@@ -191,14 +203,15 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   const [noteMotion, setNoteMotion] = useState("");
   const [addMessage, setAddMessage] = useState<string | null>(null);
 
-  const motionStyle = studioMotionStyle(reducedMotion);
+  const effectiveReducedMotion = useStudioReducedMotion(reducedMotion);
+  const motionStyle = studioMotionStyle(effectiveReducedMotion);
   const selected = sampleCards.find((card) => card.id === selectedId) ?? null;
   const selectedDraft = selected === null ? null : (drafts[selected.id] ?? null);
-  const needle = query.trim().toLowerCase();
+  const needle = collectionRequest.value.query.trim().toLowerCase();
   const visible = sampleCards.filter((card) => {
-    if (kind !== "all" && card.kind !== kind) return false;
+    if (collectionRequest.value.kind !== "all" && card.kind !== collectionRequest.value.kind) return false;
     if (needle === "") return true;
-    return `${card.title} ${card.creator} ${card.observations}`.toLowerCase().includes(needle);
+    return `${card.title} ${card.creator} ${card.observations} ${card.source} ${card.tags}`.toLowerCase().includes(needle);
   });
   const addDirty =
     imageTitle !== "" ||
@@ -219,11 +232,13 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   function openDetails(id: string): void {
     setSelectedId(id);
     setDetailsOpen(true);
+    detailRequest.load(id);
   }
 
   function closeDetails(): void {
     if (window.matchMedia("(min-width: 960px)").matches) setSelectedId(null);
     setDetailsOpen(false);
+    detailRequest.cancel();
   }
 
   function editDraft(id: string, patch: Partial<Draft>): void {
@@ -237,11 +252,41 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
 
   function submitSearch(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
+    collectionRequest.load({ query, kind });
   }
 
   function clearFilters(): void {
     setQuery("");
     setKind("all");
+    collectionRequest.load({ query: "", kind: "all" });
+  }
+
+  function selectProject(name: string): void {
+    setProject(name);
+    collectionRequest.load({ query, kind });
+    if (selectedId !== null) detailRequest.load(selectedId);
+  }
+
+  function openDialog(next: "add" | "note"): void {
+    setConfirmDiscard(false);
+    setDialog(next);
+    dialogRequest.load(next);
+  }
+
+  function reloadScreen(): void {
+    collectionRequest.load({ query, kind });
+    if (selectedId !== null) detailRequest.load(selectedId);
+    setReplay((current) => current + 1);
+  }
+
+  function changeLoadingOptions(next: StudioLoadingOptions): void {
+    setLoadingOptions(next);
+    reloadScreen();
+  }
+
+  function changeLoadingMode(next: StudioLoadingMode): void {
+    setLoadingMode(next);
+    reloadScreen();
   }
 
   function showInspectorState(next: SaveState): void {
@@ -270,9 +315,11 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
     }
     if (dialog === "add" && addDirty) {
       setConfirmDiscard(true);
+      dialogRequest.cancel();
       return;
     }
     setDialog(null);
+    dialogRequest.cancel();
     setConfirmDiscard(false);
     setAddMessage(null);
   }
@@ -281,6 +328,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
     clearAddDraft();
     setConfirmDiscard(false);
     setDialog(null);
+    dialogRequest.cancel();
   }
 
   function submitAdd(event: FormEvent<HTMLFormElement>): void {
@@ -299,13 +347,14 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
     if (next === null) return;
     event.preventDefault();
     setAddTab(next);
+    dialogRequest.load(`add-${next}`);
     document.getElementById(`sample-tab-${next}`)?.focus();
   }
 
   return (
     <div
       className="studio-ui studio-preview studio-sample"
-      data-reduced-motion={reducedMotion ? "true" : "false"}
+      data-reduced-motion={effectiveReducedMotion ? "true" : "false"}
       data-plain={plain ? "true" : "false"}
       data-details-open={detailsOpen ? "true" : "false"}
       data-studio-theme={themeChoice === "system" ? undefined : themeChoice}
@@ -321,11 +370,11 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
               { value: "Atlas", label: "Atlas" },
               { value: "Harbor", label: "Harbor" },
             ]}
-            onChange={setProject}
+            onChange={selectProject}
           />
         </div>
         <div className="sample-views" role="group" aria-label="View">
-          <StudioButton type="button" aria-pressed="true">Collection</StudioButton>
+          <StudioButton type="button" aria-pressed="true" onClick={() => collectionRequest.load({ query, kind })}>Collection</StudioButton>
         </div>
         <details className="sample-connection">
           <summary>
@@ -357,7 +406,9 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
       <div className="sample-frame">
         <nav className="sample-rail" aria-label="Projects">
           <div className="sample-rail-heading">
-            <p className="sample-project-name">{project}</p>
+            <StudioLoadingRegion options={loadingOptions} variant="text" pending={collectionRequest.pending} mode={loadingMode} reducedMotion={effectiveReducedMotion} plain={plain} replay={replay + collectionRequest.revision}>
+              <p className="sample-project-name" data-studio-reveal>{project}</p>
+            </StudioLoadingRegion>
             <StudioMenu
               label="More"
               items={[{ id: "details", label: "Project details", onSelect: () => setProjectNote("Project details stay in this sample.") }]}
@@ -370,7 +421,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
                   type="button"
                   className={project === name ? "is-selected" : undefined}
                   aria-current={project === name ? "true" : undefined}
-                  onClick={() => setProject(name)}
+                  onClick={() => selectProject(name)}
                 >
                   {name}
                 </StudioButton>
@@ -388,10 +439,10 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
             <div className="sample-heading">
               <span className="sample-index" aria-hidden="true">[01]</span>
               <h1>References</h1>
-              <span className="sample-count">{emptyCollection ? 0 : visible.length}</span>
+              <span className="sample-count" aria-busy={collectionRequest.pending || undefined}>{collectionRequest.pending ? "…" : emptyCollection ? 0 : visible.length}</span>
               <pre className="sample-texture" aria-hidden="true">{" .  .   \n        \n   :    \n        "}</pre>
             </div>
-            <StudioButton type="button" variant="primary" className="sample-add" onClick={() => { setConfirmDiscard(false); setDialog("add"); }}>
+            <StudioButton type="button" variant="primary" className="sample-add" onClick={() => openDialog("add")}>
               <PlusIcon />
               Add reference
             </StudioButton>
@@ -400,18 +451,18 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
               <input
                 aria-label="Search references"
                 value={query}
-                placeholder="north, stone"
-                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search title, creator, tags, source…"
+                onChange={(event) => { setQuery(event.target.value); collectionRequest.load({ query: event.target.value, kind }); }}
               />
               {query !== "" ? (
-                <StudioButton type="button" variant="ghost" className="sample-clear" onClick={() => { setQuery("");  }}>
+                <StudioButton type="button" variant="ghost" className="sample-clear" onClick={() => { setQuery(""); collectionRequest.load({ query: "", kind }); }}>
                   Clear
                 </StudioButton>
               ) : null}
             </form>
             <div className="sample-views sample-filters" role="group" aria-label="Kind">
               {(["all", "image", "link", "note"] as const).map((value) => (
-                <StudioButton key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}>
+                <StudioButton key={value} type="button" aria-pressed={kind === value} onClick={() => { setKind(value); collectionRequest.load({ query, kind: value }); }}>
                   {value === "all" ? "All" : kindLabel(value)}
                 </StudioButton>
               ))}
@@ -420,17 +471,27 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
               <StudioButton type="button" variant="ghost" onClick={clearFilters}>Clear filters</StudioButton>
             ) : null}
           </div>
+          <div className="sample-demo-toolbar" aria-label="Screen loading preview">
+            <span className="studio-meta">Demo latency</span>
+            <StudioSelect label="Demo latency" value={String(previewDelay)} options={[
+              { value: "0", label: "No delay" }, { value: "600", label: "600 ms" },
+              { value: "1200", label: "1.2 seconds" }, { value: "2400", label: "2.4 seconds" },
+            ]} onChange={(value) => setPreviewDelay(Number(value))} />
+            <StudioButton onClick={reloadScreen}>Reload screen sample</StudioButton>
+            <p className="studio-help">Preview only: search, filters, projects, details, and dialogs simulate this wait.</p>
+          </div>
+          <p className="sample-loading-status studio-meta" role="status">{collectionRequest.pending ? "Loading sample results…" : `${emptyCollection ? 0 : visible.length} sample references`}</p>
           {emptyCollection ? (
-            <EmptyCollection onAdd={() => setDialog("add")} />
-          ) : visible.length === 0 ? (
+            <EmptyCollection onAdd={() => openDialog("add")} />
+          ) : visible.length === 0 && !collectionRequest.pending ? (
             <div className="sample-empty">
               <h2>No matching references</h2>
               <p>Nothing matches the current search or filter.</p>
               <StudioButton type="button" onClick={clearFilters}>Clear filters</StudioButton>
             </div>
           ) : (
-            <div className="sample-grid">
-              {visible.map((card) => {
+            <div className="sample-grid" aria-busy={collectionRequest.pending || loadingState === "loading" || undefined}>
+              {(visible.length === 0 && collectionRequest.pending ? sampleCards.slice(0, 3) : visible).map((card) => {
                 const draft = drafts[card.id];
                 if (draft === undefined) return null;
                 return (
@@ -439,8 +500,16 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
                     card={card}
                     draft={draft}
                     selected={selectedId === card.id}
-                    loading={showLoading && card.id === "north"}
+                    loadingState={collectionRequest.pending ? "loading" : loadingState}
+                    placeholder={visible.length === 0 && collectionRequest.pending}
+                    loadingMode={loadingMode}
+                    replay={replay + collectionRequest.revision}
+                    reducedMotion={effectiveReducedMotion}
+                    plain={plain}
+                    onImageError={() => setLoadingState("error")}
                     onOpen={() => openDetails(card.id)}
+                    options={loadingOptions}
+                    previewDelay={previewDelay}
                   />
                 );
               })}
@@ -467,6 +536,13 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
                 else setSavedId(selected.id);
               }}
               onReview={() => setNorthSave("saved")}
+              pending={detailRequest.pending}
+              loadingMode={loadingMode}
+              reducedMotion={effectiveReducedMotion}
+              plain={plain}
+              replay={replay + detailRequest.revision}
+              options={loadingOptions}
+              onReload={() => { if (selectedId !== null) detailRequest.load(selectedId); }}
             />
           )}
         </StudioInspector>
@@ -495,7 +571,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
             <div className="sample-control-row" role="group" aria-label="Collection state">
               <StudioButton aria-pressed={plain} onClick={() => setPlain((current) => !current)}>Plain</StudioButton>
               <StudioButton aria-pressed={emptyCollection} onClick={() => setEmptyCollection((current) => !current)}>Empty collection</StudioButton>
-              <StudioButton aria-pressed={showLoading} onClick={() => setShowLoading((current) => !current)}>Loading card</StudioButton>
+              <StudioButton aria-pressed={loadingState === "loading"} onClick={() => setLoadingState((current) => current === "loading" ? "loaded" : "loading")}>Loading card</StudioButton>
             </div>
           </section>
           <section className="sample-control-section" aria-label="Feedback samples">
@@ -512,6 +588,9 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
               <StudioButton busy>Saving</StudioButton>
             </div>
           </section>
+          <StudioLoadingPreview state={loadingState} mode={loadingMode} replay={replay} reducedMotion={effectiveReducedMotion} plain={plain}
+            onState={setLoadingState} onMode={changeLoadingMode} onReplay={() => setReplay((current) => current + 1)} onOpen={() => openDetails("north")}
+            options={loadingOptions} onOptions={changeLoadingOptions} previewDelay={previewDelay} />
           <section className="sample-control-section sample-control-wide" aria-label="Overlay samples">
             <h3>Overlays &amp; interruption</h3>
             <p className="studio-help">Open and close without waiting. Menus use arrow keys; dialogs return focus to their opener.</p>
@@ -519,7 +598,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
               <StudioButton onClick={() => setPanelOpen(true)}>Open panel</StudioButton>
               <StudioButton onClick={() => setPanelOpen(false)}>Close panel</StudioButton>
               <StudioButton onClick={repeatPanel}>Repeat panel</StudioButton>
-              <StudioButton onClick={() => { setConfirmDiscard(false); setDialog("note"); }}>Open dialog</StudioButton>
+              <StudioButton onClick={() => openDialog("note")}>Open dialog</StudioButton>
               <StudioMenu label="Role" items={[
                 { id: "inspiration", label: "Inspiration", onSelect: () => setMenuChoice("Inspiration") },
                 { id: "candidate", label: "Candidate", onSelect: () => setMenuChoice("Candidate") },
@@ -540,6 +619,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
         open={dialog !== null}
         title={confirmDiscard ? "Discard changes" : dialog === "add" ? "Add reference" : "Reference note"}
         onClose={requestClose}
+        onPreviewReload={confirmDiscard ? undefined : () => dialogRequest.load(dialog ?? "note")}
         focusKey={confirmDiscard ? "discard" : dialog ?? "closed"}
         description={confirmDiscard ? "The reference you started has not been added." : dialog === "add" ? "Collect an image, link, or note. Preview only; nothing is added to a project." : "A sample of Studio's shared dialog."}
         footer={confirmDiscard ? (
@@ -550,12 +630,13 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
         ) : dialog === "add" ? (
           <>
             <StudioButton variant="ghost" onClick={requestClose}>Cancel</StudioButton>
-            <StudioButton type="submit" form="sample-add-form" variant="primary"><PlusIcon />Add {kindLabel(addTab).toLowerCase()}</StudioButton>
+            <StudioButton variant="ghost" onClick={() => dialogRequest.load(`add-${addTab}`)}>Reload sample</StudioButton>
+            <StudioButton type="submit" form="sample-add-form" variant="primary" disabled={dialogRequest.pending}><PlusIcon />Add {kindLabel(addTab).toLowerCase()}</StudioButton>
           </>
-        ) : <StudioButton variant="primary" onClick={requestClose}>Done</StudioButton>}
+        ) : <><StudioButton variant="ghost" onClick={() => dialogRequest.load("note")}>Reload sample</StudioButton><StudioButton variant="primary" onClick={requestClose}>Done</StudioButton></>}
       >
         {confirmDiscard ? null : dialog === "add" ? (
-          <form id="sample-add-form" className="studio-dialog-form" onSubmit={submitAdd}>
+          <form id="sample-add-form" className="studio-dialog-form" onSubmit={submitAdd} aria-busy={dialogRequest.pending || undefined}>
             <div className="sample-tabs" role="tablist" aria-label="Reference kind">
               {(["image", "link", "note"] as const).map((tab) => (
                 <StudioButton
@@ -566,13 +647,15 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
                   aria-selected={addTab === tab}
                   aria-controls={`sample-panel-${tab}`}
                   tabIndex={addTab === tab ? 0 : -1}
-                  onClick={() => setAddTab(tab)}
+                  onClick={() => { setAddTab(tab); dialogRequest.load(`add-${tab}`); }}
                   onKeyDown={onTabKey}
                 >
                   {kindLabel(tab)}
                 </StudioButton>
               ))}
             </div>
+            {dialogRequest.pending ? <p className="studio-meta" role="status">Loading dialog sample…</p> : null}
+            <StudioLoadingRegion options={loadingOptions} variant="form" pending={dialogRequest.pending} mode={loadingMode} reducedMotion={effectiveReducedMotion} plain={plain} replay={replay + dialogRequest.revision}>
             <div role="tabpanel" id="sample-panel-image" aria-labelledby="sample-tab-image" hidden={addTab !== "image"}>
               <div className="studio-field">
                 <label htmlFor="sample-image-file">Image file</label>
@@ -602,10 +685,13 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
               </div>
               <MotionField id="sample-note-motion" value={noteMotion} onChange={setNoteMotion} />
             </div>
+            </StudioLoadingRegion>
             {addMessage !== null ? <p className="studio-help" role="status">{addMessage}</p> : null}
           </form>
         ) : (
-          <p>Forms focus the first useful field. Escape closes the dialog and returns focus to its opener.</p>
+          <StudioLoadingRegion options={loadingOptions} variant="text" pending={dialogRequest.pending} mode={dialog === null ? "instant" : loadingMode} reducedMotion={effectiveReducedMotion} plain={plain} replay={replay + dialogRequest.revision}>
+            <p data-studio-reveal>Forms focus the first useful field. Escape closes the dialog and returns focus to its opener.</p>
+          </StudioLoadingRegion>
         )}
       </StudioDialog>
     </div>
@@ -616,29 +702,49 @@ function SampleCardView({
   card,
   draft,
   selected,
-  loading,
+  loadingState,
+  loadingMode,
+  replay,
+  reducedMotion,
+  plain,
+  onImageError,
+  placeholder,
   onOpen,
+  options,
+  previewDelay,
 }: {
   card: SampleCard;
   draft: Draft;
   selected: boolean;
-  loading: boolean;
+  loadingState: StudioLoadingState;
+  loadingMode: StudioLoadingMode;
+  replay: number;
+  reducedMotion: boolean;
+  plain: boolean;
+  onImageError: () => void;
+  placeholder: boolean;
   onOpen: () => void;
+  options: StudioLoadingOptions;
+  previewDelay: number;
 }) {
+  const request = useStudioPreviewRequest(card.id, previewDelay, false);
+  const reload = () => request.load(card.id);
   return (
     <StudioReferenceCard
       title={card.title}
       metadata={`${kindLabel(card.kind)} \u00b7 ${roleLabel(draft.role)}`}
       selected={selected}
-      loading={loading}
-      imageState={card.missing ? "missing" : card.image ? "ready" : "none"}
-      onOpen={onOpen}
-      media={loading ? (
-        <><span className="visually-hidden">Loading</span><pre className="sample-skeleton-glyphs" aria-hidden="true">{skeletonGlyphs}</pre></>
+      loading={loadingState === "loading" || request.pending}
+      options={options} onPreviewReload={reload}
+      loadingMode={loadingMode} reducedMotion={reducedMotion} plain={plain} replay={replay + request.revision} placeholder={placeholder}
+      imageState={card.missing || loadingState === "error" ? "missing" : card.image ? "ready" : "none"}
+      onOpen={() => { reload(); onOpen(); }}
+      media={loadingState === "error" ? (
+        <div className="sample-missing"><MissingIcon /><p>Image unavailable</p></div>
       ) : card.missing ? (
         <div className="sample-missing"><MissingIcon /><p>Image unavailable</p></div>
       ) : card.image ? (
-        <img src={card.image} alt={`Specimen image, ${card.title}`} />
+        <img src={card.image} alt={`Specimen image, ${card.title}`} onError={onImageError} />
       ) : <p className="sample-kind-mark">{kindLabel(card.kind)}</p>}
       summary={card.kind === "link" ? <SourceLink href={card.source} /> : (
         <p className="studio-excerpt">{card.kind === "note" ? card.observations : card.creator || "Source unknown"}</p>
@@ -657,6 +763,13 @@ function Inspector({
   onClose,
   onSave,
   onReview,
+  pending,
+  loadingMode,
+  reducedMotion,
+  plain,
+  replay,
+  options,
+  onReload,
 }: {
   card: SampleCard;
   draft: Draft;
@@ -667,6 +780,13 @@ function Inspector({
   onClose: () => void;
   onSave: () => void;
   onReview: () => void;
+  pending: boolean;
+  loadingMode: StudioLoadingMode;
+  reducedMotion: boolean;
+  plain: boolean;
+  replay: number;
+  options: StudioLoadingOptions;
+  onReload: () => void;
 }) {
   const titleId = `shared-title-${card.id}`;
   const sourceId = `shared-source-${card.id}`;
@@ -679,15 +799,16 @@ function Inspector({
 
   return (
     <>
-      <header className="studio-inspector-header">
-        <div>
-          <p className="studio-kicker">{kindLabel(card.kind)} · {roleLabel(draft.role)}</p>
-          <h2>{draft.title}</h2>
-        </div>
+      <header className="studio-inspector-header" onClick={(event) => { if (isPreviewSurfaceClick(event)) onReload(); }}>
+        <StudioLoadingRegion options={options} pending={pending} mode={loadingMode} reducedMotion={reducedMotion} plain={plain} replay={replay}>
+          <p className="studio-kicker" data-studio-reveal>{kindLabel(card.kind)} · {roleLabel(draft.role)}</p>
+          <h2 data-studio-reveal>{draft.title}</h2>
+        </StudioLoadingRegion>
         <StudioButton type="button" variant="ghost" className="studio-inspector-back" onClick={onClose}>Back</StudioButton>
         <StudioButton type="button" variant="ghost" className="studio-inspector-close" onClick={onClose}>Close</StudioButton>
       </header>
-      <div className="studio-inspector-body">
+      <div className="studio-inspector-body" aria-busy={pending || undefined} onClick={(event) => { if (isPreviewSurfaceClick(event)) onReload(); }}>
+        <StudioLoadingRegion options={options} variant="inspector" pending={pending} mode={loadingMode} reducedMotion={reducedMotion} plain={plain} replay={replay}>
         <div className="sample-preview-frame">
           {card.missing ? (
             <div className="sample-missing">
@@ -695,7 +816,7 @@ function Inspector({
               <p>Image unavailable</p>
             </div>
           ) : card.image ? (
-            <img src={card.image} alt="" />
+            <img src={card.image} alt="" data-studio-reveal />
           ) : (
             <p className="sample-kind-mark">{kindLabel(card.kind)}</p>
           )}
@@ -706,8 +827,8 @@ function Inspector({
           <p className="studio-help">Source unknown</p>
         )}
         <section data-fields="shared">
-          <h3>Shared reference</h3>
-          <p className="studio-help">Shared across projects. This sample keeps the draft locally.</p>
+          <h3 data-studio-reveal>Shared reference</h3>
+          <p className="studio-help" data-studio-reveal>Shared across projects. This sample keeps the draft locally.</p>
           <StudioField id={titleId} label="Title" value={draft.title} onChange={(title) => onChange({ title })} />
           <StudioField id={sourceId} label="Source" value={draft.source} onChange={(source) => onChange({ source })} />
           <StudioField id={creatorId} label="Creator" value={draft.creator} onChange={(creator) => onChange({ creator })} />
@@ -718,8 +839,8 @@ function Inspector({
           </div>
         </section>
         <section data-fields="placement">
-          <h3>Use in {project}</h3>
-          <p className="studio-help">Role, usage notes, and crop belong to this project.</p>
+          <h3 data-studio-reveal>Use in {project}</h3>
+          <p className="studio-help" data-studio-reveal>Role, usage notes, and crop belong to this project.</p>
           <div className="studio-field">
             <label id={`${roleId}-label`} htmlFor={roleId}>Role</label>
             <StudioSelect
@@ -760,8 +881,10 @@ function Inspector({
           <summary>Provenance</summary>
           <p className="studio-meta">Revision 4 · Specimen · Not a project record</p>
         </details>
+        </StudioLoadingRegion>
       </div>
       <footer className="studio-inspector-footer">
+        {pending ? <p className="studio-meta" role="status">Loading detail sample…</p> : null}
         {card.id === "north" && saveState === "conflict" ? (
           <p className="sample-conflict" role="status">This placement changed in another session. Your draft is still here.</p>
         ) : null}
@@ -769,10 +892,11 @@ function Inspector({
           <p className="studio-error" role="status">Save failed. The draft is still here.</p>
         ) : null}
         <div className="form-actions">
+          <StudioButton variant="ghost" onClick={onReload}>Reload detail sample</StudioButton>
           {card.id === "north" && saveState === "conflict" ? (
             <StudioButton type="button" onClick={onReview}>Review latest</StudioButton>
           ) : null}
-          <StudioButton type="button" variant="primary" className="sample-save" aria-busy={saving ? true : undefined} disabled={saving} onClick={onSave}>
+          <StudioButton type="button" variant="primary" className="sample-save" aria-busy={saving ? true : undefined} disabled={saving || pending} onClick={onSave}>
             {saving ? "Saving" : card.id === "north" && saveState === "conflict" ? "Save draft" : "Save use"}
           </StudioButton>
           {showStatus && saveState === "saved" ? (
@@ -803,7 +927,7 @@ function SourceLink({ href }: { href: string }) {
     label = href;
   }
   return (
-    <a className="sample-link" href={href} target="_blank" rel="noreferrer">
+    <a className="sample-link" href={href} target="_blank" rel="noreferrer" data-ascii="skip">
       <span className="sample-link-text">{label}</span>
       <ExternalIcon />
       <span className="visually-hidden"> (opens in a new tab)</span>

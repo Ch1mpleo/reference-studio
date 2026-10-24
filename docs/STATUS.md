@@ -5,8 +5,8 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 ## Current position
 
 - Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance.
-- Active milestone: M2.0a sample interaction/composition refinement is implemented and browser-checked (2026-10-24), with shared controls ready for reuse. Human visual acceptance is still unrecorded. The library screens still use the M1.6 theme.
-- Next task: Review the refined `#/studio` sample, then migrate the library in M2.0b using the implemented controls and design.md section 19. M2.0a stays open until human review is recorded; M2.0c loader integration remains later work.
+- Active milestone: M2.0a refinement and the expanded M2.0c whole-screen loading preview are implemented (2026-10-24). The user requested broader coverage after the media-only sample. Human acceptance of the expanded result is unrecorded. The library screens still use the M1.6 theme.
+- Next task: Review `#/studio` using component click/reload, the Skeleton only / Skeleton + reveal treatments, separate preset selectors, Center/corner/Cursor origin, speed slider, and Demo latency. Then migrate the library in M2.0b with the shared primitives in design.md sections 7/19. The preview simulator is not a production request policy; service-backed library adoption remains pending.
 
 ## Milestone 0 — Foundation
 
@@ -257,7 +257,7 @@ Motion roles are instant 0ms, feedback 100ms, menu 120ms, panel 160ms, and dialo
 
 ## Later milestones
 
-The M1 gate is closed. M2.0a is waiting for visual review. M2.0b onward is not started.
+The M1 gate is closed. M2.0a is waiting for visual review. M2.0b is not started; the preview portion of M2.0c was brought forward at the user's request below.
 
 ### M2.0a refinement — 2026-10-24
 
@@ -274,6 +274,52 @@ The user requested better easing, hover feedback, dialog/layout composition, and
 **Rendered evidence:** reviewed the resting desktop light/dark compositions, phone collection, and dialog captures in `test-results/`. Screenshot capture finishes finite transitions before recording resting appearance. A keyboard Tab trace verified a painted 2px solid focus outline; this resolves the earlier preview focus-painting verification limitation for the tested control.
 
 **Remaining:** human aesthetic acceptance is not inferred from passing tests. Loading remains a static specimen; upstream ASCII Reveal integration is M2.0c. The 720px check exercises 1440px/200% reflow geometry, not native browser zoom. Only installed Edge was exercised; this is not a full accessibility/contrast audit or an animation-performance recording. Geist is declared with system fallbacks and is not bundled. Library migration, populated board/playground acceptance, and Node 24 verification remain open.
+
+### M2.0c preview pairing — 2026-10-24
+
+At the user's request, the real loading effect is now installed and exercised in `#/studio` before M2.0b library migration. This completes the preview pairing portion; it does not mark request-driven library loading or human visual acceptance complete.
+
+- Installed `ascii-reveal` 0.3.0 from the HTTPS GitHub archive pinned to commit `94b02d76868eee8a7484dc3b11707dc4fb276a4d`, with an integrity hash in the lockfile. The npm registry returned 404. Inspected the exact commit's package metadata, types, React binding, skeleton, engine destroy/reduced-motion paths, and skeleton animation cleanup. No upstream install scripts or local package build are needed for its committed distribution.
+- Added reusable `StudioSkeleton`, `StudioReveal`, and `StudioLoadingMedia` adapters. The real dither skeleton and fast image reveal are clipped to the reserved media frame. Labels, metadata, fields, and actions stay outside the effect. Mount, selection, theme, and connection updates do not request replay.
+- Preview controls contain a visible shared sample card with Skeleton only / Skeleton + reveal / Instant, Start loading / Show loaded / Replay reveal, and failure / retry. The first collection card uses the same adapter and intent. These are explicit sample controls, not network waits or service records. There are no artificial loading timers.
+- Added a live OS/preview reduced-motion hook shared by CSS timing and canvas adapters. Runtime reduction destroys the active reveal controller and disables skeleton shimmer, restoring the source image immediately. Plain/Instant bypass glyph work. Rapid replay/loading changes, failure, and route exit clean up active decoration.
+- Updated design.md section 7 and the reuse route with the exact dependency, recipes, state ownership, and integration limits. The pre-existing lockfile changes remain intact; compared to the pre-install file, only the web dependency record and the new ascii-reveal package record changed.
+
+**Validation:** on cached Node v26.2.0 (the shell's default is Node v22.17.1), `npm run check`, the full `npm test` suite (20 files, 78 tests), and `npm run build` passed. `npm ci` passed in a temporary directory containing the workspace manifests/lockfile; this avoided replacing dependencies underneath the existing local dev process. The complete production Edge suite passed all 13 scenarios, including four loading scenarios for actual upstream engine activity, stable media bounds, both themes/phone widths, live reduction, Plain/Instant, rapid interruption, failure/retry, and route cleanup. No page errors were recorded in the loading/playback cleanup probes. `git diff --check` passed.
+
+**Evidence and repeatability:** screenshots in `test-results/studio-loading-*/` show real loading versus loaded content, light/dark, and 1440/390px composition. The loading test also records upstream `asciireveal` activity and verifies removal of hidden-source attributes/canvases after completion. Four playback videos were captured during verification. Video is opt-in through `REFERENCE_STUDIO_RECORD_LOADING=1`; install the Playwright recorder with `npx playwright install ffmpeg` before enabling it. Ordinary tests use installed Edge without requiring video recording.
+
+**Remaining:** the integration is intentionally media-only on two specimen instances. Real request readiness, warm/background refresh behavior, large-list performance, native 200% browser zoom, and broader browser/accessibility coverage remain outside this preview check. The old library UI has not adopted the adapters. User aesthetic approval and the remaining M2.0b/M2.0c acceptance work are not inferred from these checks. Node 24 remains unverified.
+
+### Whole-screen loading review — 2026-10-24
+
+The user clarified that media-only loading was insufficient and explicitly requested delays on filtering and card details to review complete components across Studio. The specimen now starts with a 1.2-second demo wait and exposes No delay / 600ms / 1.2s / 2.4s beside search, plus Reload screen sample. This is an intentional, labeled `#/studio` exception to the no-artificial-delay policy for product requests.
+
+- Complete collection cards show skeleton media and metadata/title/summary, then reveal their marked content. Search covers title, creator, observations, tags, and source; kind filters, clear, project switches, and reload simulate pending results. Inputs update immediately, cached result identity/geometry stays stable until readiness, and older requests cannot replace a newer query/filter. Zero matches appears only after the latest simulation settles.
+- Every Open details action independently loads the inspector heading, preview, and form-shaped section placeholders. Rapid selection keeps the latest item; local drafts remain associated with their original card. Repeated field placeholders are static; the media/text groups use the real upstream skeleton. Labels, live values, actions, and errors do not scramble. Close/Back remains usable, and compact inspectors remove their subtree on dismissal so hidden renderers cannot continue.
+- Add reference and the example dialog show body loading; Add reference tabs remain usable and have independent latest-intent loading. Pending form content stays mounted but hidden/inert, retaining unsent values. Native initial focus skips inert fields and uses Close; readiness does not steal focus. Submission is disabled while pending. Dirty confirmation is immediate and preserves its safe focus behavior.
+- Added shared `StudioLoadingRegion` for card/text/inspector/form anatomy. `StudioReveal` tears down the previous controller before showing placeholders, fixing stale glyph/text overlays observed during rapid detail selection. Readiness or explicit replay starts the next reveal. OS/preview reduction, Plain, and Instant apply across all regions, with demo latency controlled separately.
+- `useStudioPreviewRequest` owns only transient demonstration timers and generation cancellation; it is not used by service request hooks. Its tests cover retained results, newer intent winning, cancel/unmount cleanup, and zero-delay completion. The design specification and client rule document the approved preview exception and shared reuse contracts.
+
+**Validation:** `npm run check`, all 80 tests in 21 Vitest files, and the full workspace build passed on Node v26.2.0. The final complete production Edge run passed all 18 scenarios. Five whole-screen scenarios verify complete card placeholders, latest-query/filter behavior, retained per-card drafts, independent detail loads, inert/closed-dialog focus and cleanup, tab drafts, zero delay, reduced/Plain modes, and dark desktop/phone composition. Existing connection, interface, and upstream loading checks still pass. Unit coverage verifies obsolete-generation rejection and timer cleanup. Browser helpers were updated to account for compact inspector content being absent while closed. `git diff --check` passed.
+
+**Evidence:** reviewed full-screen loading and inspector/dialog captures, including dark 1440px and 390px compositions, under `test-results/final-e2e/` and `test-results/screen-final-check/`. Playback captures from the recording pass remain under the earlier loading scenario folders; recording remains opt-in. The screenshot review identified and led to the stale-reveal cleanup fix, with an explicit no-old-overlay assertion during pending detail selection.
+
+**Scope:** Studio review only; no service, persistence, or library request behavior changed. The prior package pin and the pre-existing lockfile edits are preserved. The live connection indicator and workspace controls do not pretend to load as fixture data. Human visual approval, native browser zoom verification, large-board/list performance, and target-project motion remain separate work.
+
+### Loading presets and component activation — 2026-10-24
+
+The user requested click-to-reload on components, then added the upstream preset/origin/speed controls to that work. Both requests are implemented in the existing `#/studio` specimen.
+
+- Loading & reveal retains Skeleton only and Skeleton + reveal, plus the existing Instant alternative. It exposes separate upstream reveal presets (Decode, Dither, Terminal, Blueprint), skeleton variants (Dither, Scan, Braille, Terminal), wave origin (Center, Top-left corner, Cursor), a 0.25×–3× speed slider/readout, and Reset loading options. Reveal-only controls are disabled in skeleton-only mode; reduced/Plain/Instant preserve static alternatives.
+- One typed `StudioLoadingOptions` object supplies the entire Studio preview: cards, inspector heading/body, dialogs, and the adjacent specimen. Changes replay pending/readiness with the new settings. The reveal receives the native preset/origin/speed props; skeleton shimmer uses the supported sweep-period CSS value and recreates the shimmer on speed/variant changes so cached measurements do not retain old timing. The demo wait is independent of playback speed.
+- Each collection/example card surface can replay its local loading cycle, with a named Reload button for keyboard use. Open details reloads both the clicked card and its inspector. Detail heading/preview/static regions and dialog static bodies have equivalent shortcuts and explicit reload actions. Repeated current filters, project options, Collection, and dialog tabs request a new loading cycle.
+- Links, buttons, field wrappers/labels, editable text, and modified clicks are excluded from the surface shortcut. Field focus/typing remains responsive; existing drafts survive local reloads. This is opt-in preview behavior, not a new clickable-article contract for production screens.
+- Added `StudioLoadingControls`, `studioLoadingOptions`, and `studioPreviewActivation`; documented their contracts and default values in design.md section 7 and the reuse route. The package pin and pre-existing edits are unchanged.
+
+**Validation (completed 2026-10-25):** `npm run check`, all 80 tests in 21 Vitest files, and the full workspace build passed on Node v26.2.0. The complete production Edge suite passed all 21 scenarios, including three new scenarios covering the actual upstream skeleton variants/reveal presets, wave-origin controls, speed/reset, phone layout, component-local mouse/keyboard reloads, and retained field editing. A final two-scenario run passed after tightening the real card-content geometry assertion and adding explicit No delay replay: identical local requests advance a replay revision, and the browser verifies an upstream `asciireveal` activation without a pending wait. `git diff --check` passed.
+
+**Evidence and scope:** reviewed the desktop skeleton controls and 390px settings captures in `test-results/options-final-e2e/`; the final edge-case results are in `test-results/options-edge-cases/`. Existing full-screen, dialog, focus, reduced-motion, connection, and cleanup checks remain green. This changes only Studio review presentation; human aesthetic approval, native browser zoom, large-list performance, wider browser coverage, and production library adoption remain separate work. Changes remain uncommitted.
 
 ### M2 planning review — 2026-10-23
 
