@@ -19,9 +19,13 @@ import {
   type ReferenceDetailsInput,
 } from "./referenceApi.js";
 
+export type ReferenceLoadStatus = "loading" | "ready" | "error";
+
 export function useProjectReferences(projectId: string, refreshKey: number): {
   references: ProjectReference[];
   notice: string | null;
+  status: ReferenceLoadStatus;
+  refreshing: boolean;
   addImage: (file: File, fields: ImageFields) => Promise<ProjectReference>;
   addLink: (input: CreateLinkReference) => Promise<ProjectReference>;
   addNote: (input: CreateNoteReference) => Promise<ProjectReference>;
@@ -31,10 +35,18 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
 } {
   const [references, setReferences] = useState<ProjectReference[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [status, setStatus] = useState<ReferenceLoadStatus>("loading");
+  const [refreshing, setRefreshing] = useState(false);
   const generation = useRef(0);
+  const loadedOnce = useRef(false);
 
   const load = useCallback(async (): Promise<void> => {
     const requestGeneration = ++generation.current;
+    if (loadedOnce.current) {
+      setRefreshing(true);
+    } else {
+      setStatus("loading");
+    }
     try {
       const next = await listProjectReferences(projectId);
       if (requestGeneration !== generation.current) {
@@ -42,11 +54,18 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
       }
       setReferences(next);
       setNotice(null);
+      loadedOnce.current = true;
+      setStatus("ready");
     } catch (error) {
       if (requestGeneration !== generation.current) {
         return;
       }
+      setStatus("error");
       setNotice(error instanceof ReferenceRequestError ? error.message : "The references could not be loaded.");
+    } finally {
+      if (requestGeneration === generation.current) {
+        setRefreshing(false);
+      }
     }
   }, [projectId]);
 
@@ -123,5 +142,5 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     [projectId, remember],
   );
 
-  return { references, notice, addImage, addLink, addNote, saveDetails, savePlacement, place };
+  return { references, notice, status, refreshing, addImage, addLink, addNote, saveDetails, savePlacement, place };
 }

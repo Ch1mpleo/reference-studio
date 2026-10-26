@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useStudioLayer } from "./studioLayer.js";
 
 /** One editor: complementary desktop rail, native modal sheet on smaller screens. */
-export function StudioInspector({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+export function StudioInspector({ open, onClose, retainContent = false, children }: { open: boolean; onClose: () => void; retainContent?: boolean; children: ReactNode }) {
   const [desktop, setDesktop] = useState(() => window.matchMedia("(min-width: 960px)").matches);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const layer = useStudioLayer();
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 960px)");
@@ -22,12 +25,13 @@ export function StudioInspector({ open, onClose, children }: { open: boolean; on
       dialog.close();
       if (previous?.isConnected) previous.focus();
     };
-  }, [desktop, open]);
+  }, [desktop, open, layer]);
 
   if (desktop) return <aside className="studio-inspector" aria-label="Inspector">{children}</aside>;
-  return (
+  const dialog = (
     <dialog ref={dialogRef} className="studio-inspector" aria-label="Reference details" onCancel={(event) => { event.preventDefault(); onClose(); }}>
-      {open ? children : null}
+      <div className="studio-dialog-sheet">{open || retainContent ? children : null}</div>
     </dialog>
   );
+  return layer === null ? dialog : createPortal(dialog, layer);
 }

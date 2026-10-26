@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { isHttpUrl, type LibraryReference } from "@reference-studio/core";
 import { ReferenceRequestError, type ReferenceDetailsInput } from "./referenceApi.js";
+import { StudioButton } from "./StudioButton.js";
 
 type Draft = {
   title: string;
@@ -89,12 +90,13 @@ export function ReferenceDetails({
   }
 
   return (
-    <details className="reference-details">
-      <summary>Edit shared details</summary>
+    <section className="reference-details">
+      <h3>Shared reference</h3>
       <p className="reference-meta">
         Title, source, creator, tags, observations, and availability belong to this reference. They stay the same in every project.
       </p>
       <form onSubmit={(event) => void save(event)}>
+        <div className="studio-field">
         <label htmlFor={titleId}>Title</label>
         <input
           id={titleId}
@@ -103,6 +105,8 @@ export function ReferenceDetails({
           disabled={saveState === "saving"}
           onChange={(event) => edit({ title: event.target.value })}
         />
+        </div>
+        <div className="studio-field">
         <label htmlFor={sourceId}>Source</label>
         <input
           id={sourceId}
@@ -113,6 +117,8 @@ export function ReferenceDetails({
           disabled={saveState === "saving"}
           onChange={(event) => edit({ sourceUrl: event.target.value })}
         />
+        </div>
+        <div className="studio-field">
         <label htmlFor={creatorId}>Creator</label>
         <input
           id={creatorId}
@@ -122,6 +128,8 @@ export function ReferenceDetails({
           disabled={saveState === "saving"}
           onChange={(event) => edit({ creator: event.target.value })}
         />
+        </div>
+        <div className="studio-field">
         <label htmlFor={tagsId}>Tags</label>
         <input
           id={tagsId}
@@ -130,6 +138,8 @@ export function ReferenceDetails({
           disabled={saveState === "saving"}
           onChange={(event) => edit({ tags: event.target.value })}
         />
+        </div>
+        <div className="studio-field">
         <label htmlFor={availabilityId}>Availability</label>
         <select
           id={availabilityId}
@@ -146,6 +156,8 @@ export function ReferenceDetails({
           <option value="available">Available</option>
         </select>
         <p className="form-note">Unknown stays unknown. Available means the material is on hand.</p>
+        </div>
+        <div className="studio-field">
         <label htmlFor={observationsId}>Observations</label>
         <textarea
           id={observationsId}
@@ -155,10 +167,11 @@ export function ReferenceDetails({
           disabled={saveState === "saving"}
           onChange={(event) => edit({ observations: event.target.value })}
         />
+        </div>
         <div className="form-actions">
-          <button type="submit" disabled={saveState === "saving" || (!dirty && overrideRevision === null)}>
+          <StudioButton type="submit" variant="primary" busy={saveState === "saving"} disabled={saveState === "saving" || (!dirty && overrideRevision === null)}>
             {overrideRevision === null ? "Save details" : "Save draft"}
-          </button>
+          </StudioButton>
           <p className="save-state" data-save-state={saveState}>
             {saveState === "saving" ? "Saving" : null}
             {saveState === "saved" ? "Saved" : null}
@@ -167,7 +180,7 @@ export function ReferenceDetails({
         </div>
         {message !== null ? <p className={saveState === "error" ? "form-error" : "form-note"}>{message}</p> : null}
       </form>
-    </details>
+    </section>
   );
 }
 

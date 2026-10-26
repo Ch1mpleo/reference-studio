@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { imageCropSchema, type ImageCrop, type ProjectReference } from "@reference-studio/core";
 import { ReferenceRequestError, type PlacementUseInput } from "./referenceApi.js";
+import { StudioButton } from "./StudioButton.js";
 
 type CropDraft = {
   x: string;
@@ -77,14 +78,15 @@ export function PlacementUse({
   }
 
   return (
-    <details className="reference-details">
-      <summary>Use in this project</summary>
+    <section className="reference-details">
+      <h3>Use in this project</h3>
       <p className="reference-meta">
         Role, usage notes, and crop belong to this project. Inspiration is the default. Candidate and approved are
         explicit choices. Approved marks the asset for this project. It does not approve a direction, and it does not
         grant a license.
       </p>
       <form onSubmit={(event) => void save(event)}>
+        <div className="studio-field">
         <label htmlFor={roleId}>Role</label>
         <select
           id={roleId}
@@ -101,6 +103,8 @@ export function PlacementUse({
           <option value="candidate">Candidate</option>
           <option value="approved">Approved</option>
         </select>
+        </div>
+        <div className="studio-field">
         <label htmlFor={notesId}>Usage notes</label>
         <textarea
           id={notesId}
@@ -110,6 +114,7 @@ export function PlacementUse({
           disabled={saveState === "saving"}
           onChange={(event) => edit({ usageNotes: event.target.value })}
         />
+        </div>
         {image ? (
           <>
             <p className="form-note">Crop is a fraction of the original image, from the top left. Leave every field empty to keep the whole image.</p>
@@ -122,9 +127,9 @@ export function PlacementUse({
           </>
         ) : null}
         <div className="form-actions">
-          <button type="submit" disabled={saveState === "saving" || (!dirty && overrideRevision === null)}>
+          <StudioButton type="submit" variant="primary" busy={saveState === "saving"} disabled={saveState === "saving" || (!dirty && overrideRevision === null)}>
             {overrideRevision === null ? "Save use" : "Save draft"}
-          </button>
+          </StudioButton>
           <p className="save-state" data-save-state={saveState}>
             {saveState === "saving" ? "Saving" : null}
             {saveState === "saved" ? "Saved" : null}
@@ -133,7 +138,7 @@ export function PlacementUse({
         </div>
         {message !== null ? <p className={saveState === "error" ? "form-error" : "form-note"}>{message}</p> : null}
       </form>
-    </details>
+    </section>
   );
 }
 

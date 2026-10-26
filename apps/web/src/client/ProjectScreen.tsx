@@ -2,8 +2,12 @@ import { useState, type FormEvent } from "react";
 import type { Project, UpdateProjectRequest } from "@reference-studio/core";
 import { ProjectRequestError } from "./projectApi.js";
 import { ReferenceCollection } from "./ReferenceCollection.js";
+import { StudioButton } from "./StudioButton.js";
+import { StudioDialog } from "./StudioDialog.js";
+import { StudioMenu } from "./StudioMenu.js";
 import { readSelectedProjectId, writeSelectedProjectId } from "./selectedProject.js";
 import { useProjectReferences } from "./useProjectReferences.js";
+import type { LibraryLoadStatus } from "./useProjectLibrary.js";
 
 export type ProjectDraft = {
   name: string;
@@ -18,6 +22,8 @@ type ProjectPatch = Omit<UpdateProjectRequest, "expectedRevision">;
 type ProjectScreenProps = {
   projects: Project[];
   notice: string | null;
+  status?: LibraryLoadStatus;
+  refreshing?: boolean;
   refreshKey: number;
   onCreate: (name: string) => Promise<Project>;
   onRestore: (file: File) => Promise<Project>;
@@ -30,6 +36,8 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 export function ProjectScreen({
   projects,
   notice,
+  status = "ready",
+  refreshing = false,
   refreshKey,
   onCreate,
   onRestore,
@@ -84,12 +92,17 @@ export function ProjectScreen({
     }
   }
 
+  const projectsLoading = status === "loading" && projects.length === 0;
+
   return (
-    <div className="workspace-body">
-      <section className="project-list" aria-label="Projects">
-        <form className="create-project" onSubmit={(event) => void submitProject(event)}>
-          <label htmlFor="new-project-name">New project</label>
-          <div className="create-row">
+    <div className="sample-frame">
+      <nav className="sample-rail" aria-label="Projects">
+        <div className="sample-rail-heading">
+          <p className="sample-project-name">{selected?.name ?? "Projects"}</p>
+        </div>
+        <form className="create-project library-rail-form" onSubmit={(event) => void submitProject(event)}>
+          <div className="studio-field">
+            <label htmlFor="new-project-name">New project</label>
             <input
               id="new-project-name"
               name="name"
@@ -99,28 +112,31 @@ export function ProjectScreen({
               disabled={creating}
               onChange={(event) => setName(event.target.value)}
             />
-            <button type="submit" aria-busy={creating} disabled={creating || name.trim() === ""}>
-              {creating ? "Creating" : "Create"}
-            </button>
           </div>
+          <StudioButton type="submit" variant="primary" busy={creating} disabled={creating || name.trim() === ""}>
+            {creating ? "Creating" : "Create"}
+          </StudioButton>
           {createError !== null ? <p className="form-error">{createError}</p> : null}
         </form>
-        <div className="restore-project">
+        <div className="restore-project studio-field">
           <label htmlFor="restore-backup">Restore backup</label>
-          <input
-            id="restore-backup"
-            name="backup"
-            type="file"
-            accept=".zip,application/zip"
-            disabled={restoring}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
-              event.currentTarget.value = "";
-              if (file !== undefined) {
-                void restore(file);
-              }
-            }}
-          />
+          <div className="sample-file">
+            <input
+              id="restore-backup"
+              name="backup"
+              type="file"
+              accept=".zip,application/zip"
+              disabled={restoring}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                if (file !== undefined) {
+                  void restore(file);
+                }
+              }}
+            />
+            <span>{restoring ? "Restoring" : "Choose a zip backup"}</span>
+          </div>
           {restoreMessage !== null ? (
             <p className="save-state" data-save-state="saved">
               {restoreMessage}
@@ -129,19 +145,25 @@ export function ProjectScreen({
           {restoreError !== null ? <p className="form-error">{restoreError}</p> : null}
         </div>
         {notice !== null ? <p className="form-error">{notice}</p> : null}
-        {active.length === 0 ? <p className="quiet">No active projects.</p> : null}
+        {refreshing ? <p className="studio-meta" role="status">Updating</p> : null}
+        {projectsLoading ? <p className="studio-meta" role="status">Loading projects</p> : null}
+        {!projectsLoading && active.length === 0 ? <p className="quiet">No active projects.</p> : null}
         <ProjectChoices projects={active} selectedId={selectedId} onSelect={select} />
         {archived.length > 0 ? (
-          <details className="archived">
+          <details className="archived sample-disclosure">
             <summary>Archived</summary>
             <ProjectChoices projects={archived} selectedId={selectedId} onSelect={select} />
           </details>
         ) : null}
-      </section>
-      <section className="project-detail">
-        {projects.length === 0 ? <EmptyLibrary /> : null}
+      </nav>
+      <main className="sample-workspace">
+        <span className="sample-joint sample-joint-nw" aria-hidden="true" />
+        <span className="sample-joint sample-joint-ne" aria-hidden="true" />
+        <span className="sample-joint sample-joint-sw" aria-hidden="true" />
+        <span className="sample-joint sample-joint-se" aria-hidden="true" />
+        {projects.length === 0 && !projectsLoading ? <EmptyLibrary /> : null}
         {projects.length > 0 && selected === null ? (
-          <div className="invitation">
+          <div className="sample-empty">
             <h2>Choose a project</h2>
             <p>Opening one here does not change the project selected in another tab.</p>
           </div>
@@ -155,7 +177,7 @@ export function ProjectScreen({
             onDownload={onDownload}
           />
         ) : null}
-      </section>
+      </main>
     </div>
   );
 }
@@ -173,14 +195,14 @@ function ProjectChoices({
     <ul>
       {projects.map((project) => (
         <li key={project.id}>
-          <button
+          <StudioButton
             type="button"
-            className={project.id === selectedId ? "project-option selected" : "project-option"}
+            className={project.id === selectedId ? "project-option selected is-selected" : "project-option"}
             aria-current={project.id === selectedId ? "true" : undefined}
             onClick={() => onSelect(project.id)}
           >
             {project.name}
-          </button>
+          </StudioButton>
         </li>
       ))}
     </ul>
@@ -189,8 +211,9 @@ function ProjectChoices({
 
 function EmptyLibrary() {
   return (
-    <div className="invitation">
-      <h2>Start with a reference</h2>
+    <div className="sample-empty">
+      <pre className="sample-motif" aria-hidden="true">{"[     ]\n[ ... ]"}</pre>
+      <h1>Start with a reference</h1>
       <p>Name the project, then add an image, a link, or a note. You do not need a brief yet.</p>
       <p>Source and creator can stay unknown.</p>
     </div>
@@ -209,6 +232,7 @@ function ProjectEditor({
   onDownload: ProjectScreenProps["onDownload"];
 }) {
   const collection = useProjectReferences(project.id, refreshKey);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [draft, setDraft] = useState<ProjectDraft>(() => draftFromProject(project));
   const [baseRevision, setBaseRevision] = useState(project.revision);
   const [overrideRevision, setOverrideRevision] = useState<number | null>(null);
@@ -289,101 +313,83 @@ function ProjectEditor({
 
   return (
     <>
-    <form className="project-form" onSubmit={(event) => void save(event)}>
-      <div className="detail-heading">
-        <h2>{project.status === "archived" ? "Archived project" : "Project"}</h2>
-        <p className="save-state" data-save-state={saveState}>
-          {saveState === "saving" ? "Saving" : null}
-          {saveState === "saved" ? "Saved" : null}
-          {saveState === "error" ? "Save failed" : null}
-        </p>
+      <div className="sample-toolbar">
+        <div className="sample-heading">
+          <span className="sample-index" aria-hidden="true">[01]</span>
+          <h1>References</h1>
+          <span className="sample-count">{collection.status === "loading" ? "…" : collection.references.length}</span>
+        </div>
+        <StudioMenu
+          label="Project"
+          items={[
+            { id: "details", label: "Project details", onSelect: () => setDetailsOpen(true) },
+            { id: "backup", label: backupState === "saving" ? "Downloading" : "Download backup", onSelect: () => void downloadBackup() },
+            project.status === "active"
+              ? { id: "archive", label: "Archive", onSelect: () => void changeStatus("archived") }
+              : { id: "reopen", label: "Reopen", onSelect: () => void changeStatus("active") },
+          ]}
+        />
       </div>
-      <label htmlFor="project-name">Name</label>
-      <input
-        id="project-name"
-        value={draft.name}
-        maxLength={200}
-        required
-        disabled={saveState === "saving"}
-        onChange={(event) => edit({ name: event.target.value })}
+      {project.status === "archived" ? <p className="sample-banner" role="status">Archived project. Reopen it to continue, or keep reading its references.</p> : null}
+      {backupMessage !== null ? <p className="save-state" data-save-state={backupState}>{backupMessage}</p> : null}
+      <StudioDialog
+        open={detailsOpen}
+        title={project.status === "archived" ? "Archived project" : "Project details"}
+        description="Name, brief, and the optional audience, purpose, and constraints for this project."
+        onClose={() => setDetailsOpen(false)}
+        footer={
+          <>
+            <StudioButton type="button" variant="ghost" onClick={() => setDetailsOpen(false)}>Close</StudioButton>
+            <StudioButton type="submit" form="project-details-form" variant="primary" busy={saveState === "saving"} disabled={saveState === "saving" || (!dirty && overrideRevision === null)}>
+              {overrideRevision === null ? "Save" : "Save draft"}
+            </StudioButton>
+          </>
+        }
+      >
+        <form id="project-details-form" className="project-form studio-dialog-form" onSubmit={(event) => void save(event)}>
+          <p className="save-state" data-save-state={saveState}>
+            {saveState === "saving" ? "Saving" : null}
+            {saveState === "saved" ? "Saved" : null}
+            {saveState === "error" ? "Save failed" : null}
+          </p>
+          <div className="studio-field">
+            <label htmlFor="project-name">Name</label>
+            <input id="project-name" value={draft.name} maxLength={200} required disabled={saveState === "saving"} onChange={(event) => edit({ name: event.target.value })} />
+          </div>
+          <div className="studio-field">
+            <label htmlFor="project-brief">Brief</label>
+            <textarea id="project-brief" value={draft.brief} maxLength={20000} rows={6} disabled={saveState === "saving"} onChange={(event) => edit({ brief: event.target.value })} />
+          </div>
+          <details className="sample-disclosure">
+            <summary>Audience, purpose, and constraints</summary>
+            <div className="studio-field">
+              <label htmlFor="project-audience">Audience</label>
+              <textarea id="project-audience" value={draft.audience} maxLength={4000} rows={3} disabled={saveState === "saving"} onChange={(event) => edit({ audience: event.target.value })} />
+            </div>
+            <div className="studio-field">
+              <label htmlFor="project-purpose">Purpose</label>
+              <textarea id="project-purpose" value={draft.purpose} maxLength={4000} rows={3} disabled={saveState === "saving"} onChange={(event) => edit({ purpose: event.target.value })} />
+            </div>
+            <div className="studio-field">
+              <label htmlFor="project-constraints">Constraints</label>
+              <textarea id="project-constraints" value={draft.constraints} maxLength={8000} rows={3} disabled={saveState === "saving"} onChange={(event) => edit({ constraints: event.target.value })} />
+            </div>
+          </details>
+          {message !== null ? <p className={saveState === "error" ? "form-error" : "form-note"}>{message}</p> : null}
+        </form>
+      </StudioDialog>
+      <ReferenceCollection
+        references={collection.references}
+        notice={collection.notice}
+        status={collection.status}
+        refreshing={collection.refreshing}
+        onAddImage={collection.addImage}
+        onAddLink={collection.addLink}
+        onAddNote={collection.addNote}
+        onSaveDetails={collection.saveDetails}
+        onSavePlacement={collection.savePlacement}
+        onPlace={collection.place}
       />
-      <label htmlFor="project-brief">Brief</label>
-      <textarea
-        id="project-brief"
-        value={draft.brief}
-        maxLength={20000}
-        rows={6}
-        disabled={saveState === "saving"}
-        onChange={(event) => edit({ brief: event.target.value })}
-      />
-      <details>
-        <summary>Audience, purpose, and constraints</summary>
-        <label htmlFor="project-audience">Audience</label>
-        <textarea
-          id="project-audience"
-          value={draft.audience}
-          maxLength={4000}
-          rows={3}
-          disabled={saveState === "saving"}
-          onChange={(event) => edit({ audience: event.target.value })}
-        />
-        <label htmlFor="project-purpose">Purpose</label>
-        <textarea
-          id="project-purpose"
-          value={draft.purpose}
-          maxLength={4000}
-          rows={3}
-          disabled={saveState === "saving"}
-          onChange={(event) => edit({ purpose: event.target.value })}
-        />
-        <label htmlFor="project-constraints">Constraints</label>
-        <textarea
-          id="project-constraints"
-          value={draft.constraints}
-          maxLength={8000}
-          rows={3}
-          disabled={saveState === "saving"}
-          onChange={(event) => edit({ constraints: event.target.value })}
-        />
-      </details>
-      <div className="form-actions">
-        <button
-          type="submit"
-          aria-busy={saveState === "saving"}
-          disabled={saveState === "saving" || (!dirty && overrideRevision === null)}
-        >
-          {overrideRevision === null ? "Save" : "Save draft"}
-        </button>
-        <button type="button" aria-busy={backupState === "saving"} disabled={backupState === "saving"} onClick={() => void downloadBackup()}>
-          {backupState === "saving" ? "Downloading" : "Download backup"}
-        </button>
-        {project.status === "active" ? (
-          <button type="button" disabled={saveState === "saving"} onClick={() => void changeStatus("archived")}>
-            Archive
-          </button>
-        ) : (
-          <button type="button" disabled={saveState === "saving"} onClick={() => void changeStatus("active")}>
-            Reopen
-          </button>
-        )}
-      </div>
-      {message !== null ? <p className={saveState === "error" ? "form-error" : "form-note"}>{message}</p> : null}
-      {backupMessage !== null ? (
-        <p className="save-state" data-save-state={backupState}>
-          {backupMessage}
-        </p>
-      ) : null}
-    </form>
-    <ReferenceCollection
-      references={collection.references}
-      notice={collection.notice}
-      onAddImage={collection.addImage}
-      onAddLink={collection.addLink}
-      onAddNote={collection.addNote}
-      onSaveDetails={collection.saveDetails}
-      onSavePlacement={collection.savePlacement}
-      onPlace={collection.place}
-    />
     </>
   );
 }

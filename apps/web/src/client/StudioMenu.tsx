@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { StudioButton } from "./StudioButton.js";
 
 type StudioMenuItem = {
@@ -14,8 +14,10 @@ type StudioMenuProps = {
 
 export function StudioMenu({ label, items }: StudioMenuProps) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const menuId = useId();
 
   useEffect(() => {
@@ -73,6 +75,34 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
     };
   }, [open]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place(): void {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      const list = listRef.current;
+      if (rect === undefined || list === null) return;
+      const width = Math.min(Math.max(rect.width, 220), window.innerWidth - 32);
+      const left = Math.min(Math.max(16, rect.right - width), window.innerWidth - width - 16);
+      const height = list.offsetHeight || 160;
+      const below = window.innerHeight - rect.bottom;
+      const upwards = below < height + 12 && rect.top > below;
+      setPosition({
+        position: "fixed",
+        left,
+        width,
+        top: upwards ? undefined : rect.bottom + 6,
+        bottom: upwards ? window.innerHeight - rect.top + 6 : undefined,
+      });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
   return (
     <div className="studio-menu" ref={rootRef} onBlur={(event) => {
       if (event.relatedTarget instanceof Node && rootRef.current?.contains(event.relatedTarget)) return;
@@ -95,7 +125,7 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
         {label}
       </StudioButton>
       {open ? (
-        <ul id={menuId} className="studio-menu-list" role="menu">
+        <ul id={menuId} ref={listRef} className="studio-menu-list" role="menu" style={position}>
           {items.map((item) => (
             <li key={item.id} role="none">
               <StudioButton

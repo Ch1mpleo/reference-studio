@@ -5,8 +5,8 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 ## Current position
 
 - Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance.
-- Active milestone: M2.0a refinement and the expanded M2.0c whole-screen loading preview are implemented (2026-10-24). The user requested broader coverage after the media-only sample. Human acceptance of the expanded result is unrecorded. The library screens still use the M1.6 theme.
-- Next task: Review `#/studio` using component click/reload, the Skeleton only / Skeleton + reveal treatments, separate preset selectors, Center/corner/Cursor origin, speed slider, and Demo latency. Then migrate the library in M2.0b with the shared primitives in design.md sections 7/19. The preview simulator is not a production request policy; service-backed library adoption remains pending.
+- Active milestone: M2. The user accepted the rendered `#/studio` specimen on 2026-10-27. The library now uses that system, and reference loading reports a real pending state. Direction records and the canvas are not started.
+- Next task: M2.4 direction ownership and backup compatibility, before persisted board frames in M2.1. Verify the revised library in the browser at desktop and phone widths, including add, inspect, save, and backup, before treating M2.0 as closed.
 
 ## Milestone 0 — Foundation
 
@@ -232,7 +232,9 @@ Download showed “Downloaded”. The zip was format version 1 and included the 
 
 ## Milestone 2 — Studio sample
 
-### M2.0a — Representative sample, awaiting review
+### M2.0a — Representative sample
+
+The rendered specimen was accepted on 2026-10-27. The notes below describe the sample at the time of that pass. The library adoption is recorded later in this file.
 
 The specimen shell now uses the viewport up to 1440px. Selects, the reduced-motion checkbox, external links, the inspector scrollbar, and the dialog use the same glass control anatomy as the rest of the sample. Native widgets were the layout mismatch.
 
@@ -248,7 +250,7 @@ Motion roles are instant 0ms, feedback 100ms, menu 120ms, panel 160ms, and dialo
 
 ### Known limitations
 
-- The sample has not been accepted. The glass values are on the specimen until that review.
+- Acceptance of this pass was still open when these notes were written. The 2026-10-27 decision accepts the later refined specimen.
 - The glyph field is a static backdrop so the glass can read. It is not the ASCII Reveal package and it does not animate.
 - The card artwork is original specimen drawing, not a project reference.
 - Paste, drop, and service saves stay on the library screen. The specimen does not perform them.
@@ -257,7 +259,22 @@ Motion roles are instant 0ms, feedback 100ms, menu 120ms, panel 160ms, and dialo
 
 ## Later milestones
 
-The M1 gate is closed. M2.0a is waiting for visual review. M2.0b is not started; the preview portion of M2.0c was brought forward at the user's request below.
+The M1 gate is closed. The accepted Studio specimen is now the library shell. Direction records, the canvas, and the playground are not started.
+
+### M2.0 library shell — 2026-10-27
+
+The user reviewed `#/studio` and accepted it as the Studio system. The product route now uses `.studio-ui` without the specimen-only glyph field, demo latency, or preview controls.
+
+- The connection indicator is a compact disclosure: Connected, Reconnecting, or Unavailable, with contract, updates, and Check again inside it. Reconnecting and Unavailable keep a visible banner.
+- The project rail creates a project, restores a backup, and lists active and archived projects. Project name, brief, audience, purpose, constraints, archive, and reopen live in the project dialog. Download backup stays on the Project menu.
+- References are image-led cards. Add reference opens one dialog with Image, Link, and Note tabs. Shared facts and placement use stay in the inspector, keyed so a hidden card keeps its draft. Kind filters the open project immediately. Library search still submits on Enter.
+- `useProjectLibrary` and `useProjectReferences` expose loading, ready, and error. A refresh keeps the current list and sets refreshing. An older response cannot replace a newer one. The first load does not present an empty collection as ready. Product screens do not use the specimen timer.
+
+**Validation:** `npm run check` passed. `npm test` passed, 22 files and 81 tests, including refresh retention and a stale reference response. On a temporary data directory, the dev workspace at `http://127.0.0.1:5174` connected, created Atlas, added the note “Quiet stone and north light.”, saved placement notes “Hero”, opened project details, and kept that note and those notes after reload. At a narrow window the rail stayed in view, the inspector opened as a dialog, and the page did not scroll sideways. The full Edge suite was not rerun after the connection label change. The personal data directory was not used.
+
+**Layering follow-up — 2026-10-27:** the connection disclosure was painting under the frame, the Project menu crossed the right edge, and dialog motion (`transform` on the `<dialog>`) dropped the Add reference dialog out of the top layer into the collection grid. Dialogs now portal to `.studio-layer`, the 4px offset and glass stay on the inner sheet, the top bar stacks above the frame, and menus use fixed coordinates clamped inside the window. File choices use `.sample-file`. In-content disclosures are full-width field rows; the connection summary stays a pill. On the running library at `http://127.0.0.1:5173`, the connection panel, Project menu, Add reference dialog, and project-details disclosure were hittable and inside the viewport at desktop and a 500px-wide window, with no horizontal overflow. Affected client tests passed (4 files, 11 tests) and `npm run check` passed. The full Edge suite was not rerun.
+
+**Remaining:** browser confirmation of collect, find, reuse, backup, and restore on temporary data; native 200% zoom; large-list performance. Node 24 remains unverified. Board, direction, and playground recipes are still later tasks.
 
 ### M2.0a refinement — 2026-10-24
 

@@ -694,6 +694,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
           </StudioLoadingRegion>
         )}
       </StudioDialog>
+      <div className="studio-layer" />
     </div>
   );
 }

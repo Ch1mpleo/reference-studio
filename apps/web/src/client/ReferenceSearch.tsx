@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { LibraryReference, ProjectReference } from "@reference-studio/core";
 import { ReferenceRequestError, searchReferences } from "./referenceApi.js";
+import { StudioButton } from "./StudioButton.js";
 
 type Kind = "" | "image" | "link" | "note";
 
@@ -87,9 +88,9 @@ export function ReferenceSearch({
         <option value="note">Note</option>
       </select>
       <div className="form-actions">
-        <button type="submit" disabled={status === "searching"}>
+        <StudioButton type="submit" variant="primary" busy={status === "searching"} disabled={status === "searching"}>
           Search
-        </button>
+        </StudioButton>
         <p className="save-state" aria-live="polite">
           {status === "searching" ? "Searching" : null}
         </p>
@@ -122,22 +123,23 @@ export function ReferenceSearch({
                   <p className="reference-meta">Source unknown</p>
                 ) : null}
                 {reference.tags.length > 0 ? <p className="reference-meta">{reference.tags.join(", ")}</p> : null}
-                <button
+                <StudioButton
                   type="button"
                   disabled={inProject || placingId === reference.id}
+                  busy={placingId === reference.id}
                   onClick={() => void place(reference.id)}
                 >
                   {inProject ? "In this project" : "Add to this project"}
-                </button>
+                </StudioButton>
               </li>
             );
           })}
         </ul>
       ) : null}
       {nextCursor !== null ? (
-        <button type="button" disabled={status === "searching"} onClick={() => void search(undefined, nextCursor)}>
+        <StudioButton type="button" disabled={status === "searching"} onClick={() => void search(undefined, nextCursor)}>
           More
-        </button>
+        </StudioButton>
       ) : null}
     </form>
   );

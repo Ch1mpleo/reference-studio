@@ -17,6 +17,13 @@ import { PlacementUse } from "./PlacementUse.js";
 import { ReferenceDetails } from "./ReferenceDetails.js";
 import { ReferenceSearch } from "./ReferenceSearch.js";
 import { ReferenceRequestError, type PlacementUseInput, type ReferenceDetailsInput } from "./referenceApi.js";
+import { StudioButton } from "./StudioButton.js";
+import { StudioDialog } from "./StudioDialog.js";
+import { StudioInspector } from "./StudioInspector.js";
+import { StudioLoadingRegion } from "./StudioLoadingRegion.js";
+import { StudioReferenceCard } from "./StudioReferenceCard.js";
+import { useStudioReducedMotion } from "./studioMotion.js";
+import type { ReferenceLoadStatus } from "./useProjectReferences.js";
 
 type AddState = "idle" | "adding" | "added" | "error";
 
@@ -25,6 +32,8 @@ const emptyFields: ImageFields = { title: "", sourceUrl: null, creator: null, ob
 export function ReferenceCollection({
   references,
   notice,
+  status = "ready",
+  refreshing = false,
   onAddImage,
   onAddLink,
   onAddNote,
@@ -34,6 +43,8 @@ export function ReferenceCollection({
 }: {
   references: ProjectReference[];
   notice: string | null;
+  status?: ReferenceLoadStatus;
+  refreshing?: boolean;
   onAddImage: (file: File, fields: ImageFields) => Promise<ProjectReference>;
   onAddLink: (input: CreateLinkReference) => Promise<ProjectReference>;
   onAddNote: (input: CreateNoteReference) => Promise<ProjectReference>;
@@ -44,7 +55,15 @@ export function ReferenceCollection({
   const [state, setState] = useState<AddState>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addTab, setAddTab] = useState<"image" | "link" | "note">("image");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [kind, setKind] = useState<"all" | "image" | "link" | "note">("all");
+  const reducedMotion = useStudioReducedMotion();
   const adding = state === "adding";
+  const initialLoading = status === "loading" && references.length === 0;
+  const visible = references.filter((item) => kind === "all" || item.reference.kind === kind);
+  const selected = references.find((item) => item.placementId === selectedId) ?? null;
 
   useEffect(() => {
     function onPaste(event: Event): void {
@@ -71,9 +90,11 @@ export function ReferenceCollection({
         if (problem !== null) {
           throw new ReferenceRequestError(problem, "validation");
         }
-        await onAddImage(file, emptyFields);
+        const item = await onAddImage(file, emptyFields);
+        setSelectedId(item.placementId);
       }
       setState("added");
+      setAddOpen(false);
     } catch (error) {
       setState("error");
       setMessage(error instanceof ReferenceRequestError ? error.message : "The image could not be added.");
@@ -105,43 +126,106 @@ export function ReferenceCollection({
       onDragLeave={() => setDropping(false)}
       onDrop={onDrop}
     >
-      <div className="detail-heading">
-        <h3>References</h3>
+      <div className="sample-toolbar library-collection-toolbar">
+        <StudioButton type="button" variant="primary" className="sample-add" onClick={() => setAddOpen(true)}>
+          Add reference
+        </StudioButton>
+        <div className="sample-views sample-filters" role="group" aria-label="Kind">
+          {(["all", "image", "link", "note"] as const).map((value) => (
+            <StudioButton key={value} type="button" aria-pressed={kind === value} onClick={() => setKind(value)}>
+              {value === "all" ? "All" : kindLabel(value)}
+            </StudioButton>
+          ))}
+        </div>
         <p className="save-state" data-save-state={state} aria-live="polite">
-          {state === "adding" ? "Adding" : null}
-          {state === "added" ? "Added" : null}
-          {state === "error" ? "Could not add" : null}
+          {[state === "adding" ? "Adding" : null, state === "added" ? "Added" : null, state === "error" ? "Could not add" : null, refreshing ? "Updating" : null].filter((item) => item !== null).join(" ")}
         </p>
       </div>
-      <p>Add an image, a link, or a note. Source and creator can stay unknown.</p>
-      <ReferenceSearch
-        placedReferenceIds={references.map((item) => item.reference.id)}
-        onPlace={onPlace}
-      />
+      <details className="sample-disclosure">
+        <summary>Find a reference</summary>
+        <ReferenceSearch placedReferenceIds={references.map((item) => item.reference.id)} onPlace={async (referenceId) => {
+          const item = await onPlace(referenceId);
+          setSelectedId(item.placementId);
+          return item;
+        }} />
+      </details>
       {notice !== null ? <p className="form-error">{notice}</p> : null}
       {message !== null ? <p className="form-error">{message}</p> : null}
-      <ImageForm disabled={adding} onFile={(file) => void addFiles([file])} onError={showError} />
-      <LinkForm
-        disabled={adding}
-        onSubmit={async (input) => {
-          await run(() => onAddLink(input));
-        }}
-        onError={showError}
-      />
-      <NoteForm
-        disabled={adding}
-        onSubmit={async (input) => {
-          await run(() => onAddNote(input));
-        }}
-        onError={showError}
-      />
-      {references.length > 0 ? (
-        <ul className="reference-list">
-          {references.map((item) => (
-            <ReferenceCard key={item.placementId} item={item} onSave={onSaveDetails} onSavePlacement={onSavePlacement} />
+      <StudioLoadingRegion pending={initialLoading} mode={reducedMotion ? "instant" : "reveal"} reducedMotion={reducedMotion} plain={false} variant="card">
+        {initialLoading ? <div className="sample-grid" data-studio-reveal /> : null}
+        {!initialLoading && status === "ready" && references.length === 0 ? (
+          <div className="sample-empty">
+            <h2>Add your first reference</h2>
+            <p>Add an image, a link, or a note. Source and creator can stay unknown.</p>
+            <StudioButton type="button" variant="primary" onClick={() => setAddOpen(true)}>Add reference</StudioButton>
+          </div>
+        ) : null}
+        {!initialLoading && references.length > 0 && visible.length === 0 ? (
+          <div className="sample-empty">
+            <h2>No matching references</h2>
+            <p>Nothing in this project matches the current kind.</p>
+            <StudioButton type="button" onClick={() => setKind("all")}>Clear filters</StudioButton>
+          </div>
+        ) : null}
+        {!initialLoading && visible.length > 0 ? (
+          <div className="sample-grid" data-studio-reveal>
+            {visible.map((item) => (
+              <LibraryCard key={item.placementId} item={item} selected={item.placementId === selectedId} onOpen={() => setSelectedId(item.placementId)} />
+            ))}
+          </div>
+        ) : null}
+      </StudioLoadingRegion>
+      <StudioDialog
+        open={addOpen}
+        title="Add reference"
+        description="Collect an image, link, or note. Source and creator can stay unknown."
+        onClose={() => setAddOpen(false)}
+        footer={<StudioButton type="button" variant="ghost" onClick={() => setAddOpen(false)}>Cancel</StudioButton>}
+      >
+        <div className="sample-tabs" role="tablist" aria-label="Reference kind">
+          {(["image", "link", "note"] as const).map((tab) => (
+            <StudioButton key={tab} type="button" role="tab" aria-selected={addTab === tab} onClick={() => setAddTab(tab)}>
+              {kindLabel(tab)}
+            </StudioButton>
           ))}
-        </ul>
-      ) : null}
+        </div>
+        <div hidden={addTab !== "image"}>
+          <ImageForm disabled={adding} onFile={(file) => void addFiles([file])} onError={showError} />
+        </div>
+        <div hidden={addTab !== "link"}>
+          <LinkForm disabled={adding} onSubmit={async (input) => { await run(() => onAddLink(input)); }} onError={showError} />
+        </div>
+        <div hidden={addTab !== "note"}>
+          <NoteForm disabled={adding} onSubmit={async (input) => { await run(() => onAddNote(input)); }} onError={showError} />
+        </div>
+      </StudioDialog>
+      <StudioInspector open={selected !== null} retainContent onClose={() => setSelectedId(null)}>
+        {selected === null ? (
+          <div className="sample-placeholder">
+            <h2>Select a reference to inspect</h2>
+            <p>Choose Open details on a reference. Selection stays in this tab.</p>
+          </div>
+        ) : (
+          <div className="library-inspector">
+            <header className="studio-inspector-header">
+              <div>
+                <p className="studio-kicker">{kindLabel(selected.reference.kind)} · {roleLabel(selected.role)}</p>
+                <h2>{selected.reference.title}</h2>
+              </div>
+              <StudioButton type="button" variant="ghost" className="studio-inspector-back" onClick={() => setSelectedId(null)}>Back</StudioButton>
+            </header>
+            <div className="studio-inspector-body">
+              {references.map((item) => (
+                <div key={item.placementId} hidden={item.placementId !== selected.placementId}>
+                  <ReferencePreview item={item} />
+                  <ReferenceDetails reference={item.reference} onSave={onSaveDetails} />
+                  <PlacementUse item={item} onSave={onSavePlacement} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </StudioInspector>
     </section>
   );
 
@@ -154,8 +238,12 @@ export function ReferenceCollection({
     setState("adding");
     setMessage(null);
     try {
-      await action();
+      const item = await action();
+      if (isProjectReference(item)) {
+        setSelectedId(item.placementId);
+      }
       setState("added");
+      setAddOpen(false);
     } catch (error) {
       setState("error");
       setMessage(error instanceof ReferenceRequestError ? error.message : "The reference could not be added.");
@@ -193,18 +281,23 @@ function ImageForm({
 
   return (
     <form className="reference-form" aria-label="Add an image" onSubmit={submit}>
-      <label htmlFor="reference-image">Image</label>
-      <input
-        id="reference-image"
-        name="image"
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        disabled={disabled}
-        onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-      />
-      <button type="submit" disabled={disabled}>
+      <div className="studio-field">
+        <label htmlFor="reference-image">Image</label>
+        <div className="sample-file">
+          <input
+            id="reference-image"
+            name="image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={disabled}
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+          <span>{file?.name ?? "Choose a JPEG, PNG, or WebP"}</span>
+        </div>
+      </div>
+      <StudioButton type="submit" variant="primary" disabled={disabled}>
         Add image
-      </button>
+      </StudioButton>
     </form>
   );
 }
@@ -268,7 +361,7 @@ function LinkForm({
         value={url}
         onChange={(event) => setUrl(event.target.value)}
       />
-      <details>
+      <details className="sample-disclosure">
         <summary>Title, source, and timing</summary>
         <label htmlFor="reference-link-title">Title</label>
         <input
@@ -308,9 +401,9 @@ function LinkForm({
           onBehavior={setBehavior}
         />
       </details>
-      <button type="submit" disabled={disabled || url.trim() === ""}>
+      <StudioButton type="submit" variant="primary" disabled={disabled || url.trim() === ""}>
         Add link
-      </button>
+      </StudioButton>
     </form>
   );
 }
@@ -373,7 +466,7 @@ function NoteForm({
         disabled={disabled}
         onChange={(event) => setBody(event.target.value)}
       />
-      <details>
+      <details className="sample-disclosure">
         <summary>Title, source, and timing</summary>
         <label htmlFor="reference-note-title">Title</label>
         <input
@@ -413,9 +506,9 @@ function NoteForm({
           onBehavior={setBehavior}
         />
       </details>
-      <button type="submit" disabled={disabled || body.trim() === ""}>
+      <StudioButton type="submit" variant="primary" disabled={disabled || body.trim() === ""}>
         Add note
-      </button>
+      </StudioButton>
     </form>
   );
 }
@@ -476,63 +569,55 @@ function MotionFields({
   );
 }
 
-function ReferenceCard({
-  item,
-  onSave,
-  onSavePlacement,
-}: {
-  item: ProjectReference;
-  onSave: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
-  onSavePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
-}) {
+function LibraryCard({ item, selected, onOpen }: { item: ProjectReference; selected: boolean; onOpen: () => void }) {
+  const reference = item.reference;
+  const failed = reference.kind === "image" && reference.asset === null;
+  return (
+    <StudioReferenceCard
+      title={reference.title}
+      metadata={`${kindLabel(reference.kind)} · ${roleLabel(item.role)} · ${reference.availability === "available" ? "Available" : "Unknown"}`}
+      imageState={reference.kind === "image" ? (failed ? "missing" : "ready") : "none"}
+      selected={selected}
+      loadingMode="instant"
+      media={reference.asset !== null ? (
+        <img src={`/api/assets/${reference.asset.id}/thumbnail`} alt="" width={reference.asset.width} height={reference.asset.height} />
+      ) : (
+        <p className="studio-meta">{reference.kind === "image" ? "Image unavailable" : kindLabel(reference.kind)}</p>
+      )}
+      summary={<p className="studio-meta">{cardSummary(item)}</p>}
+      onOpen={onOpen}
+    />
+  );
+}
+
+function ReferencePreview({ item }: { item: ProjectReference }) {
   const reference = item.reference;
   return (
-    <li className="reference-card">
+    <div className="library-preview">
       {reference.asset !== null ? (
-        <img
-          src={`/api/assets/${reference.asset.id}/thumbnail`}
-          alt=""
-          width={reference.asset.width}
-          height={reference.asset.height}
-        />
+        <img src={`/api/assets/${reference.asset.id}/thumbnail`} alt="" width={reference.asset.width} height={reference.asset.height} />
       ) : null}
-      <div>
-        <p className="reference-meta">
-          {kindLabel(reference.kind)}
-          {" · "}
-          {roleLabel(item.role)}
-          {" · "}
-          {reference.availability === "available" ? "Available" : "Unknown"}
-        </p>
-        <h4>{reference.title}</h4>
-        {item.role === "approved" ? (
-          <p className="form-note">This asset role is not an approved direction.</p>
-        ) : null}
-        {reference.creator !== null ? <p className="reference-meta">{reference.creator}</p> : null}
-        {reference.sourceUrl !== null ? (
-          <a href={reference.sourceUrl} rel="noreferrer noopener" target="_blank">
-            {reference.sourceUrl}
-          </a>
-        ) : null}
-        {reference.tags.length > 0 ? <p className="reference-meta">{reference.tags.join(", ")}</p> : null}
-        {reference.observations !== "" ? <p>{reference.observations}</p> : null}
-        {item.usageNotes !== "" ? <p className="reference-meta">Use: {item.usageNotes}</p> : null}
-        {item.crop !== null ? (
-          <p className="reference-meta">
-            Crop {item.crop.x}, {item.crop.y}, {item.crop.width} by {item.crop.height}
-          </p>
-        ) : null}
-        {reference.motion !== null ? (
-          <p className="reference-meta">
-            {formatMotionRange(reference.motion)}
-            {reference.motion.behavior === "" ? "" : ` ${reference.motion.behavior}`}
-          </p>
-        ) : null}
-        <PlacementUse item={item} onSave={onSavePlacement} />
-        <ReferenceDetails reference={reference} onSave={onSave} />
-      </div>
-    </li>
+      {item.role === "approved" ? <p className="form-note">This asset role is not an approved direction.</p> : null}
+      {reference.sourceUrl !== null ? (
+        <a href={reference.sourceUrl} rel="noreferrer noopener" target="_blank">{reference.sourceUrl}</a>
+      ) : null}
+      {reference.motion !== null ? (
+        <p className="studio-meta">{formatMotionRange(reference.motion)}{reference.motion.behavior === "" ? "" : ` ${reference.motion.behavior}`}</p>
+      ) : null}
+    </div>
   );
+}
+
+function cardSummary(item: ProjectReference): string {
+  const reference = item.reference;
+  if (reference.creator !== null) return reference.creator;
+  if (reference.observations !== "") return reference.observations;
+  if (item.usageNotes !== "") return item.usageNotes;
+  return "Source unknown";
+}
+
+function isProjectReference(value: unknown): value is ProjectReference {
+  return typeof value === "object" && value !== null && "placementId" in value && typeof value.placementId === "string";
 }
 
 function kindLabel(kind: LibraryReference["kind"]): string {

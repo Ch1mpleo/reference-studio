@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { StudioButton } from "./StudioButton.js";
 import { isPreviewSurfaceClick } from "./studioPreviewActivation.js";
+import { useStudioLayer } from "./studioLayer.js";
 
 type StudioDialogProps = {
   open: boolean;
@@ -16,6 +18,7 @@ type StudioDialogProps = {
 export function StudioDialog({ open, title, onClose, children, description, footer, focusKey, onPreviewReload }: StudioDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const layer = useStudioLayer();
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -32,7 +35,7 @@ export function StudioDialog({ open, title, onClose, children, description, foot
       }
       previous?.focus();
     };
-  }, [open]);
+  }, [open, layer]);
 
   useEffect(() => {
     if (!open) return;
@@ -40,9 +43,9 @@ export function StudioDialog({ open, title, onClose, children, description, foot
     const candidates = dialog?.querySelectorAll<HTMLElement>("[data-dialog-initial-focus], input:not(:disabled), textarea:not(:disabled)");
     const initial = [...(candidates ?? [])].find((element) => !element.closest("[hidden], [inert]"));
     (initial ?? dialog?.querySelector<HTMLElement>("[data-dialog-close]"))?.focus();
-  }, [open, focusKey]);
+  }, [open, focusKey, layer]);
 
-  return (
+  const dialog = (
     <dialog
       ref={dialogRef}
       className="studio-dialog"
@@ -60,6 +63,7 @@ export function StudioDialog({ open, title, onClose, children, description, foot
         onClose();
       }}
     >
+      <div className="studio-dialog-sheet">
       <header className="studio-dialog-header">
         <div className="studio-dialog-heading">
           <h2 id={titleId}>{title}</h2>
@@ -73,6 +77,8 @@ export function StudioDialog({ open, title, onClose, children, description, foot
       </header>
       <div className="studio-dialog-body" onClick={(event) => { if (onPreviewReload && isPreviewSurfaceClick(event)) onPreviewReload(); }}>{children}</div>
       {footer ? <footer className="studio-dialog-footer">{footer}</footer> : null}
+      </div>
     </dialog>
   );
+  return layer === null ? dialog : createPortal(dialog, layer);
 }

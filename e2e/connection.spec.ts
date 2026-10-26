@@ -17,7 +17,7 @@ test("connects to the production service and recovers from a retry", async ({ pa
   await page.goto(server.origin);
   await expectConnected(page);
   await page.getByRole("button", { name: "Check again" }).click();
-  await expect(page.getByRole("heading", { name: "Service connected" })).toBeVisible();
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
   await expect(page.getByText("Listening")).toBeVisible();
   await expect(page.getByText("1", { exact: true })).toBeVisible();
 });
@@ -27,14 +27,15 @@ test("reconnects after the production service restarts", async ({ page }) => {
   await expectConnected(page);
 
   await server.stop();
-  await expect(page.getByRole("heading", { name: "Reconnecting" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Reconnecting", { exact: true })).toBeVisible({ timeout: 15_000 });
 
   await server.start();
   await expectConnected(page);
 });
 
 async function expectConnected(page: Page): Promise<void> {
-  await expect(page.getByRole("heading", { name: "Service connected" })).toBeVisible();
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  await page.getByText("Connected", { exact: true }).click();
   await expect(page.getByText("Listening")).toBeVisible();
   await expect(page.getByText("1", { exact: true })).toBeVisible();
 }
