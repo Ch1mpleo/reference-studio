@@ -21,6 +21,7 @@ type Panel = "library" | "inspect" | null;
 export type CollectionProps = {
   projectId: string; refreshKey: number;
   references: ProjectReference[]; notice: string | null; status?: ReferenceLoadStatus; refreshing?: boolean;
+  onRetryReferences: () => Promise<void>;
   onAddImage: (file: File, fields: ImageFields) => Promise<ProjectReference>;
   onAddLink: (input: CreateLinkReference) => Promise<ProjectReference>;
   onAddNote: (input: CreateNoteReference) => Promise<ProjectReference>;
@@ -30,7 +31,7 @@ export type CollectionProps = {
 };
 
 export function ReferenceWorkspace({ projectId, refreshKey, references, notice, status = "ready", refreshing = false,
-  onAddImage, onAddLink, onAddNote, onSaveDetails, onSavePlacement, onPlace }: CollectionProps) {
+  onAddImage, onAddLink, onAddNote, onSaveDetails, onSavePlacement, onPlace, onRetryReferences }: CollectionProps) {
   const board = useProjectBoard(projectId, refreshKey);
   const [selection, setSelection] = useState<string[]>([]);
   const [inspectedId, setInspectedId] = useState<string | null>(null);
@@ -154,7 +155,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     finally { setImporting(false); }
   }
 
-  return <section ref={root} className="canvas-workspace" aria-label="Project canvas" tabIndex={-1} data-dropping={dropping}
+  return <section ref={root} className="canvas-workspace" aria-label="Project canvas" tabIndex={-1} data-dropping={dropping} data-panel-open={panel !== null}
     onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setDropping(true); } }}
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) setDropping(false); }} onDrop={drop}>
     <div className="canvas-surface" hidden={viewMode !== "board"}>
@@ -176,9 +177,10 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     {ready && references.length === 0 ? <div className="canvas-empty"><pre aria-hidden="true">{"[ + ]"}</pre><h1>Drop your references here</h1><p>Paste an image, link, or thought. Arrange it into a direction.</p></div> : null}
     {dropping ? <div className="canvas-drop-hint" aria-hidden="true">Drop images onto your canvas</div> : null}
     <div className="canvas-status" role="status">
-      {status === "loading" || board.state === "loading" ? "Loading workspace" : importing ? "Adding references" : board.state === "saving" ? "Saving arrangement" : board.state === "saved" ? (refreshing ? "Updating" : "Saved") : "Arrangement not saved"}
+      {status === "loading" || board.state === "loading" ? "Loading workspace" : status === "error" ? "References unavailable" : importing ? "Adding references" : board.state === "saving" ? "Saving arrangement" : board.state === "saved" ? (refreshing ? "Updating" : "Saved") : board.unsaved ? "Arrangement not saved" : board.loaded ? "Refresh failed" : "Could not load workspace"}
       {notice ? <p className="form-error">{notice}</p> : null}{message ? <p>{message}</p> : null}{board.message ? <p className="form-error">{board.message}</p> : null}
       {board.state === "error" ? <StudioButton onClick={board.retry}>Retry</StudioButton> : null}
+      {status === "error" ? <StudioButton busy={refreshing} onClick={() => void onRetryReferences()}>Retry references</StudioButton> : null}
       {board.state === "conflict" ? <StudioButton onClick={() => setDialog("recover")}>Review recovery</StudioButton> : null}
     </div>
     <div className="canvas-dock" role="toolbar" aria-label="Canvas tools">

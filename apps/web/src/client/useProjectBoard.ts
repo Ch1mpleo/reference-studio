@@ -31,7 +31,11 @@ export function useProjectBoard(projectId: string, refreshKey: number) {
     try {
       const board = await getBoard(projectId);
       if (!mounted.current || request !== generation.current || before !== draft.current || working.current) return;
-      if (saved.current?.revision === board.revision) return;
+      if (saved.current?.revision === board.revision) {
+        setState("saved");
+        setMessage(null);
+        return;
+      }
       saved.current = board;
       draft.current = board.layout;
       setLayout(board.layout);
@@ -120,7 +124,7 @@ export function useProjectBoard(projectId: string, refreshKey: number) {
     } catch { setMessage("The latest arrangement could not be loaded. Your arrangement is still here."); }
   }
   function retry(): void {
-    if (!saved.current) { void load(); return; }
+    if (!saved.current || (!pending.current && draft.current === saved.current.layout)) { void load(); return; }
     blocked.current = false;
     void flush();
   }
@@ -133,5 +137,6 @@ export function useProjectBoard(projectId: string, refreshKey: number) {
   }, []);
   function beginGesture(): void { interacting.current = true; generation.current++; }
   return { layout, state, message, commit, beginGesture, undo, redo, retry, recover, loaded: saved.current !== null, currentLayout: () => draft.current,
+    unsaved: Boolean(pending.current || (saved.current && draft.current !== saved.current.layout)),
     canUndo: history.undo > 0 && state === "saved", canRedo: history.redo > 0 && state === "saved" };
 }

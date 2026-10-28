@@ -67,6 +67,12 @@
 .canvas-status { position: absolute; z-index: var(--layer-toolbar); top: 24px; right: 130px; max-width: min(40%, 460px); color: var(--color-muted); font: var(--type-meta); text-align: right; pointer-events: none; }
 .canvas-status button { pointer-events: auto; }
 .canvas-status p { margin: 4px 0 0; font: var(--type-caption); }
+@media (min-width: 960px) {
+  .canvas-workspace[data-panel-open="true"] .canvas-status {
+    right: 380px;
+    max-width: min(460px, calc(100% - 740px));
+  }
+}
 .canvas-empty { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); width: min(400px, calc(100% - 48px)); text-align: center; pointer-events: none; }
 .canvas-empty pre { font: var(--type-meta); color: var(--color-subtle); margin-bottom: 20px; }
 .canvas-empty h1 { font: var(--type-page); margin: 0 0 8px; }

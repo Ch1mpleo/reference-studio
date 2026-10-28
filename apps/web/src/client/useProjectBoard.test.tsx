@@ -88,4 +88,35 @@ describe("board save lifecycle", () => {
     await act(async () => { snapshot.commit(arrange(10)); });
     expect(vi.mocked(putBoard).mock.calls[0]?.slice(0, 3)).toEqual([projectId, 1, arrange(10)]);
   });
+
+  it("retries a failed refresh and clears the error only after the service confirms the same revision", async () => {
+    const root = await mount();
+    vi.mocked(getBoard).mockRejectedValueOnce(new TypeError("Connection lost"));
+    await act(async () => { root.render(createElement(Probe, { refreshKey: 1 })); });
+    expect(snapshot.state).toBe("error");
+    expect(snapshot.layout).toEqual(empty);
+    const retry = deferred<Board>();
+    vi.mocked(getBoard).mockImplementationOnce(() => retry.promise);
+    await act(async () => { snapshot.retry(); });
+    expect(getBoard).toHaveBeenCalledTimes(3);
+    expect(putBoard).not.toHaveBeenCalled();
+    expect(snapshot.state).toBe("error");
+    await act(async () => { retry.resolve({ projectId, revision: 1, layout: empty }); });
+    expect(snapshot.state).toBe("saved");
+    expect(snapshot.message).toBeNull();
+  });
+
+  it("retains the current arrangement on refresh failure and loads newer service data on retry", async () => {
+    const root = await mount();
+    await act(async () => { snapshot.commit(arrange(10)); });
+    vi.mocked(getBoard).mockRejectedValueOnce(new TypeError("Connection lost"));
+    await act(async () => { root.render(createElement(Probe, { refreshKey: 1 })); });
+    expect(snapshot.layout).toEqual(arrange(10));
+    expect(snapshot.state).toBe("error");
+    vi.mocked(getBoard).mockResolvedValueOnce({ projectId, revision: 4, layout: arrange(99) });
+    await act(async () => { snapshot.retry(); });
+    expect(snapshot.layout).toEqual(arrange(99));
+    expect(snapshot.state).toBe("saved");
+    expect(putBoard).toHaveBeenCalledTimes(1);
+  });
 });

@@ -26,6 +26,7 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
   notice: string | null;
   status: ReferenceLoadStatus;
   refreshing: boolean;
+  retry: () => Promise<void>;
   addImage: (file: File, fields: ImageFields) => Promise<ProjectReference>;
   addLink: (input: CreateLinkReference) => Promise<ProjectReference>;
   addNote: (input: CreateNoteReference) => Promise<ProjectReference>;
@@ -142,5 +143,5 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     [projectId, remember],
   );
 
-  return { references, notice, status, refreshing, addImage, addLink, addNote, saveDetails, savePlacement, place };
+  return { references, notice, status, refreshing, retry: load, addImage, addLink, addNote, saveDetails, savePlacement, place };
 }

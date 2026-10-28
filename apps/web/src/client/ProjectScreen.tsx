@@ -381,6 +381,7 @@ function ProjectEditor({
         notice={collection.notice}
         status={collection.status}
         refreshing={collection.refreshing}
+        onRetryReferences={collection.retry}
         onAddImage={collection.addImage}
         onAddLink={collection.addLink}
         onAddNote={collection.addNote}
