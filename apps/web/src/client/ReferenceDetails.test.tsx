@@ -56,7 +56,7 @@ describe("ReferenceDetails", () => {
     });
     expect(title.value).toBe("North stair");
     expect(view.container.textContent).toContain("Your draft is still here");
-    expect(view.container.querySelector("button")?.textContent).toBe("Save draft");
+    expect(view.container.querySelector("button[type='submit']")?.textContent).toBe("Save draft");
     await act(async () => {
       view.root.unmount();
     });

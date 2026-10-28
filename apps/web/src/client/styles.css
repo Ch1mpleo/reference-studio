@@ -933,6 +933,22 @@ body:has(.studio-ui[data-studio-theme="light"]) {
   outline-offset: 2px;
 }
 
+/* Author layout must never override hidden panels or closed native dialogs. */
+.studio-ui [hidden] { display: none !important; }
+.studio-ui dialog:not([open]) { display: none; }
+.studio-ui .studio-inspector-dismiss {
+  align-self: flex-end;
+  flex: none;
+  margin: 8px 8px 0;
+}
+.studio-menu-list[popover] {
+  inset: auto;
+  margin: 0;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  color: var(--color-ink);
+}
+
 .studio-ui :where(h1, h2, h3, p) {
   font-family: var(--font-sans);
 }

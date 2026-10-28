@@ -193,8 +193,6 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   const detailRequest = useStudioPreviewRequest<string | null>("north", previewDelay);
   const dialogRequest = useStudioPreviewRequest<string | null>(null, previewDelay, false);
   const [addTab, setAddTab] = useState<AddTab>("image");
-  const [imageTitle, setImageTitle] = useState("");
-  const [imageFileName, setImageFileName] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkTitle, setLinkTitle] = useState("");
   const [linkMotion, setLinkMotion] = useState("");
@@ -214,8 +212,6 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
     return `${card.title} ${card.creator} ${card.observations} ${card.source} ${card.tags}`.toLowerCase().includes(needle);
   });
   const addDirty =
-    imageTitle !== "" ||
-    imageFileName !== null ||
     linkUrl !== "" ||
     linkTitle !== "" ||
     linkMotion !== "" ||
@@ -296,8 +292,6 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   }
 
   function clearAddDraft(): void {
-    setImageTitle("");
-    setImageFileName(null);
     setLinkUrl("");
     setLinkTitle("");
     setLinkMotion("");
@@ -516,7 +510,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
             </div>
           )}
         </main>
-        <StudioInspector open={detailsOpen} onClose={closeDetails}>
+        <StudioInspector open={detailsOpen} retainContent closeControl="provided" onClose={closeDetails}>
           {selected === null || selectedDraft === null ? (
             <div className="sample-placeholder">
               <h2>Select a reference to inspect</h2>
@@ -536,8 +530,8 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
                 else setSavedId(selected.id);
               }}
               onReview={() => setNorthSave("saved")}
-              pending={detailRequest.pending}
-              loadingMode={loadingMode}
+              pending={detailsOpen && detailRequest.pending}
+              loadingMode={detailsOpen ? loadingMode : "instant"}
               reducedMotion={effectiveReducedMotion}
               plain={plain}
               replay={replay + detailRequest.revision}
@@ -657,20 +651,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
             {dialogRequest.pending ? <p className="studio-meta" role="status">Loading dialog sample…</p> : null}
             <StudioLoadingRegion options={loadingOptions} variant="form" pending={dialogRequest.pending} mode={loadingMode} reducedMotion={effectiveReducedMotion} plain={plain} replay={replay + dialogRequest.revision}>
             <div role="tabpanel" id="sample-panel-image" aria-labelledby="sample-tab-image" hidden={addTab !== "image"}>
-              <div className="studio-field">
-                <label htmlFor="sample-image-file">Image file</label>
-                <div className="sample-file">
-                  <input
-                    data-dialog-initial-focus
-                    id="sample-image-file"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={(event) => setImageFileName(event.currentTarget.files?.[0]?.name ?? null)}
-                  />
-                  <span>{imageFileName ?? "Choose an image"}</span>
-                </div>
-              </div>
-              <StudioField id="sample-image-title" label="Title" optional value={imageTitle} onChange={setImageTitle} />
+              <p className="studio-help">Drop or paste images directly onto the project canvas. Inspect a placed image to edit its title and source.</p>
             </div>
             <div role="tabpanel" id="sample-panel-link" aria-labelledby="sample-tab-link" hidden={addTab !== "link"}>
               <StudioField id="sample-link-url" label="URL" value={linkUrl} onChange={setLinkUrl} />

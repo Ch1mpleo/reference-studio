@@ -49,7 +49,7 @@ export function StudioSelect({
     }
     positionList();
     // The native top layer escapes the sheet's blur containing block and clipping.
-    listRef.current?.showPopover();
+    listRef.current?.showPopover?.();
     const selected = listRef.current?.querySelector<HTMLElement>("[role='option'][aria-selected='true']");
     selected?.focus({ preventScroll: true });
     function onPointerDown(event: PointerEvent): void {
@@ -80,6 +80,7 @@ export function StudioSelect({
       if (event.key === "Tab") { setOpen(false); buttonRef.current?.focus(); return; }
       if (event.key !== "Escape") return;
       event.preventDefault();
+      event.stopImmediatePropagation();
       setOpen(false);
       buttonRef.current?.focus();
     }
@@ -88,18 +89,18 @@ export function StudioSelect({
       positionList();
     }
     document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onScroll);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onScroll);
     };
   }, [open, options.length]);
 
-  const portal = rootRef.current?.closest("dialog") ?? rootRef.current?.closest(".studio-ui");
+  const portal = rootRef.current?.closest("dialog") ?? rootRef.current?.closest(".studio-ui") ?? rootRef.current;
   const list = open && portal instanceof HTMLElement ? (
     <ul
       ref={listRef}

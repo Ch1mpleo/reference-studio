@@ -14,7 +14,7 @@ test("initial screen and filtered cards load as complete components; latest filt
   await expect(grid).toHaveAttribute("aria-busy", "true");
   await expect(grid.locator("article")).toHaveCount(5);
   await expect(grid.locator(".studio-loading-region-placeholder .studio-skeleton-text")).toHaveCount(5);
-  await expect(page.locator(".studio-inspector-body")).toHaveAttribute("aria-busy", "true");
+  await expect(page.getByRole("complementary", { name: "Inspector" })).toBeHidden();
   await page.screenshot({ path: info.outputPath("screen-loading.png"), fullPage: true });
   await expect(grid).not.toHaveAttribute("aria-busy", "true");
   await expect(page.locator(".studio-inspector-body")).not.toHaveAttribute("aria-busy", "true");
@@ -40,6 +40,7 @@ test("initial screen and filtered cards load as complete components; latest filt
 
 test("detail selections load independently, preserve drafts and ignore an earlier selection", async ({ page }, info) => {
   await page.goto(`${server.origin}/#/studio`);
+  await page.getByRole("button", { name: "Open details for North stair", exact: true }).click();
   const inspector = page.getByRole("complementary", { name: "Inspector" });
   await expect(inspector.locator(".studio-inspector-body")).not.toHaveAttribute("aria-busy", "true");
   await inspector.getByRole("textbox", { name: "Title", exact: true }).fill("My retained North draft");

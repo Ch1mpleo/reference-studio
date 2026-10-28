@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { imageCropSchema, type ImageCrop, type ProjectReference } from "@reference-studio/core";
 import { ReferenceRequestError, type PlacementUseInput } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
+import { StudioSelect } from "./StudioSelect.js";
 
 type CropDraft = {
   x: string;
@@ -88,21 +89,19 @@ export function PlacementUse({
       <form onSubmit={(event) => void save(event)}>
         <div className="studio-field">
         <label htmlFor={roleId}>Role</label>
-        <select
+        <StudioSelect
           id={roleId}
+          label="Role"
+          field
           value={draft.role}
           disabled={saveState === "saving"}
-          onChange={(event) => {
-            const value = event.target.value;
+          options={[{ value: "inspiration", label: "Inspiration" }, { value: "candidate", label: "Candidate" }, { value: "approved", label: "Approved" }]}
+          onChange={(value) => {
             if (value === "inspiration" || value === "candidate" || value === "approved") {
               edit({ role: value });
             }
           }}
-        >
-          <option value="inspiration">Inspiration</option>
-          <option value="candidate">Candidate</option>
-          <option value="approved">Approved</option>
-        </select>
+        />
         </div>
         <div className="studio-field">
         <label htmlFor={notesId}>Usage notes</label>

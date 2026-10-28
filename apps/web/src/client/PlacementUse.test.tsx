@@ -65,17 +65,21 @@ describe("PlacementUse", () => {
     const view = await render(createElement(PlacementUse, { item: image, onSave }));
     expect(view.container.textContent).toContain("does not approve a direction");
     expect(view.container.textContent).toContain("does not grant a license");
-    const role = view.container.querySelector<HTMLSelectElement>("#placement-role-00000000-0000-4000-8000-000000000010");
+    const role = view.container.querySelector<HTMLButtonElement>("#placement-role-00000000-0000-4000-8000-000000000010");
     const notes = view.container.querySelector<HTMLTextAreaElement>("#placement-notes-00000000-0000-4000-8000-000000000010");
     const width = view.container.querySelector<HTMLInputElement>("#crop-width-00000000-0000-4000-8000-000000000010");
     const form = view.container.querySelector("form");
     if (role === null || notes === null || width === null || form === null) {
       throw new Error("Expected the placement form.");
     }
-    expect(role.value).toBe("inspiration");
+    expect(role.textContent).toBe("Inspiration");
+
+    await act(async () => { role.click(); });
+    const approved = view.container.querySelector<HTMLButtonElement>("[role='option']:last-child");
+    const options = [...view.container.querySelectorAll<HTMLButtonElement>("[role='option']")];
+    await act(async () => { (options.find((option) => option.textContent === "Approved") ?? approved)?.click(); });
 
     await act(async () => {
-      setValue(role, "approved");
       setValue(notes, "Hero");
       setValue(view.container.querySelector<HTMLInputElement>("#crop-x-00000000-0000-4000-8000-000000000010"), "0.1");
       setValue(width, "0.4");
@@ -117,7 +121,7 @@ describe("PlacementUse", () => {
     });
     expect(notes.value).toBe("Keep this");
     expect(view.container.textContent).toContain("Your draft is still here");
-    expect(view.container.querySelector("button")?.textContent).toBe("Save draft");
+    expect(view.container.querySelector("button[type='submit']")?.textContent).toBe("Save draft");
     await act(async () => {
       view.root.unmount();
     });

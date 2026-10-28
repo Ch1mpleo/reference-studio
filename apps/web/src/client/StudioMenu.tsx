@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { StudioButton } from "./StudioButton.js";
+import { createPortal } from "react-dom";
 
 type StudioMenuItem = {
   id: string;
@@ -24,9 +25,10 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
     if (!open) {
       return;
     }
-    rootRef.current?.querySelector<HTMLElement>("[role='menuitem']")?.focus();
+    listRef.current?.showPopover?.();
+    listRef.current?.querySelector<HTMLElement>("[role='menuitem']")?.focus();
     function onPointerDown(event: PointerEvent): void {
-      if (event.target instanceof Node && rootRef.current?.contains(event.target)) {
+      if (event.target instanceof Node && (rootRef.current?.contains(event.target) || listRef.current?.contains(event.target))) {
         return;
       }
       setOpen(false);
@@ -37,7 +39,7 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
         buttonRef.current?.focus();
         return;
       }
-      const items = [...(rootRef.current?.querySelectorAll<HTMLElement>("[role='menuitem']") ?? [])];
+      const items = [...(listRef.current?.querySelectorAll<HTMLElement>("[role='menuitem']") ?? [])];
       const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const index = active === null ? -1 : items.indexOf(active);
       if (event.key === "ArrowDown" && items.length > 0) {
@@ -64,14 +66,15 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
         return;
       }
       event.preventDefault();
+      event.stopImmediatePropagation();
       setOpen(false);
       buttonRef.current?.focus();
     }
     document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
     };
   }, [open]);
 
@@ -103,9 +106,10 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
     };
   }, [open]);
 
+  const portal = rootRef.current?.closest("dialog") ?? rootRef.current?.closest(".studio-ui") ?? rootRef.current;
   return (
     <div className="studio-menu" ref={rootRef} onBlur={(event) => {
-      if (event.relatedTarget instanceof Node && rootRef.current?.contains(event.relatedTarget)) return;
+      if (event.relatedTarget instanceof Node && (rootRef.current?.contains(event.relatedTarget) || listRef.current?.contains(event.relatedTarget))) return;
       setOpen(false);
     }}>
       <StudioButton
@@ -124,8 +128,8 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
       >
         {label}
       </StudioButton>
-      {open ? (
-        <ul id={menuId} ref={listRef} className="studio-menu-list" role="menu" style={position}>
+      {open && portal ? createPortal(
+        <ul id={menuId} ref={listRef} className="studio-menu-list" role="menu" popover="manual" style={position}>
           {items.map((item) => (
             <li key={item.id} role="none">
               <StudioButton
@@ -142,7 +146,7 @@ export function StudioMenu({ label, items }: StudioMenuProps) {
               </StudioButton>
             </li>
           ))}
-        </ul>
+        </ul>, portal
       ) : null}
     </div>
   );

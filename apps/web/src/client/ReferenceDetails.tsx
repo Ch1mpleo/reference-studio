@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { isHttpUrl, type LibraryReference } from "@reference-studio/core";
 import { ReferenceRequestError, type ReferenceDetailsInput } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
+import { StudioSelect } from "./StudioSelect.js";
 
 type Draft = {
   title: string;
@@ -141,20 +142,19 @@ export function ReferenceDetails({
         </div>
         <div className="studio-field">
         <label htmlFor={availabilityId}>Availability</label>
-        <select
+        <StudioSelect
           id={availabilityId}
+          label="Availability"
+          field
           value={draft.availability}
           disabled={saveState === "saving"}
-          onChange={(event) => {
-            const value = event.target.value;
+          options={[{ value: "unknown", label: "Unknown" }, { value: "available", label: "Available" }]}
+          onChange={(value) => {
             if (value === "available" || value === "unknown") {
               edit({ availability: value });
             }
           }}
-        >
-          <option value="unknown">Unknown</option>
-          <option value="available">Available</option>
-        </select>
+        />
         <p className="form-note">Unknown stays unknown. Available means the material is on hand.</p>
         </div>
         <div className="studio-field">

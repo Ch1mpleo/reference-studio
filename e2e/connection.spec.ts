@@ -35,7 +35,9 @@ test("reconnects after the production service restarts", async ({ page }) => {
 
 async function expectConnected(page: Page): Promise<void> {
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
-  await page.getByText("Connected", { exact: true }).click();
+  if (!(await page.locator("details.sample-connection").evaluate((element) => element.hasAttribute("open")))) {
+    await page.getByText("Connected", { exact: true }).click();
+  }
   await expect(page.getByText("Listening")).toBeVisible();
   await expect(page.getByText("1", { exact: true })).toBeVisible();
 }

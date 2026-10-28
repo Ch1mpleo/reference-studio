@@ -7,10 +7,14 @@ test.beforeAll(async () => { server = await IsolatedServer.create(); });
 test.afterAll(async () => { await server.dispose(); });
 
 async function openStudio(page: Page) {
-  await page.goto(`${server.origin}/#/studio`);
+  await page.goto(`${server.origin}/?specimen=${crypto.randomUUID()}#/studio`);
   await expect(page.getByRole("heading", { name: "References", exact: true })).toBeVisible();
   await expect(page.locator(".sample-grid")).not.toHaveAttribute("aria-busy", "true");
   await expect(page.locator(".studio-inspector-body[aria-busy='true']")).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 0) >= 960) {
+    await page.getByRole("button", { name: "Open details for North stair", exact: true }).click();
+    await expect(page.locator(".studio-inspector-body")).not.toHaveAttribute("aria-busy", "true");
+  }
 }
 
 test("cards keep their geometry; buttons respond to hover and press and respect reduction", async ({ page }) => {

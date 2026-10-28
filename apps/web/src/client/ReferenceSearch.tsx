@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { LibraryReference, ProjectReference } from "@reference-studio/core";
 import { ReferenceRequestError, searchReferences } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
+import { StudioSelect } from "./StudioSelect.js";
 
 type Kind = "" | "image" | "link" | "note";
 
@@ -76,17 +77,15 @@ export function ReferenceSearch({
         onChange={(event) => setTag(event.target.value)}
       />
       <label htmlFor="reference-search-kind">Kind</label>
-      <select
+      <StudioSelect
         id="reference-search-kind"
+        label="Kind"
+        field
         value={kind}
         disabled={status === "searching"}
-        onChange={(event) => setKind(event.target.value as Kind)}
-      >
-        <option value="">Any</option>
-        <option value="image">Image</option>
-        <option value="link">Link</option>
-        <option value="note">Note</option>
-      </select>
+        options={[{ value: "", label: "Any" }, { value: "image", label: "Image" }, { value: "link", label: "Link" }, { value: "note", label: "Note" }]}
+        onChange={(value) => { if (value === "" || value === "image" || value === "link" || value === "note") setKind(value); }}
+      />
       <div className="form-actions">
         <StudioButton type="submit" variant="primary" busy={status === "searching"} disabled={status === "searching"}>
           Search
