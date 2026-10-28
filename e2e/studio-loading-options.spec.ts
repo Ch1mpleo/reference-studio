@@ -116,16 +116,31 @@ test("surface and keyboard reloads affect the clicked component, while fields ke
   await expect(page.locator(".sample-grid")).not.toHaveAttribute("aria-busy", "true");
   await page.getByRole("button", { name: "Demo latency", exact: true }).click();
   await page.getByRole("option", { name: "No delay", exact: true }).click();
+  // Activity events describe idle/running transitions, not every overlapping
+  // replay. Let the previous run finish before observing a new start.
+  await expect(cards.locator(".ar-overlay canvas")).toHaveCount(0);
   await page.evaluate(() => {
     document.documentElement.dataset.cardReplayed = "false";
+    document.documentElement.dataset.otherCardReplayed = "false";
     document.addEventListener("asciireveal", (event) => {
       const detail: unknown = event instanceof CustomEvent ? event.detail : null;
-      if (typeof detail === "object" && detail !== null && "active" in detail && detail.active === true && event.target instanceof Element && event.target.closest(".sample-grid article")) {
-        document.documentElement.dataset.cardReplayed = "true";
+      if (typeof detail === "object" && detail !== null && "active" in detail && detail.active === true && event.target instanceof Element) {
+        const card = event.target.closest(".sample-grid article");
+        if (card !== null) {
+          document.documentElement.dataset[card === document.querySelector(".sample-grid article") ? "cardReplayed" : "otherCardReplayed"] = "true";
+        }
       }
     });
   });
   await reload.click();
   await expect(page.locator("html")).toHaveAttribute("data-card-replayed", "true");
   await expect(first).not.toHaveAttribute("aria-busy", "true");
+  await expect(first.locator(".ar-overlay canvas")).toHaveCount(0);
+  await page.evaluate(() => { document.documentElement.dataset.cardReplayed = "false"; });
+  await reload.focus();
+  await page.keyboard.press("Space");
+  await expect(page.locator("html")).toHaveAttribute("data-card-replayed", "true");
+  await expect(first).not.toHaveAttribute("aria-busy", "true");
+  await expect(first.locator(".ar-overlay canvas")).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-other-card-replayed", "false");
 });
