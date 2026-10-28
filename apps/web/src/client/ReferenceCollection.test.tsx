@@ -5,6 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ImageFields, ProjectReference } from "@reference-studio/core";
 import { ReferenceCollection } from "./ReferenceCollection.js";
 
+vi.mock("./BoardCanvas.js", () => ({ BoardCanvas: () => null }));
+vi.mock("./boardApi.js", () => ({
+  getBoard: async (projectId: string) => ({ projectId, revision: 1, layout: { frames: [], items: [] } }),
+  putBoard: async (projectId: string, revision: number, layout: unknown) => ({ projectId, revision: revision + 1, layout }),
+}));
+
 const created = {
   placementId: "00000000-0000-4000-8000-000000000010",
   role: "inspiration",
@@ -48,6 +54,7 @@ describe("ReferenceCollection", () => {
     const onAddImage = vi.fn<(file: File, fields: ImageFields) => Promise<ProjectReference>>(async () => created);
     const view = await render(
       createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001", refreshKey: 0,
         references: [],
         notice: null,
         onAddImage,
@@ -87,6 +94,7 @@ describe("ReferenceCollection", () => {
     const onAddLink = vi.fn(async () => created);
     const view = await render(
       createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001", refreshKey: 0,
         references: [],
         notice: null,
         onAddImage: vi.fn(),
@@ -121,6 +129,7 @@ function pasteEvent(file: File): Event {
   const event = new Event("paste", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", {
     value: {
+      getData: () => "",
       files: {
         0: file,
         length: 1,

@@ -5,6 +5,7 @@ import { ReferenceCollection } from "./ReferenceCollection.js";
 import { StudioButton } from "./StudioButton.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioMenu } from "./StudioMenu.js";
+import { StudioSelect } from "./StudioSelect.js";
 import { readSelectedProjectId, writeSelectedProjectId } from "./selectedProject.js";
 import { useProjectReferences } from "./useProjectReferences.js";
 import type { LibraryLoadStatus } from "./useProjectLibrary.js";
@@ -48,12 +49,13 @@ export function ProjectScreen({
     typeof sessionStorage === "undefined" ? null : readSelectedProjectId(sessionStorage),
   );
   const [name, setName] = useState("");
+  const [managing, setManaging] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
-  const selected = projects.find((project) => project.id === selectedId) ?? null;
+  const selected = projects.find((project) => project.id === selectedId) ?? projects.find((project) => project.status === "active") ?? projects[0] ?? null;
   const active = projects.filter((project) => project.status === "active");
   const archived = projects.filter((project) => project.status === "archived");
 
@@ -70,6 +72,7 @@ export function ProjectScreen({
       const project = await onRestore(file);
       setRestoreMessage("Restored");
       select(project.id);
+      setManaging(false);
     } catch (error) {
       setRestoreError(error instanceof ProjectRequestError ? error.message : "The backup could not be restored.");
     } finally {
@@ -85,6 +88,7 @@ export function ProjectScreen({
       const project = await onCreate(name);
       setName("");
       select(project.id);
+      setManaging(false);
     } catch (error) {
       setCreateError(error instanceof ProjectRequestError ? error.message : "The project could not be created.");
     } finally {
@@ -95,11 +99,12 @@ export function ProjectScreen({
   const projectsLoading = status === "loading" && projects.length === 0;
 
   return (
-    <div className="sample-frame">
-      <nav className="sample-rail" aria-label="Projects">
-        <div className="sample-rail-heading">
-          <p className="sample-project-name">{selected?.name ?? "Projects"}</p>
-        </div>
+    <div className="project-canvas-shell">
+      <div className="canvas-project-control">
+        {selected ? <StudioSelect label="Project" value={selected.id} options={projects.map((project) => ({ value: project.id, label: `${project.name}${project.status === "archived" ? " (archived)" : ""}` }))} onChange={select} /> : null}
+        <StudioButton onClick={() => setManaging(true)}>Projects</StudioButton>
+      </div>
+      <StudioDialog open={managing} title="Projects" description="Create a project, open another, or restore a backup." onClose={() => setManaging(false)}>
         <form className="create-project library-rail-form" onSubmit={(event) => void submitProject(event)}>
           <div className="studio-field">
             <label htmlFor="new-project-name">New project</label>
@@ -148,20 +153,16 @@ export function ProjectScreen({
         {refreshing ? <p className="studio-meta" role="status">Updating</p> : null}
         {projectsLoading ? <p className="studio-meta" role="status">Loading projects</p> : null}
         {!projectsLoading && active.length === 0 ? <p className="quiet">No active projects.</p> : null}
-        <ProjectChoices projects={active} selectedId={selectedId} onSelect={select} />
+        <ProjectChoices projects={active} selectedId={selected?.id ?? null} onSelect={(id) => { select(id); setManaging(false); }} />
         {archived.length > 0 ? (
           <details className="archived sample-disclosure">
             <summary>Archived</summary>
-            <ProjectChoices projects={archived} selectedId={selectedId} onSelect={select} />
+            <ProjectChoices projects={archived} selectedId={selected?.id ?? null} onSelect={(id) => { select(id); setManaging(false); }} />
           </details>
         ) : null}
-      </nav>
-      <main className="sample-workspace">
-        <span className="sample-joint sample-joint-nw" aria-hidden="true" />
-        <span className="sample-joint sample-joint-ne" aria-hidden="true" />
-        <span className="sample-joint sample-joint-sw" aria-hidden="true" />
-        <span className="sample-joint sample-joint-se" aria-hidden="true" />
-        {projects.length === 0 && !projectsLoading ? <EmptyLibrary /> : null}
+      </StudioDialog>
+      <main className="project-canvas-main">
+        {projects.length === 0 && !projectsLoading ? <><EmptyLibrary /><StudioButton variant="primary" className="canvas-start" onClick={() => setManaging(true)}>Create project</StudioButton></> : null}
         {projects.length > 0 && selected === null ? (
           <div className="sample-empty">
             <h2>Choose a project</h2>
@@ -313,12 +314,7 @@ function ProjectEditor({
 
   return (
     <>
-      <div className="sample-toolbar">
-        <div className="sample-heading">
-          <span className="sample-index" aria-hidden="true">[01]</span>
-          <h1>References</h1>
-          <span className="sample-count">{collection.status === "loading" ? "…" : collection.references.length}</span>
-        </div>
+      <div className="canvas-project-menu">
         <StudioMenu
           label="Project"
           items={[
@@ -379,6 +375,8 @@ function ProjectEditor({
         </form>
       </StudioDialog>
       <ReferenceCollection
+        projectId={project.id}
+        refreshKey={refreshKey}
         references={collection.references}
         notice={collection.notice}
         status={collection.status}

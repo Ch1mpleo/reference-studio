@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { UpdateProjectRequest } from "@reference-studio/core";
 import { downloadProjectBackup } from "./projectApi.js";
 import { ProjectScreen } from "./ProjectScreen.js";
 import { StudioButton } from "./StudioButton.js";
-import { StudioPreview } from "./StudioPreview.js";
 import { studioMotionStyle, useStudioReducedMotion } from "./studioMotion.js";
 import { useProjectLibrary } from "./useProjectLibrary.js";
 import { useServiceConnection, type ServiceState } from "./useServiceConnection.js";
+
+const StudioPreview = lazy(async () => ({ default: (await import("./StudioPreview.js")).StudioPreview }));
 
 const copy: Record<ServiceState, { title: string; detail: string }> = {
   loading: {
@@ -52,6 +53,7 @@ export function App() {
   if (preview) {
     return (
       <div className="studio-preview-route">
+        <Suspense fallback={<p className="studio-ui" role="status">Loading interface preview</p>}>
         <StudioPreview
           connection={{
             state: connection.state,
@@ -61,18 +63,16 @@ export function App() {
             onRetry: connection.retry,
           }}
         />
+        </Suspense>
       </div>
     );
   }
 
   return (
-    <div className="studio-ui" data-reduced-motion={reducedMotion ? "true" : "false"} style={studioMotionStyle(reducedMotion)}>
+    <div className="studio-ui studio-canvas-app" data-reduced-motion={reducedMotion ? "true" : "false"} style={studioMotionStyle(reducedMotion)}>
       <header className="sample-topbar">
         <p className="sample-wordmark">Reference Studio</p>
         {import.meta.env.DEV ? <a href="#/studio">Interface preview</a> : null}
-        <div className="sample-views" role="group" aria-label="View">
-          <StudioButton type="button" aria-pressed="true">Collection</StudioButton>
-        </div>
         <details className="sample-connection">
           <summary>
             <span className={`sample-dot sample-dot-${connection.state}`} aria-hidden="true" />

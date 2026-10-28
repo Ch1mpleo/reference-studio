@@ -7,6 +7,12 @@ import { ProjectRequestError } from "./projectApi.js";
 import { ProjectScreen } from "./ProjectScreen.js";
 import { selectedProjectKey } from "./selectedProject.js";
 
+vi.mock("./BoardCanvas.js", () => ({ BoardCanvas: () => null }));
+vi.mock("./boardApi.js", () => ({
+  getBoard: async (projectId: string) => ({ projectId, revision: 1, layout: { frames: [], items: [] } }),
+  putBoard: async (projectId: string, revision: number, layout: unknown) => ({ projectId, revision: revision + 1, layout }),
+}));
+
 const project: Project = {
   id: "00000000-0000-4000-8000-000000000001",
   name: "Atlas",

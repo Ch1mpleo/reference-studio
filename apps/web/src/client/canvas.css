@@ -1,0 +1,123 @@
+/* Canvas composition only. Controls and materials come from Studio primitives. */
+.studio-canvas-app {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.studio-canvas-app > .sample-topbar { flex: none; width: 100%; max-width: none; padding-inline: 20px; }
+.studio-canvas-app > .sample-topbar .sample-connection { margin-left: auto; }
+.studio-canvas-app > .sample-banner { flex: none; margin: 0; }
+.project-canvas-shell { flex: 1; position: relative; min-height: 0; width: 100%; }
+.project-canvas-main { height: 100%; min-height: 0; }
+.project-canvas-main > .sample-empty { padding: 100px 32px 24px; }
+.canvas-start { margin-left: 32px; }
+.canvas-project-control, .canvas-project-menu {
+  position: absolute; z-index: var(--layer-toolbar); top: 16px; display: flex; gap: 8px; align-items: center;
+}
+.canvas-project-control { left: 20px; max-width: min(50%, 400px); }
+.canvas-project-control .studio-select { min-width: 0; }
+.canvas-project-control .studio-select-trigger { max-width: 240px; }
+.canvas-project-control .studio-select-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-project-menu { right: 20px; }
+.canvas-workspace { position: relative; height: 100%; min-height: 0; isolation: isolate; }
+.canvas-surface { position: absolute; inset: 0; }
+.canvas-workspace .react-flow {
+  --xy-background-color: var(--color-bg);
+  --xy-background-pattern-color: var(--color-line-strong);
+  --xy-node-color: var(--color-ink);
+  --xy-node-border: 1px solid var(--color-line);
+  --xy-selection-background-color: color-mix(in srgb, var(--color-focus) 6%, transparent);
+  --xy-selection-border: 1px solid var(--color-focus);
+  --xy-resize-background-color-default: var(--color-bg);
+  --xy-resize-line-background-color-default: var(--color-focus);
+  --xy-resize-line-border-color-default: var(--color-focus);
+}
+.canvas-workspace .react-flow__node-material { border: 0; border-radius: 8px; background: transparent; }
+.canvas-workspace .react-flow__node-material:focus-visible { outline-offset: 6px; }
+.board-material {
+  position: relative; width: 100%; height: 100%; border: 1px solid var(--color-line-strong);
+  border-radius: 8px; background: var(--color-bg); color: var(--color-ink);
+}
+.board-material > img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; user-select: none; }
+.react-flow__node.selected > .board-material, .react-flow__node.selected > .board-frame { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.board-item-caption { position: absolute; top: calc(100% + 6px); left: 0; right: 0; color: var(--color-muted); font: var(--type-caption); pointer-events: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.board-material-text { height: 100%; padding: 16px; box-sizing: border-box; overflow: hidden; }
+.board-material-text h3 { font: var(--type-card); margin: 8px 0; }
+.board-material-text > p:last-child { font: var(--type-caption); white-space: pre-wrap; overflow-wrap: anywhere; }
+.board-frame { position: relative; width: 100%; height: 100%; border: 1px solid var(--color-line-strong); border-radius: 12px; background: color-mix(in srgb, var(--color-ink) 3%, transparent); }
+.board-frame-heading { height: 32px; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--color-line); font: var(--type-control); cursor: grab; }
+.board-frame-heading > span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.board-item-actions { position: absolute; bottom: calc(100% + 10px); left: 0; display: flex; gap: 4px; width: max-content; border-radius: var(--radius-pill); padding: 4px; background: var(--color-overlay); box-shadow: inset 0 0 0 1px var(--color-control-line), var(--shadow-popover); }
+.board-frame > .board-item-actions { bottom: auto; top: 40px; left: 8px; }
+.canvas-workspace .react-flow__resize-control.handle { width: 8px; height: 8px; border: 1px solid var(--color-focus); background: var(--color-bg); }
+.canvas-workspace .react-flow__resize-control.handle::after { content: ""; position: absolute; inset: -8px; }
+.canvas-workspace .react-flow__resize-control.line { border-color: var(--color-focus); }
+.canvas-dock {
+  position: absolute; z-index: var(--layer-toolbar); left: 50%; bottom: 20px; transform: translateX(-50%);
+  max-width: calc(100% - 32px); box-sizing: border-box; display: flex; gap: 8px; align-items: center;
+  padding: 8px; border-radius: var(--radius-panel); background: var(--color-overlay);
+  border: 1px solid var(--color-control-line); box-shadow: inset 0 1px 0 var(--color-glass-hi), var(--shadow-popover);
+  backdrop-filter: blur(8px); white-space: nowrap;
+}
+.canvas-dock-group { display: flex; align-items: center; gap: 4px; }
+.canvas-dock-group + .canvas-dock-group { border-left: 1px solid var(--color-line-strong); padding-left: 8px; }
+.canvas-zoom { min-width: 42px; text-align: center; }
+.canvas-status { position: absolute; z-index: var(--layer-toolbar); top: 24px; right: 130px; max-width: min(40%, 460px); color: var(--color-muted); font: var(--type-meta); text-align: right; pointer-events: none; }
+.canvas-status button { pointer-events: auto; }
+.canvas-status p { margin: 4px 0 0; font: var(--type-caption); }
+.canvas-empty { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); width: min(400px, calc(100% - 48px)); text-align: center; pointer-events: none; }
+.canvas-empty pre { font: var(--type-meta); color: var(--color-subtle); margin-bottom: 20px; }
+.canvas-empty h1 { font: var(--type-page); margin: 0 0 8px; }
+.canvas-empty p { font: var(--type-caption); color: var(--color-muted); }
+.canvas-drop-hint { position: absolute; z-index: var(--layer-board-selection); inset: 76px 24px 100px; border: 2px dashed var(--color-focus); border-radius: var(--radius-panel); display: grid; place-items: center; background: color-mix(in srgb, var(--color-bg) 85%, transparent); pointer-events: none; }
+.studio-canvas-app .canvas-workspace > aside.studio-inspector {
+  position: absolute; top: 68px; bottom: 96px; right: 16px; z-index: var(--layer-inspector);
+  display: flex; flex-direction: column; width: 340px; max-width: calc(100% - 32px); max-height: none;
+  border: 1px solid var(--color-control-line); border-radius: var(--radius-panel); background: var(--color-overlay);
+  box-shadow: inset 0 1px 0 var(--color-glass-hi), var(--shadow-popover); overflow: hidden;
+}
+.canvas-panel-content { padding: 16px; overflow-y: auto; min-height: 0; overflow-wrap: anywhere; }
+.canvas-panel-content h2 { font: var(--type-section); margin: 0 0 12px; }
+.canvas-panel-content > .studio-meta { margin-bottom: 16px; }
+.canvas-panel-content .reference-form { margin-top: 16px; }
+.canvas-panel-content .reference-details .reference-meta { font: var(--type-caption); color: var(--color-muted); }
+.canvas-direction-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding-block: 8px; border-bottom: 1px solid var(--color-line); font: var(--type-caption); }
+.canvas-direction-row > span { min-width: 0; overflow-wrap: anywhere; }
+.canvas-inspector-preview { width: 100%; max-height: 220px; object-fit: contain; margin-bottom: 12px; }
+.canvas-image-viewer { overflow: auto; max-height: 60dvh; }
+.canvas-image-viewer img { display: block; object-fit: contain; max-height: none; }
+.canvas-list { position: absolute; inset: 76px 24px 108px; overflow: auto; }
+.canvas-list > h2 { font: var(--type-section); margin: 0 0 16px; }
+.canvas-list-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--color-line); min-height: 72px; }
+.canvas-list-row > img { width: 56px; height: 56px; object-fit: contain; }
+.canvas-list-row > input { flex: none; }
+.canvas-list-row > div { flex: 1; min-width: 0; }
+.canvas-list-row h3 { font: var(--type-control); overflow-wrap: anywhere; }
+.canvas-list-row p { margin: 4px 0 0; }
+.canvas-workspace .react-flow__attribution { background: var(--color-bg); color: var(--color-muted); font: var(--type-meta); }
+.canvas-workspace .react-flow__attribution a { color: inherit; }
+@media (max-width: 1100px) {
+  .canvas-dock { flex-wrap: wrap; justify-content: center; width: max-content; }
+  .canvas-dock-group + .canvas-dock-group { border: 0; padding-left: 0; }
+}
+@media (max-width: 639px) {
+  .studio-canvas-app > .sample-topbar { min-height: 56px; padding-inline: 16px; }
+  .canvas-project-control { left: 12px; top: 12px; max-width: calc(100% - 108px); }
+  .canvas-project-control .studio-select-trigger { max-width: 140px; }
+  .canvas-project-menu { right: 12px; top: 12px; }
+  .canvas-status { top: 66px; right: 16px; max-width: calc(100% - 32px); }
+  .canvas-dock { bottom: 12px; max-width: calc(100% - 24px); gap: 4px; padding: 8px; }
+  .canvas-dock .studio-button { min-height: 44px; min-width: 44px; padding-inline: 10px; }
+  .canvas-dock-group { flex-wrap: wrap; justify-content: center; }
+  .canvas-dock-group:last-child { flex-wrap: nowrap; }
+  .canvas-list { inset: 100px 12px 204px; }
+  .canvas-list-row { flex-wrap: wrap; gap: 8px; }
+  .canvas-list-row > div { min-width: 100px; }
+  .canvas-list-row > input { width: 24px; height: 24px; }
+}
+@media (max-height: 560px) {
+  .canvas-dock { bottom: 8px; }
+  .studio-canvas-app .canvas-workspace > aside.studio-inspector { top: 64px; bottom: 84px; }
+}
