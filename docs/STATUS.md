@@ -4,10 +4,10 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance, M2.0a, M2.0b, M2.0c.
 - Active milestone: M2. The accepted Studio visual system now surrounds a working React Flow project canvas, direct image drop/paste, compact dock, explicit inspection, and optional Library panel. This is the first M2.1/M2.2 interaction slice, not completion of M2.
 - Loader-specimen replay checkpoint: resolved on 2026-10-29. The failure was test synchronization with an already-running reveal; runtime animation behavior did not need changing.
-- Next task: review the new canvas interaction with the user, then continue focused direction/comparison, contextual annotations, and complete direction duplication/revision semantics. The initial project-owned direction/geometry aggregate and backup version 2 are implemented; independent direction revisions and full M2.4 duplication remain open.
+- Next task after M2.0: continue the M2.4 direction/revision foundation and remaining M2.1/M2.2 interaction work, then contextual annotations and comparison. The initial project-owned direction/geometry aggregate and backup version 2 are implemented; independent direction revisions and full M2.4 duplication remain open. Systems/playground and M2.10 acceptance are later gates.
 
 ## Milestone 0 — Foundation
 
@@ -233,6 +233,20 @@ Download showed “Downloaded”. The zip was format version 1 and included the 
 
 ## Milestone 2 — Studio sample
 
+### M2.0 acceptance — 2026-10-29
+
+M2.0a–M2.0c are complete. The representative specimen and its loading treatments were accepted on 2026-10-27. This pass closes the shared-shell and real-request acceptance gaps using the user's canvas interaction decision; it preserves that accepted visual system.
+
+- Library results now consume `StudioReferenceCard`, including its fixed media frame, contain-fit artwork, shared type and action area. The living loading specimen exercises the same action slot. Removed the duplicate search-card styling.
+- Phone inspectors now occupy the complete viewport width. Desktop recovery status reserves space beside an open panel, so long errors cannot put Retry beneath the inspector.
+- A failed board refresh retains the current arrangement. Retry performs a service read even when a cached board exists, and a confirmed unchanged revision clears the error. It no longer reports a successful retry without contacting the service. Reference-read failures have their own retry action.
+- New isolated production scenarios exercise collect → find → reuse → backup → restore at 1440px/light and 390px/dark with reduced motion: drop an image, paste a link and note, edit shared attribution/tags and project role/notes/crop, find and reuse the image, preserve independent project interpretations, download/restore a ZIP, and verify remapped project data and board geometry.
+- Delayed and failed real reads verify no initial empty flash, retained content during refresh, an unsaved inspector draft surviving SSE updates and failures, and both board/reference retry responses. At 960×640 with an open inspector, recovery controls remain clickable. Shared browser scenarios cover keyboard controls, focus return, dismissals, both themes, loading/plain/reduced alternatives, scoped replay, and cleanup.
+
+**Verification:** type checking, all 90 tests in 25 Vitest files, and the full workspace build passed. The complete production Edge suite passed all 27 scenarios against temporary data. Desktop/phone Library and restored-workspace captures plus the retained-draft capture were inspected under `test-results/`. The personal `.reference-studio/` was not used or reset.
+
+**Limits:** this closes M2.0 only. Independent direction revisions/duplication, comparison, annotations, system records, playground, and M2.10 remain open. Native 200% browser zoom, quantified populated-board performance, Node 24, and unsaved-draft recovery after reload/project switching remain unverified or unimplemented. Vite still reports a main JavaScript chunk above 500 kB (618.15 kB); no performance acceptance is inferred from the passing interaction tests.
+
 ### Loader-specimen replay verification — 2026-10-29
 
 Reproduced the zero-delay failure in `studio-loading-options.spec.ts` against the production build, then inspected the pinned upstream engine. Its `active()` event reports a transition between idle and active, not every replay request. The earlier simulated request had finished (`aria-busy` was false) while its decorative reveal was still active. Installing a new activity listener and immediately replaying during that run therefore did not guarantee another `active: true` event; the assertion could fail even while the replay worked.
@@ -286,7 +300,7 @@ Motion roles are instant 0ms, feedback 100ms, menu 120ms, panel 160ms, and dialo
 
 ## Later milestones
 
-The M1 gate is closed. The accepted Studio specimen is now the library shell. Direction records, the canvas, and the playground are not started.
+The M1 and M2.0 gates are closed. The accepted Studio system surrounds the first canvas slice; full direction semantics, comparison, annotations, and systems/playground remain open. See Current position and the dated acceptance evidence above.
 
 ### M2.0 library shell — 2026-10-27
 
