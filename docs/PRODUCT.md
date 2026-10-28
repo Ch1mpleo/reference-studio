@@ -10,6 +10,7 @@ The working loop is: collect references → explore directions → review an exp
 
 - Start with the user's growing collection. Support pasted links, clipboard images, uploaded JPEG/PNG/WebP files, and agent-added references.
 - Use a grouped canvas with an inbox, named direction frames, focused comparison, and an approved-direction view. Provide a list alternative for keyboard access and small screens.
+- The canvas is the primary workspace, with a compact dock and on-demand tools. Drop/paste images directly into open space; image collection does not require an upload form. Selection and arranging stay separate from explicit inspection. Preserve the accepted Studio visual system across every control.
 - Discussion happens in the external agent's chat. The workspace persists the selected visual context, annotations, proposals, feedback, and decisions.
 - Treat imagery, atmosphere, composition, typography, material, and interaction as possible design drivers. Do not convert a liked example into a permanent aesthetic or mandatory template.
 - The workspace's controls support reviewing the material. A project direction belongs to that project, not to the application's interface as a whole.

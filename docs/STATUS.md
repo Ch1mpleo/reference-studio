@@ -5,8 +5,8 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 ## Current position
 
 - Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance.
-- Active milestone: M2. The user accepted the rendered `#/studio` specimen on 2026-10-27. The library now uses that system, and reference loading reports a real pending state. Direction records and the canvas are not started.
-- Next task: M2.4 direction ownership and backup compatibility, before persisted board frames in M2.1. Verify the revised library in the browser at desktop and phone widths, including add, inspect, save, and backup, before treating M2.0 as closed.
+- Active milestone: M2. The accepted Studio visual system now surrounds a working React Flow project canvas, direct image drop/paste, compact dock, explicit inspection, and optional Library panel. This is the first M2.1/M2.2 interaction slice, not completion of M2.
+- Next task: review the new canvas interaction with the user, then continue focused direction/comparison, contextual annotations, and complete direction duplication/revision semantics. The initial project-owned direction/geometry aggregate and backup version 2 are implemented; independent direction revisions and full M2.4 duplication remain open.
 
 ## Milestone 0 — Foundation
 
@@ -231,6 +231,22 @@ Download showed “Downloaded”. The zip was format version 1 and included the 
 - Node 24 remains unverified.
 
 ## Milestone 2 — Studio sample
+
+### Canvas interaction slice — 2026-10-28
+
+The user requested a canvas-first interaction model while retaining the accepted `#/studio` visual concept. Updated the existing overview plan and `design.md`; milestone IDs and later functional gates remain intact.
+
+- The project workspace fills the viewport. A compact dock supplies tools; project switching and management no longer occupy a permanent rail. Board/List share project material. Phones begin with List and omit pan/zoom tools there.
+- Images drop/paste directly into open space, at coordinates converted through the current viewport. There is no image file chooser or upload form in the product or specimen. Multiple files continue after an individual failure. Plain-text paste creates a note; http(s) paste creates a bookmark. Paste inside an editor remains native.
+- React Flow supports selection, multi-selection, drag, image resizing, pan, zoom, Fit all/selection, grouping into named draft directions, frame movement, reparenting, and persistent arrangement undo/redo. Import/selection does not auto-open forms or move the camera. View image opens a closable original-image viewer.
+- Library and Inspector share one optional panel. Inspected reference drafts remain mounted in the current project session, including when switching to a direction. All feature dropdowns now use `StudioSelect`. Shared menus/selects use the native top layer, Escape dismisses the deepest layer first, desktop inspectors honor `open`, and author styles cannot override `hidden`. The specimen's existing Back/Close header is reused instead of showing duplicate dismiss actions.
+- Migration `004_boards.sql` stores project-owned draft direction records and parent-local placement geometry in one revisioned `project_boards` aggregate. `GET/PUT /api/projects/:projectId/board` validates project ownership, bounds, direction membership, revisions, and retry keys; commits publish board events. Frame concept, feeling, decisions, and questions live in this project aggregate, separate from shared reference facts. Archiving retains the direction and ungroups references without moving their absolute positions; Library offers restore.
+- Gesture updates stay local until completion. Queued saves retain newer edits; lost-response retries reuse the original payload/key before saving newer intent. Refresh cannot replace an active gesture's base revision. Conflicts retain local intent and disable undo/redo until explicit recovery. Direction-field drafts also require explicit review/reapply when their underlying values changed.
+- Backup format 2 includes the board and direction records. Restore remaps project, placement, and frame IDs coherently and preserves local geometry and metadata. Version 1 import remains supported. Service tests use temporary data; personal `.reference-studio/` was not reset or used for browser validation.
+
+**Verification:** type checking and the full workspace build passed; the domain/service/client suite passed 25 files and 88 tests. The new Edge canvas scenarios pass drop/drag/group/undo/redo/inspect/custom-select/close/view/reload at 1440px, dark reduced-motion List/detail at 390px, and a 50-placement mixed image/link/note board with two directions. The populated-board scenario verifies moving a frame leaves child-local coordinates unchanged, and image resizing survives reload. Browser screenshots were inspected. The latest full Edge run passed 23 of 24 scenarios; the unresolved scenario is the specimen-only zero-delay card replay assertion in `studio-loading-options.spec.ts`. Its cause is not established as pre-existing. Experimental loader changes and diagnostic instrumentation were removed when the user clarified this turn's scope. The final focused `studio.spec.ts` run passed all 7 scenarios, including custom selects, dialog/inspector dismissal and focus return, both themes, and desktop/phone/short-window compositions. Responsive checks now use fresh specimen navigation so an earlier viewport's open modal does not carry into the next case.
+
+**Boundaries and remaining work:** M2.1–M2.5 are still in progress. Direction records currently share the atomic board revision; independent direction operations/duplication, multiple uses of a reference across directions, contextual annotations, comparison, and the M2.6+ systems/playground remain unfinished. No immutable direction approval is implied by an asset's role. Native 200% browser zoom, quantified performance/CPU-throttling acceptance, Node 24, reload-surviving unsaved drafts, and draft recovery after switching projects remain unverified or unimplemented. Vite reports a main JavaScript chunk above 500 kB; the specimen is lazy-loaded, but no broader bundle/performance claim is made.
 
 ### M2.0a — Representative sample
 
