@@ -35,6 +35,10 @@ export function StudioLoadingPreview({ state, mode, replay, reducedMotion, plain
         <StudioReferenceCard title="North stair — loading sample" metadata="Image · Specimen"
           selected={false} loading={pending} imageState={state === "error" ? "missing" : "ready"} onOpen={() => { request.load("sample"); onOpen(); }}
           loadingMode={mode} reducedMotion={reducedMotion} plain={plain} replay={replay + request.revision} options={options} onPreviewReload={reload}
+          actions={<>
+            <StudioButton aria-label="Open details for North stair — loading sample" onClick={() => { request.load("sample"); onOpen(); }}>Open details</StudioButton>
+            <StudioButton variant="ghost" aria-label="Reload sample for North stair — loading sample" onClick={reload}>Reload</StudioButton>
+          </>}
           media={state === "error" ? <div className="sample-missing"><p>Image unavailable</p></div> : <img src={northStairArt} alt="Specimen image, North stair loading sample" onError={() => onState("error")} />}
           summary={<p className="studio-excerpt">Shared Studio card and media adapter</p>} />
         <div className="sample-loading-actions">

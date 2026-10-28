@@ -3,6 +3,7 @@ import type { LibraryReference, ProjectReference } from "@reference-studio/core"
 import { ReferenceRequestError, searchReferences } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
 import { StudioSelect } from "./StudioSelect.js";
+import { StudioReferenceCard } from "./StudioReferenceCard.js";
 
 type Kind = "" | "image" | "link" | "note";
 
@@ -101,35 +102,39 @@ export function ReferenceSearch({
           {results.map((reference) => {
             const inProject = placed.has(reference.id);
             return (
-              <li key={reference.id} className="reference-card">
-                {reference.asset !== null ? (
-                  <img
-                    src={`/api/assets/${reference.asset.id}/thumbnail`}
-                    alt=""
-                    width={reference.asset.width}
-                    height={reference.asset.height}
-                  />
-                ) : null}
-                <p className="reference-meta">{kindLabel(reference.kind)}</p>
-                <h4>{reference.title}</h4>
-                {reference.creator !== null ? <p className="reference-meta">{reference.creator}</p> : null}
-                {reference.sourceUrl !== null ? (
-                  <a href={reference.sourceUrl} rel="noreferrer noopener" target="_blank">
-                    {reference.sourceUrl}
-                  </a>
-                ) : null}
-                {reference.creator === null && reference.sourceUrl === null ? (
-                  <p className="reference-meta">Source unknown</p>
-                ) : null}
-                {reference.tags.length > 0 ? <p className="reference-meta">{reference.tags.join(", ")}</p> : null}
-                <StudioButton
-                  type="button"
-                  disabled={inProject || placingId === reference.id}
-                  busy={placingId === reference.id}
-                  onClick={() => void place(reference.id)}
-                >
-                  {inProject ? "In this project" : "Add to this project"}
-                </StudioButton>
+              <li key={reference.id}>
+                <StudioReferenceCard title={reference.title} metadata={kindLabel(reference.kind)} selected={false}
+                  loadingMode="instant" imageState={reference.kind === "image" ? (reference.asset ? "ready" : "missing") : "none"}
+                  onOpen={() => void place(reference.id)}
+                  media={reference.asset !== null ? (
+                    <img
+                      src={`/api/assets/${reference.asset.id}/thumbnail`}
+                      alt=""
+                      width={reference.asset.width}
+                      height={reference.asset.height}
+                    />
+                  ) : <p className="studio-meta">{reference.kind === "image" ? "Image unavailable" : kindLabel(reference.kind)}</p>}
+                  summary={<div className="reference-search-summary">
+                    {reference.creator !== null ? <p className="studio-help">{reference.creator}</p> : null}
+                    {reference.sourceUrl !== null ? (
+                      <a className="sample-url" href={reference.sourceUrl} rel="noreferrer noopener" target="_blank">
+                        <span className="sample-link-text">{reference.sourceUrl}</span>
+                      </a>
+                    ) : null}
+                    {reference.creator === null && reference.sourceUrl === null ? (
+                      <p className="studio-help">Source unknown</p>
+                    ) : null}
+                    {reference.tags.length > 0 ? <p className="studio-help">{reference.tags.join(", ")}</p> : null}
+                  </div>}
+                  actions={<StudioButton
+                    type="button"
+                    disabled={inProject || placingId === reference.id}
+                    busy={placingId === reference.id}
+                    onClick={() => void place(reference.id)}
+                  >
+                    {inProject ? "In this project" : "Add to this project"}
+                  </StudioButton>}
+                />
               </li>
             );
           })}

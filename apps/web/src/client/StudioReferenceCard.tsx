@@ -21,10 +21,11 @@ type StudioReferenceCardProps = {
   placeholder?: boolean;
   options?: StudioLoadingOptions;
   onPreviewReload?: () => void;
+  actions?: ReactNode;
 };
 
 /** A stable media frame and ordinary controls; the article itself is not a button. */
-export function StudioReferenceCard({ title, metadata, media, summary, selected, loading = false, imageState, onOpen, loadingMode = "reveal", reducedMotion = false, plain = false, replay = 0, placeholder = false, options, onPreviewReload }: StudioReferenceCardProps) {
+export function StudioReferenceCard({ title, metadata, media, summary, selected, loading = false, imageState, onOpen, loadingMode = "reveal", reducedMotion = false, plain = false, replay = 0, placeholder = false, options, onPreviewReload, actions }: StudioReferenceCardProps) {
   return (
     <article className={`studio-reference-card${selected ? " is-selected" : ""}${onPreviewReload ? " has-click-reload" : ""}`} aria-busy={loading || undefined} data-image={imageState}
       onClick={(event) => { if (!placeholder && onPreviewReload && isPreviewSurfaceClick(event)) onPreviewReload(); }}>
@@ -37,8 +38,10 @@ export function StudioReferenceCard({ title, metadata, media, summary, selected,
         </div>
       </StudioLoadingRegion>
       <div className="studio-card-actions">
-        <StudioButton onClick={onOpen} disabled={placeholder} aria-label={`Open details for ${title}`}>Open details</StudioButton>
-        {onPreviewReload ? <StudioButton variant="ghost" onClick={onPreviewReload} disabled={placeholder} aria-label={`Reload sample for ${title}`}>Reload</StudioButton> : null}
+        {actions ?? <>
+          <StudioButton onClick={onOpen} disabled={placeholder} aria-label={`Open details for ${title}`}>Open details</StudioButton>
+          {onPreviewReload ? <StudioButton variant="ghost" onClick={onPreviewReload} disabled={placeholder} aria-label={`Reload sample for ${title}`}>Reload</StudioButton> : null}
+        </>}
       </div>
     </article>
   );

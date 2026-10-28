@@ -2247,7 +2247,8 @@ html:has(.studio-ui)::-webkit-scrollbar-thumb {
   .studio-ui:not(.studio-preview) dialog.studio-inspector[open] {
     position: fixed;
     inset: 0;
-    width: 100%;
+    width: 100vw;
+    max-width: 100vw;
     height: 100dvh;
     max-height: 100dvh;
     border: 0;
@@ -2447,8 +2448,7 @@ html:has(.studio-ui)::-webkit-scrollbar-thumb {
   margin-top: 0;
 }
 
-.studio-ui .reference-form h4,
-.studio-ui .reference-card h4 {
+.studio-ui .reference-form h4 {
   margin: 0;
   color: var(--color-ink);
   font: var(--type-card);
@@ -2461,25 +2461,9 @@ html:has(.studio-ui)::-webkit-scrollbar-thumb {
   padding: 0;
 }
 
-.studio-ui .reference-card {
-  margin: 0;
-  padding: 16px;
-  border: 1px solid var(--color-control-line);
-  border-radius: 16px;
-  background: var(--color-surface);
-  box-shadow: inset 0 1px 0 var(--color-glass-hi);
-}
-
-.studio-ui .reference-card img {
-  width: 100%;
-  max-height: 160px;
-  object-fit: cover;
-  border-radius: 12px;
-  background: var(--color-field);
-}
-
-.studio-ui .reference-meta,
-.studio-ui .reference-card a {
+.studio-ui .reference-search-summary { display: grid; gap: 8px; min-width: 0; }
+.studio-ui .reference-search-summary .sample-url { max-width: 100%; }
+.studio-ui .reference-meta {
   color: var(--color-muted);
   font: var(--type-caption);
   overflow-wrap: anywhere;
