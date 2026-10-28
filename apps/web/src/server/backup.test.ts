@@ -329,12 +329,12 @@ describe("backup and restore", () => {
     const newer = await restoreZip(
       app,
       storedArchive([
-        { name: "backup.json", data: Buffer.from(JSON.stringify({ format: BACKUP_FORMAT, formatVersion: 2 })) },
+        { name: "backup.json", data: Buffer.from(JSON.stringify({ format: BACKUP_FORMAT, formatVersion: 3 })) },
       ]),
       "newer",
     );
     expect(newer.statusCode).toBe(400);
-    expect(JSON.stringify(newer.json())).toContain(backupVersionMessage("2"));
+    expect(JSON.stringify(newer.json())).toContain(backupVersionMessage("3"));
     const pathForm = multipart(Buffer.from("zip"), "backup.zip", { path: "C:\\secret.zip" });
     const pathResponse = await app.inject({
       method: "POST",

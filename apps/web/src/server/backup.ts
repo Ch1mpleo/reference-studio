@@ -25,6 +25,7 @@ import { commitMutation, hashCanonicalRequest, readIdempotencyKey, rejectIdempot
 import { inspectImage, type InspectedImage } from "./images.js";
 import { getProject } from "./projects.js";
 import { readBackupZip, writeBackupZip } from "./zipArchive.js";
+import { readBoard, writeBoard } from "./boards.js";
 
 const PATH_FIELDS = new Set(["path", "filePath", "filepath", "localPath"]);
 
@@ -191,7 +192,7 @@ export function exportProjectBackup(
   }
   const manifest = readBackupManifest({
     format: "reference-studio-backup",
-    formatVersion: 1,
+    formatVersion: 2,
     exportedAt: new Date().toISOString(),
     project: {
       originalId: project.id,
@@ -205,6 +206,7 @@ export function exportProjectBackup(
     assets: [...assets.values()].sort((left, right) => left.originalId.localeCompare(right.originalId)),
     references: [...references.values()].sort((left, right) => left.originalId.localeCompare(right.originalId)),
     placements,
+    board: readBoard(database, projectId).layout,
     sections: { systems: [], variants: [], evidence: [], snapshots: [] },
   });
   const files = new Map<string, Uint8Array>();
@@ -388,11 +390,14 @@ function insertRestoredProject(
         now,
       );
   }
+  const placementIds = new Map<string, string>();
   for (const placement of manifest.placements) {
     const referenceId = referenceIds.get(placement.referenceOriginalId);
     if (referenceId === undefined) {
       throw new ServiceError("validation", "This backup has a placement for a missing reference.");
     }
+    const placementId = createId();
+    placementIds.set(placement.originalId, placementId);
     database
       .prepare(
         `INSERT INTO placements (
@@ -401,7 +406,7 @@ function insertRestoredProject(
         ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, NULL, 1, ?, ?)`,
       )
       .run(
-        createId(),
+        placementId,
         project.id,
         referenceId,
         placement.role,
@@ -411,6 +416,18 @@ function insertRestoredProject(
         now,
         now,
       );
+  }
+  if (manifest.board !== undefined) {
+    const frameIds = new Map(manifest.board.frames.map((frame) => [frame.id, createId()]));
+    writeBoard(database, {
+      projectId: project.id,
+      revision: 1,
+      layout: {
+        frames: manifest.board.frames.map((frame) => ({ ...frame, id: frameIds.get(frame.id)! })),
+        items: manifest.board.items.map((item) => ({ ...item, placementId: placementIds.get(item.placementId)!,
+          frameId: item.frameId === null ? null : frameIds.get(item.frameId)! })),
+      },
+    });
   }
   return project;
 }

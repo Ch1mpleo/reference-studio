@@ -14,9 +14,10 @@ import {
   motionMarkSchema,
 } from "./references.js";
 import { PROJECT_STATUSES } from "./projects.js";
+import { boardLayoutSchema } from "./board.js";
 
 export const BACKUP_FORMAT = "reference-studio-backup";
-export const BACKUP_FORMAT_VERSION = 1;
+export const BACKUP_FORMAT_VERSION = 2;
 
 /** 80 MiB across the archive, declared uncompressed size, and the upload. */
 export const MAX_BACKUP_BYTES = 80 * 1024 * 1024;
@@ -106,7 +107,7 @@ const emptySection = z.array(z.never()).length(0);
 export const backupManifestSchema = z
   .object({
     format: z.literal(BACKUP_FORMAT),
-    formatVersion: z.literal(BACKUP_FORMAT_VERSION),
+    formatVersion: z.union([z.literal(1), z.literal(2)]),
     exportedAt: z.iso.datetime(),
     project: z
       .object({
@@ -122,6 +123,7 @@ export const backupManifestSchema = z
     assets: z.array(backupAssetSchema).max(MAX_BACKUP_ENTRIES),
     references: z.array(backupReferenceSchema).max(MAX_BACKUP_ENTRIES),
     placements: z.array(backupPlacementSchema).max(MAX_BACKUP_ENTRIES),
+    board: boardLayoutSchema.optional(),
     sections: z
       .object({
         systems: emptySection,
@@ -149,7 +151,7 @@ export function readBackupManifest(value: unknown): BackupManifest {
   if (!isRecord(value) || value.format !== BACKUP_FORMAT) {
     throw new ServiceError("validation", "This file is not a Reference Studio backup.");
   }
-  if (value.formatVersion !== BACKUP_FORMAT_VERSION) {
+  if (value.formatVersion !== 1 && value.formatVersion !== BACKUP_FORMAT_VERSION) {
     throw new ServiceError("validation", backupVersionMessage(shownVersion(value.formatVersion)));
   }
   if (isRecord(value.sections)) {
@@ -174,6 +176,12 @@ export function readBackupManifest(value: unknown): BackupManifest {
     }
   }
   const manifest = parseContract(backupManifestSchema, value, "This backup is invalid.");
+  if (manifest.formatVersion === 1 && manifest.board !== undefined) {
+    throw new ServiceError("validation", "Version 1 backups cannot store a board.");
+  }
+  if (manifest.formatVersion === 2 && manifest.board === undefined) {
+    throw new ServiceError("validation", "This backup is missing its board.");
+  }
   validateBackupGraph(manifest);
   return manifest;
 }
@@ -221,6 +229,9 @@ function validateBackupGraph(manifest: BackupManifest): void {
     if (placement.crop !== null && reference.kind !== "image") {
       throw new ServiceError("validation", "The crop must stay inside the image.");
     }
+  }
+  if (manifest.board?.items.some((item) => !placementIds.has(item.placementId))) {
+    throw new ServiceError("validation", "This backup has a board item for a missing placement.");
   }
 }
 

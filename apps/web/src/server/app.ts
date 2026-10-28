@@ -27,6 +27,7 @@ import type { AppConfig } from "./config.js";
 import { EventHub } from "./events.js";
 import { defaultMigrationsDir, migrate } from "./migrate.js";
 import { registerBackupRoutes } from "./backup.js";
+import { registerBoardRoutes } from "./boards.js";
 import { registerProjectRoutes } from "./projects.js";
 import { registerReferenceRoutes } from "./references.js";
 import { issueSessionCookie } from "./session.js";
@@ -101,6 +102,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   registerProjectRoutes(app, dependencies.database, hub);
   registerReferenceRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
   registerBackupRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
+  registerBoardRoutes(app, dependencies.database, hub);
 
   app.get("/api/events", (request, reply) => {
     reply.hijack();

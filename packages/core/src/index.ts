@@ -100,3 +100,5 @@ export {
   readBackupManifest,
 } from "./backup.js";
 export type { BackupManifest, BackupUploadRequest } from "./backup.js";
+export { boardRectSchema, boardFrameSchema, boardItemSchema, boardLayoutSchema, boardSchema, updateBoardSchema } from "./board.js";
+export type { BoardRect, BoardFrame, BoardItem, BoardLayout, Board } from "./board.js";

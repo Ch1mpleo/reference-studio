@@ -63,7 +63,7 @@ describe("backup manifest", () => {
     expect(() => readBackupManifest({ format: "other", formatVersion: 1 })).toThrow(
       "This file is not a Reference Studio backup.",
     );
-    expect(() => readBackupManifest(manifest({ formatVersion: 2 as never }))).toThrow(backupVersionMessage("2"));
+    expect(() => readBackupManifest(manifest({ formatVersion: 3 as never }))).toThrow(backupVersionMessage("3"));
     expect(() =>
       readBackupManifest({
         ...manifest(),
