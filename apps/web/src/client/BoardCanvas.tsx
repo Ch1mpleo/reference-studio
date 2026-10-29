@@ -6,12 +6,16 @@ import {
 import type { BoardAnnotation, BoardLayout, ProjectReference } from "@reference-studio/core";
 import { StudioButton } from "./StudioButton.js";
 import { ImageRegions } from "./ImageRegions.js";
+import { BoardInlineText } from "./BoardInlineText.js";
 import "@xyflow/react/dist/style.css";
 
 type MaterialNode = Node<{
   title: string; item?: ProjectReference; frame: boolean;
   annotations: BoardAnnotation[];
   readOnly: boolean;
+  editing: boolean; revision: number; count: number; groupCommandsDisabled: boolean;
+  edit: () => void; done: () => void; saveText: (text: string, revision: number) => Promise<number | void>;
+  duplicate: () => void; archive: () => void;
   inspect: () => void; view: () => void; resized: () => void; resizeStarted: () => void;
 }, "material">;
 export type BoardView = ReactFlowInstance<MaterialNode>;
@@ -20,15 +24,15 @@ function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
   const reference = data.item?.reference;
   const imageWidth = reference?.asset ? Math.min(1, ((height ?? reference.asset.height) / (width ?? reference.asset.width)) * reference.asset.width / reference.asset.height) * 100 : 100;
   return <div className={data.frame ? "board-frame" : `board-material board-material-${reference?.kind ?? "note"}`}>
-    <NodeResizer isVisible={selected && !data.readOnly} minWidth={data.frame ? 240 : 100} minHeight={data.frame ? 160 : 80}
+    <NodeResizer isVisible={selected && !data.readOnly && !data.editing} minWidth={data.frame ? 240 : 100} minHeight={data.frame ? 160 : 80}
       keepAspectRatio={!data.frame && reference?.kind === "image"} onResizeStart={data.resizeStarted} onResizeEnd={data.resized} />
-    {data.frame ? <div className="board-frame-heading"><span>{data.title}</span><span className="studio-meta">Draft</span></div> : <>
+    {data.frame ? <div className="board-frame-heading"><BoardInlineText value={data.title} revision={data.revision} label="Group name" editing={data.editing} disabled={data.readOnly} onEdit={data.edit} onDone={data.done} onSave={data.saveText} /><span className="studio-meta">{data.count} {data.count === 1 ? "item" : "items"}</span></div> : reference?.kind === "note" ? <div className="board-note"><BoardInlineText value={reference.observations} revision={reference.revision} label="Note text" multiline editing={data.editing} onEdit={data.edit} onDone={data.done} onSave={data.saveText} /></div> : <>
       {reference?.asset ? data.annotations.some((note) => note.region) ? <div className="board-image-plane"><div style={{ width: `${imageWidth}%` }}><ImageRegions reference={reference} resolution="thumbnail" annotations={data.annotations} onSelect={data.inspect} /></div></div> : <img src={`/api/assets/${reference.asset.id}/thumbnail`} alt={reference.title} draggable={false} /> :
         <div className="board-material-text"><p className="studio-kicker">{reference?.kind}</p><h3>{data.title}</h3><p>{reference?.observations || reference?.sourceUrl || "Image unavailable"}</p></div>}
       <div className="board-item-caption"><span>{data.title}</span></div>
     </>}
-    {selected ? <div className="board-item-actions nodrag nopan">
-      <StudioButton variant="ghost" onClick={data.inspect}>Inspect</StudioButton>
+    {selected && !data.editing ? <div className="board-item-actions nodrag nopan">
+      {data.frame ? <><StudioButton variant="ghost" disabled={data.readOnly} onClick={data.edit}>Rename</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.duplicate}>Duplicate</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.archive}>Ungroup</StudioButton></> : reference?.kind === "note" ? <StudioButton variant="ghost" onClick={data.edit}>Edit note</StudioButton> : <StudioButton variant="ghost" onClick={data.inspect}>Details</StudioButton>}
       {reference?.asset ? <StudioButton variant="ghost" onClick={data.view}>View image</StudioButton> : null}
     </div> : null}
   </div>;
@@ -36,14 +40,20 @@ function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
 const nodeTypes = { material: Material };
 const edges: Edge[] = [];
 
-export function BoardCanvas({ layout, references, selection, hand, readOnly = false, projectId, onSelect, onCommit, onInspect, onView, onReady, onZoom, onGestureStart }: {
-  layout: BoardLayout; references: ProjectReference[]; selection: string[]; hand: boolean; projectId: string;
+export function BoardCanvas({ layout, references, selection, readOnly = false, projectId, onSelect, onCommit, onInspect, onView, onReady, onZoom, onGestureStart,
+  editingId, onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, groupCommandsDisabled }: {
+  layout: BoardLayout; references: ProjectReference[]; selection: string[]; projectId: string;
   onSelect: (ids: string[]) => void; onCommit: (layout: BoardLayout) => void;
   onInspect: (id: string) => void; onView: (id: string) => void; onReady: (view: BoardView) => void;
   onZoom: (zoom: number) => void;
   onGestureStart: () => void;
   readOnly?: boolean;
+  editingId: string | null; onEdit: (id: string) => void; onEditDone: (id: string) => void;
+  onEditNote: (id: string, text: string, revision: number) => Promise<number>;
+  onRenameGroup: (id: string, text: string, revision: number) => Promise<void>;
+  onDuplicateGroup: (id: string) => void; onArchiveGroup: (id: string) => void; groupCommandsDisabled: boolean;
 }) {
+  const [spacePanning, setSpacePanning] = useState(false);
   const [nodes, setNodes] = useState<MaterialNode[]>([]);
   const nodesRef = useRef(nodes);
   const selectionRef = useRef(selection);
@@ -51,8 +61,20 @@ export function BoardCanvas({ layout, references, selection, hand, readOnly = fa
   const view = useRef<BoardView | null>(null);
   const latest = useRef({ layout, onCommit, onInspect, onView, onSelect, onGestureStart });
   latest.current = { layout, onCommit, onInspect, onView, onSelect, onGestureStart };
+  const actions = useRef({ onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup });
+  actions.current = { onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup };
   const frame = useRef<number | null>(null);
   const gesturing = useRef(false);
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || !(event.target instanceof Element) || !event.target.closest(".react-flow") || event.target.closest("input,textarea,button,select,[role='textbox'],[contenteditable]")) return;
+      event.preventDefault(); setSpacePanning(true);
+    };
+    const up = (event: KeyboardEvent) => { if (event.code === "Space") setSpacePanning(false); };
+    const blur = () => setSpacePanning(false);
+    window.addEventListener("keydown", down); window.addEventListener("keyup", up); window.addEventListener("blur", blur);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); };
+  }, []);
 
   function persist(reparent: Set<string> = new Set()): void {
     const current = latest.current;
@@ -93,6 +115,11 @@ export function BoardCanvas({ layout, references, selection, hand, readOnly = fa
     if (gesturing.current) return;
     const byId = new Map(references.map((item) => [item.placementId, item]));
     const data = (id: string, title: string, isFrame: boolean, item?: ProjectReference) => ({ title, frame: isFrame, item, readOnly,
+      editing: editingId === id, revision: layout.frames.find((entry) => entry.id === id)?.revision ?? item?.reference.revision ?? 1,
+      count: layout.items.filter((entry) => entry.frameId === id).length, groupCommandsDisabled,
+      edit: () => actions.current.onEdit(id), done: () => actions.current.onEditDone(id),
+      saveText: (text: string, revision: number) => isFrame ? actions.current.onRenameGroup(id, text, revision) : actions.current.onEditNote(id, text, revision),
+      duplicate: () => actions.current.onDuplicateGroup(id), archive: () => actions.current.onArchiveGroup(id),
       annotations: (layout.annotations ?? []).filter((note) => note.target.type === "placement" && note.target.placementId === id),
       inspect: () => latest.current.onInspect(id), view: () => latest.current.onView(id), resized: schedule,
       resizeStarted: () => { gesturing.current = true; latest.current.onGestureStart(); } });
@@ -110,7 +137,7 @@ export function BoardCanvas({ layout, references, selection, hand, readOnly = fa
     ];
     nodesRef.current = next;
     setNodes(next);
-  }, [layout, references, readOnly]);
+  }, [layout, references, readOnly, editingId, groupCommandsDisabled]);
 
   useEffect(() => {
     setNodes((current) => {
@@ -151,9 +178,9 @@ export function BoardCanvas({ layout, references, selection, hand, readOnly = fa
     }}
     onMove={(_, viewport) => onZoom(viewport.zoom)}
     onMoveEnd={(_, viewport) => { sessionStorage.setItem(`rs-board-view:${projectId}`, JSON.stringify(viewport)); }}
-    nodesConnectable={false} nodesDraggable={!hand && !readOnly} selectionOnDrag={!hand} panOnDrag={hand ? true : [1, 2]}
+    nodesConnectable={false} nodesDraggable={!spacePanning && !readOnly} selectionOnDrag={!spacePanning} panOnDrag={spacePanning ? true : [1, 2]}
     panOnScroll zoomOnScroll={false} zoomOnPinch zoomOnDoubleClick={false} deleteKeyCode={null}
     minZoom={0.1} maxZoom={3} defaultViewport={{ x: 40, y: 40, zoom: 0.8 }}
-    multiSelectionKeyCode="Shift" onlyRenderVisibleElements
+    multiSelectionKeyCode="Shift"
   ><Background variant={BackgroundVariant.Dots} gap={24} size={1} /></ReactFlow>;
 }

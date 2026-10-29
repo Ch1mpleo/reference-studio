@@ -9,6 +9,7 @@
 .studio-canvas-app > .sample-topbar { flex: none; width: 100%; max-width: none; padding-inline: 20px; }
 .studio-canvas-app > .sample-topbar .sample-connection { margin-left: auto; }
 .studio-canvas-app > .sample-banner { flex: none; margin: 0; }
+.studio-canvas-app > .sample-banner { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; }
 .project-canvas-shell { flex: 1; position: relative; min-height: 0; width: 100%; }
 .project-canvas-main { height: 100%; min-height: 0; }
 .project-canvas-main > .sample-empty { padding: 100px 32px 24px; }
@@ -64,10 +65,12 @@
 .canvas-dock-group { display: flex; align-items: center; gap: 4px; }
 .canvas-dock-group + .canvas-dock-group { border-left: 1px solid var(--color-line-strong); padding-left: 8px; }
 .canvas-zoom { min-width: 42px; text-align: center; }
+.canvas-workspace > .studio-zoom { position: absolute; z-index: var(--layer-toolbar); right: 20px; bottom: 20px; }
 .canvas-status { position: absolute; z-index: var(--layer-toolbar); top: 24px; right: 130px; max-width: min(40%, 460px); color: var(--color-muted); font: var(--type-meta); text-align: right; pointer-events: none; }
 .canvas-status button { pointer-events: auto; }
 .canvas-status p { margin: 4px 0 0; font: var(--type-caption); }
 @media (min-width: 960px) {
+  .canvas-workspace[data-panel-open="true"] > .studio-zoom { right: 376px; }
   .canvas-workspace[data-panel-open="true"] .canvas-status {
     right: 380px;
     max-width: min(460px, calc(100% - 740px));
@@ -117,14 +120,18 @@
   .canvas-dock { flex-wrap: wrap; justify-content: center; width: max-content; }
   .canvas-dock-group + .canvas-dock-group { border: 0; padding-left: 0; }
 }
+@media (max-width: 900px) {
+  .canvas-dock { bottom: 20px; }
+}
 @media (max-width: 639px) {
   .studio-canvas-app > .sample-topbar { min-height: 56px; padding-inline: 16px; }
   .canvas-project-control { left: 12px; top: 12px; max-width: calc(100% - 108px); }
   .canvas-project-control .studio-select-trigger { max-width: 140px; }
   .canvas-project-menu { right: 12px; top: 12px; }
   .canvas-status { top: 66px; right: 16px; max-width: calc(100% - 32px); }
-  .canvas-dock { bottom: 12px; max-width: calc(100% - 24px); gap: 4px; padding: 8px; }
-  .canvas-dock .studio-button { min-height: 44px; min-width: 44px; padding-inline: 10px; }
+  .canvas-dock { left: 12px; transform: none; bottom: 12px; max-width: calc(100% - 88px); gap: 0; padding: 4px; flex-wrap: nowrap; }
+  .canvas-workspace > .studio-zoom { right: 12px; bottom: 12px; }
+  .canvas-dock .studio-button { min-height: 44px; min-width: 36px; padding-inline: 8px; }
   .canvas-dock-group { flex-wrap: wrap; justify-content: center; }
   .canvas-dock-group:last-child { flex-wrap: nowrap; }
   .canvas-list { inset: 100px 12px 204px; }
@@ -139,5 +146,6 @@
 }
 @media (max-height: 560px) {
   .canvas-dock { bottom: 8px; }
+  .canvas-workspace > .studio-zoom { bottom: 8px; }
   .studio-canvas-app .canvas-workspace > aside.studio-inspector { top: 64px; bottom: 84px; }
 }

@@ -24,13 +24,17 @@ async function createProject(page: Page, name: string) {
   return project;
 }
 async function list(page: Page) {
-  await toolbar(page).getByRole("button", { name: "View", exact: true }).click();
-  await page.getByRole("option", { name: "List", exact: true }).click();
+  await page.getByRole("region", { name: "Project canvas" }).click({ position: { x: 20, y: 160 } });
+  await page.getByRole("toolbar", { name: "Canvas zoom" }).getByRole("button", { name: "Fit", exact: true }).click();
 }
 async function inspect(page: Page, title: string, phone: boolean) {
   await list(page);
-  await page.locator(".canvas-list-row").filter({ has: page.getByRole("heading", { name: title, exact: true }) }).getByRole("button", { name: "Inspect", exact: true }).click();
+  const node = page.locator(".board-material").filter({ has: page.getByRole("img", { name: title, exact: true }) });
+  await node.getByRole("img").click();
+  await node.getByRole("button", { name: "Details", exact: true }).click();
   await expect(panel(page, phone)).toBeVisible();
+  await panel(page, phone).locator("summary").filter({ hasText: /^Reference details$/ }).click();
+  await panel(page, phone).locator("summary").filter({ hasText: /^Usage and crop$/ }).click();
 }
 async function closePanel(page: Page, phone: boolean) {
   await panel(page, phone).getByRole("button", { name: "Close inspector" }).click();
@@ -138,7 +142,7 @@ for (const phone of [false, true]) {
     expect(restored.id).not.toBe(original.id);
     await expect(page.getByRole("dialog", { name: "Projects", exact: true })).toBeHidden();
     await list(page);
-    await expect(page.locator(".canvas-list-row")).toHaveCount(3);
+    await expect(page.locator(".board-material")).toHaveCount(3);
     await inspect(page, `North portrait ${suffix}`, phone);
     await expect(panel(page, phone).getByLabel("Creator", { exact: true })).toHaveValue("Studio acceptance fixture");
     await expect(panel(page, phone).getByLabel("Usage notes", { exact: true })).toHaveValue("Use as inspiration only.");
@@ -191,13 +195,13 @@ test("real pending reads retain content and drafts, and refresh Retry waits for 
     await expect.poll(initial.reached).toBe(true);
     await expect(page.locator(".canvas-status")).toContainText("Loading workspace");
     await expect(page.getByText("Drop your references here", { exact: true })).toBeHidden();
-    await expect(toolbar(page).getByRole("button", { name: "Add", exact: true })).toBeDisabled();
+    await expect(toolbar(page).getByRole("button", { name: "Note", exact: true })).toBeDisabled();
   } finally { initial.release(); }
   await expect(page.locator(".canvas-status")).toContainText("Saved");
   expect(errors).toEqual([]);
   expect(await references(page, project.id)).toHaveLength(1);
   await list(page);
-  await expect(page.locator(".canvas-list-row")).toHaveCount(1);
+  await expect(page.locator(".board-material")).toHaveCount(1);
   await inspect(page, "Acceptance portrait", false);
   const inspector = panel(page, false);
   await inspector.getByLabel("Title", { exact: true }).fill("Keep this local draft");
@@ -206,11 +210,11 @@ test("real pending reads retain content and drafts, and refresh Retry waits for 
     await externalNote(page, project.id, "Arrived from another session");
     await expect.poll(refreshing.reached).toBe(true);
     await expect(page.locator(".canvas-status")).toContainText("Updating");
-    await expect(page.locator(".canvas-list-row")).toHaveCount(1);
+    await expect(page.locator(".board-material")).toHaveCount(1);
     await expect(inspector.getByLabel("Title", { exact: true })).toHaveValue("Keep this local draft");
-    await expect(toolbar(page).getByRole("button", { name: "Add", exact: true })).toBeEnabled();
+    await expect(toolbar(page).getByRole("button", { name: "Note", exact: true })).toBeEnabled();
   } finally { refreshing.release(); }
-  await expect(page.locator(".canvas-list-row")).toHaveCount(2);
+  await expect(page.locator(".board-material")).toHaveCount(2);
   await expect(inspector.getByLabel("Title", { exact: true })).toHaveValue("Keep this local draft");
   await expect(page.locator(".canvas-status")).toContainText("Saved");
   const boardPath = `/api/projects/${project.id}/board`;
@@ -222,7 +226,7 @@ test("real pending reads retain content and drafts, and refresh Retry waits for 
     if (!response.ok) throw new Error("External reference update failed");
   }, { id: ref.reference.id, revision: ref.reference.revision });
   await expect(page.locator(".canvas-status")).toContainText("Refresh failed");
-  await expect(page.locator(".canvas-list-row")).toHaveCount(2);
+  await expect(page.locator(".board-material")).toHaveCount(2);
   await page.setViewportSize({ width: 960, height: 640 });
   const retry = await holdRead(page, boardPath);
   try {
@@ -237,15 +241,15 @@ test("real pending reads retain content and drafts, and refresh Retry waits for 
   await page.route(`${server.origin}${readPath}`, (route) => route.abort("failed"), { times: 1 });
   await externalNote(page, project.id, "Reference refresh recovery");
   await expect(page.locator(".canvas-status")).toContainText("References unavailable");
-  await expect(page.locator(".canvas-list-row")).toHaveCount(2);
+  await expect(page.locator(".board-material")).toHaveCount(2);
   const referenceRetry = await holdRead(page, readPath);
   try {
     await page.getByRole("button", { name: "Retry references", exact: true }).click();
     await expect.poll(referenceRetry.reached).toBe(true);
-    await expect(page.locator(".canvas-list-row")).toHaveCount(2);
+    await expect(page.locator(".board-material")).toHaveCount(2);
     await expect(inspector.getByLabel("Title", { exact: true })).toHaveValue("Keep this local draft");
   } finally { referenceRetry.release(); }
-  await expect(page.locator(".canvas-list-row")).toHaveCount(3);
+  await expect(page.locator(".board-material")).toHaveCount(3);
   await expect(page.locator(".canvas-status")).toContainText("Saved");
   expect(errors).toEqual([]);
   await page.screenshot({ path: info.outputPath("retained-draft-after-refresh.png") });

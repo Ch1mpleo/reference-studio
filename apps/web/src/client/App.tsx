@@ -73,32 +73,12 @@ export function App() {
       <header className="sample-topbar">
         <p className="sample-wordmark">Reference Studio</p>
         {import.meta.env.DEV ? <a href="#/studio">Interface preview</a> : null}
-        <details className="sample-connection">
-          <summary>
-            <span className={`sample-dot sample-dot-${connection.state}`} aria-hidden="true" />
-            {status.title}
-          </summary>
-          <div className="sample-diagnostics">
-            <dl>
-              <div>
-                <dt>Contract</dt>
-                <dd>{connection.health?.contractVersion ?? "Unknown"}</dd>
-              </div>
-              <div>
-                <dt>Updates</dt>
-                <dd>{connection.live ? "Listening" : "Not listening"}</dd>
-              </div>
-            </dl>
-            <p>{status.detail}</p>
-            <StudioButton type="button" onClick={connection.retry}>Check again</StudioButton>
-          </div>
-        </details>
       </header>
       {connection.state === "reconnecting" ? (
-        <p className="sample-banner" role="status">Current data may be stale. The page will refresh when the service returns.</p>
+        <div className="sample-banner" role="status">Reconnecting. Current data may be stale.<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
       ) : null}
       {connection.state === "unavailable" ? (
-        <p className="sample-banner" role="status">{status.detail}</p>
+        <div className="sample-banner" role="status">{status.detail}<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
       ) : null}
       {libraryVisible ? (
         <ProjectScreen

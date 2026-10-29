@@ -67,10 +67,8 @@ describe("ReferenceCollection", () => {
       }),
     );
     const file = new File([Uint8Array.from([1, 2, 3])], "north.png", { type: "image/png" });
-    const input = view.container.querySelector<HTMLInputElement>("#reference-link");
-    if (input === null) {
-      throw new Error("Expected the link field.");
-    }
+    const input = document.createElement("textarea");
+    view.container.append(input);
     await act(async () => {
       input.dispatchEvent(pasteEvent(file));
     });
@@ -107,16 +105,10 @@ describe("ReferenceCollection", () => {
         onPlace: vi.fn(),
       }),
     );
-    const input = view.container.querySelector<HTMLInputElement>("#reference-link");
-    const form = view.container.querySelector<HTMLFormElement>('form[aria-label="Add a link"]');
-    if (input === null || form === null) {
-      throw new Error("Expected the link form.");
-    }
     await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter?.call(input, "https://example.com/board");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: { files: [], getData: () => "https://example.com/board" } });
+      document.dispatchEvent(event);
     });
     expect(onAddLink).toHaveBeenCalledWith(
       expect.objectContaining({ url: "https://example.com/board", creator: "", motion: null }),
