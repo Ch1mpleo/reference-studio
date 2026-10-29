@@ -27,6 +27,7 @@ import {
   type ProjectReference,
   type UpdatePlacementRequest,
   type UpdateReferenceRequest,
+  type CreatePlacementRequest,
 } from "@reference-studio/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
@@ -42,6 +43,7 @@ import {
   rejectIdempotencyMismatch,
 } from "./idempotency.js";
 import { getProject } from "./projects.js";
+import { assertPlacementDirectionRevision, bumpPlacementDirection, readBoard, saveBoardLayout } from "./boards.js";
 
 const IMAGE_FIELDS = new Set(["title", "sourceUrl", "creator", "observations"]);
 const PATH_FIELDS = new Set(["path", "filePath", "filepath", "localPath"]);
@@ -175,11 +177,12 @@ export function registerReferenceRoutes(
       key,
       requestHash: hashCanonicalRequest(input),
       execute: () => {
-        const placed = placeReference(database, projectId, input.referenceId);
+        const placed = placeReference(database, projectId, input);
         return { statusCode: 201, body: placed, revision: placed.reference.revision, changed: true };
       },
     });
     publishReference(hub, projectId, outcome);
+    if (input.directionId !== undefined && outcome.changed && !outcome.replayed) publishChange(hub, { entity: "board", entityId: projectId, projectId, revision: readBoard(database, projectId).revision });
     return reply.code(outcome.statusCode).send(outcome.body);
   });
 
@@ -205,6 +208,7 @@ export function registerReferenceRoutes(
       },
     });
     publishPlacement(hub, projectId, outcome);
+    if (outcome.changed && !outcome.replayed) publishChange(hub, { entity: "board", entityId: projectId, projectId, revision: readBoard(database, projectId).revision });
     return reply.code(outcome.statusCode).send(outcome.body);
   });
 
@@ -819,7 +823,8 @@ function updateReference(database: DatabaseSync, id: string, input: UpdateRefere
   return saved;
 }
 
-function placeReference(database: DatabaseSync, projectId: string, referenceId: string): ProjectReference {
+function placeReference(database: DatabaseSync, projectId: string, input: CreatePlacementRequest): ProjectReference {
+  const { referenceId } = input;
   const reference = findLibraryReference(database, referenceId);
   if (reference === undefined || reference.archived) {
     throw new ServiceError("not_found", "Reference was not found.");
@@ -827,7 +832,7 @@ function placeReference(database: DatabaseSync, projectId: string, referenceId: 
   const existing = database
     .prepare("SELECT id FROM placements WHERE project_id = ? AND reference_id = ?")
     .get(projectId, referenceId);
-  if (existing !== undefined) {
+  if (existing !== undefined && input.directionId === undefined && input.allowDuplicate !== true) {
     throw new ServiceError("conflict", "This reference is already in the project.", {
       reason: "already_placed",
       referenceId,
@@ -844,7 +849,13 @@ function placeReference(database: DatabaseSync, projectId: string, referenceId: 
       ) VALUES (?, ?, ?, NULL, 'inspiration', '', NULL, '', NULL, 1, ?, ?)`,
     )
     .run(placementId, projectId, referenceId, now, now);
-  const placed = readProjectReference(database, projectId, referenceId);
+  if (input.directionId !== undefined) {
+    const board = readBoard(database, projectId);
+    const direction = board.layout.frames.find((frame) => frame.id === input.directionId && !frame.archived);
+    if (direction === undefined) throw new ServiceError("not_found", "Direction was not found in this project.");
+    saveBoardLayout(database, board, { ...board.layout, items: [...board.layout.items, { placementId, frameId: direction.id, rect: { x: 32, y: 64, width: 260, height: 180 } }] }, new Set([placementId]));
+  }
+  const placed = readPlacement(database, projectId, placementId);
   if (placed === undefined) {
     throw new Error("Placed reference is missing.");
   }
@@ -881,6 +892,7 @@ function updatePlacement(
     throw new ServiceError("not_found", "Placement was not found.");
   }
   assertExpectedRevision(current.revision, input.expectedRevision, { type: "placement", id: placementId });
+  assertPlacementDirectionRevision(database, projectId, placementId, input.expectedDirectionRevision);
   const role = input.role ?? current.role;
   const usageNotes = input.usageNotes ?? current.usageNotes;
   const crop = input.crop === undefined ? current.crop : input.crop;
@@ -890,6 +902,7 @@ function updatePlacement(
   if (role === current.role && usageNotes === current.usageNotes && sameCrop(crop, current.crop)) {
     return current;
   }
+  bumpPlacementDirection(database, projectId, placementId);
   const updatedAt = new Date().toISOString();
   const revision = current.revision + 1;
   const result = database
@@ -945,25 +958,6 @@ function findLibraryReference(database: DatabaseSync, id: string): LibraryRefere
     )
     .get(id);
   return row === undefined ? undefined : libraryReferenceFromRow(row);
-}
-
-function readProjectReference(
-  database: DatabaseSync,
-  projectId: string,
-  referenceId: string,
-): ProjectReference | undefined {
-  const row = database
-    .prepare(
-      `SELECT
-        ${PLACEMENT_COLUMNS}
-        ${LIBRARY_COLUMNS}
-      FROM placements
-      JOIN "references" ON "references".id = placements.reference_id
-      LEFT JOIN assets ON assets.id = "references".asset_id
-      WHERE placements.project_id = ? AND placements.reference_id = ?`,
-    )
-    .get(projectId, referenceId);
-  return row === undefined ? undefined : projectReferenceFromRow(row);
 }
 
 function projectIdsForReference(database: DatabaseSync, referenceId: string): string[] {

@@ -2,8 +2,10 @@ import { crc32, inflateRawSync } from "node:zlib";
 import {
   MAX_BACKUP_BYTES,
   MAX_BACKUP_ENTRIES,
+  MAX_BACKUP_MANIFEST_BYTES,
   ServiceError,
   backupTooLargeMessage,
+  backupManifestTooLargeMessage,
 } from "@reference-studio/core";
 import { zipSync } from "fflate";
 
@@ -22,11 +24,18 @@ type ZipEntry = {
 };
 
 export function writeBackupZip(files: ReadonlyMap<string, Uint8Array>): Buffer {
+  if (files.size > MAX_BACKUP_ENTRIES) throw new ServiceError("validation", "This backup has too many files.");
   const input: Record<string, Uint8Array> = {};
+  let uncompressed = 0;
   for (const [name, bytes] of files) {
+    if (name === "backup.json" && bytes.byteLength > MAX_BACKUP_MANIFEST_BYTES) throw new ServiceError("validation", backupManifestTooLargeMessage());
+    uncompressed += bytes.byteLength;
+    if (uncompressed > MAX_BACKUP_BYTES) throw new ServiceError("validation", backupTooLargeMessage());
     input[name] = bytes;
   }
-  return Buffer.from(zipSync(input, { level: 0 }));
+  const bytes = Buffer.from(zipSync(input, { level: 0 }));
+  if (bytes.byteLength > MAX_BACKUP_BYTES) throw new ServiceError("validation", backupTooLargeMessage());
+  return bytes;
 }
 
 export function readBackupZip(bytes: Buffer): Map<string, Buffer> {
@@ -57,6 +66,7 @@ function extractArchive(bytes: Buffer): Map<string, Buffer> {
     if (uncompressed > MAX_BACKUP_BYTES || compressed > MAX_BACKUP_BYTES) {
       throw new ServiceError("validation", backupTooLargeMessage());
     }
+    if (entry.name === "backup.json" && entry.uncompressedSize > MAX_BACKUP_MANIFEST_BYTES) throw new ServiceError("validation", backupManifestTooLargeMessage());
   }
   const extracted = new Map<string, Buffer>();
   for (const entry of files) {

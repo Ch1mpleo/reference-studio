@@ -239,6 +239,8 @@ export type UpdateReferenceRequest = z.infer<typeof updateReferenceRequestSchema
 export const createPlacementRequestSchema = z
   .object({
     referenceId: z.uuid(),
+    directionId: z.uuid().optional(),
+    allowDuplicate: z.boolean().optional(),
   })
   .strict();
 
@@ -247,6 +249,7 @@ export type CreatePlacementRequest = z.infer<typeof createPlacementRequestSchema
 export const updatePlacementRequestSchema = z
   .object({
     expectedRevision: z.number().int().positive(),
+    expectedDirectionRevision: z.number().int().positive().optional(),
     role: z.enum(PLACEMENT_ROLES).optional(),
     usageNotes: z.string().max(20_000).optional(),
     crop: imageCropSchema.nullable().optional(),

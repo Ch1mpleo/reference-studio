@@ -54,6 +54,19 @@ function manifest(patch?: Partial<BackupManifest>): BackupManifest {
 }
 
 describe("backup manifest", () => {
+  it("restores legacy boards and rejects contextual annotations with dangling, foreign, or non-image targets", () => {
+    const annotation = { id: "00000000-0000-4000-8000-000000000004", target: { type: "project", projectId }, body: "User correction", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" } };
+    expect(readBackupManifest(manifest({ formatVersion: 2, board: { frames: [], items: [] } })).formatVersion).toBe(2);
+    const current = { ...manifest(), formatVersion: 3, board: { frames: [], items: [], annotations: [annotation] } };
+    expect(readBackupManifest(current).board?.annotations?.[0]?.provenance.author).toBe("human");
+    for (const invalid of [
+      { ...annotation, target: { type: "project", projectId: placementId } },
+      { ...annotation, target: { type: "placement", placementId: projectId } },
+      { ...annotation, target: { type: "direction", directionId: projectId } },
+      { ...annotation, target: { type: "placement", placementId }, region: { x: 0, y: 0, width: 1, height: 1 } },
+      { ...annotation, decision: { rationale: "Dangling source", annotationId: projectId } },
+    ]) expect(() => readBackupManifest({ ...current, board: { ...current.board, annotations: [invalid] } })).toThrow(ServiceError);
+  });
   it("accepts a version 1 project with empty future sections", () => {
     expect(readBackupManifest(manifest()).project.name).toBe("Atlas");
   });
@@ -63,7 +76,7 @@ describe("backup manifest", () => {
     expect(() => readBackupManifest({ format: "other", formatVersion: 1 })).toThrow(
       "This file is not a Reference Studio backup.",
     );
-    expect(() => readBackupManifest(manifest({ formatVersion: 3 as never }))).toThrow(backupVersionMessage("3"));
+    expect(() => readBackupManifest(manifest({ formatVersion: 4 as never }))).toThrow(backupVersionMessage("4"));
     expect(() =>
       readBackupManifest({
         ...manifest(),

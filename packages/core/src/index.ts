@@ -94,6 +94,7 @@ export {
   MAX_BACKUP_MANIFEST_BYTES,
   backupAssetPath,
   backupManifestSchema,
+  backupManifestTooLargeMessage,
   backupTooLargeMessage,
   backupUploadRequestSchema,
   backupVersionMessage,
@@ -102,3 +103,5 @@ export {
 export type { BackupManifest, BackupUploadRequest } from "./backup.js";
 export { boardRectSchema, boardFrameSchema, boardItemSchema, boardLayoutSchema, boardSchema, updateBoardSchema } from "./board.js";
 export type { BoardRect, BoardFrame, BoardItem, BoardLayout, Board } from "./board.js";
+export { annotationTargetSchema, boardAnnotationSchema, updateDirectionSchema, duplicateDirectionSchema } from "./board.js";
+export type { AnnotationTarget, BoardAnnotation } from "./board.js";

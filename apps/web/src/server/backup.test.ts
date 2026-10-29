@@ -8,7 +8,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BACKUP_FORMAT,
   MAX_BACKUP_BYTES,
+  MAX_BACKUP_MANIFEST_BYTES,
   backupVersionMessage,
+  boardSchema,
+  createId,
+  projectSchema,
   type StudioEvent,
 } from "@reference-studio/core";
 import type { FastifyInstance } from "fastify";
@@ -17,7 +21,7 @@ import { createApp } from "./app.js";
 import type { AppConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { EventHub } from "./events.js";
-import { readBackupZip } from "./zipArchive.js";
+import { readBackupZip, writeBackupZip } from "./zipArchive.js";
 
 const PNG_1X1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -121,6 +125,34 @@ async function createProject(app: FastifyInstance, name: string, key: string): P
 }
 
 describe("backup and restore", () => {
+  it("round-trips supported annotation manifests larger than the legacy 2 MB ceiling", async () => {
+    const { app } = await startApp();
+    const projectId = await createProject(app, "Long annotations", "large-notes");
+    const text = "a".repeat(20_000);
+    const annotations = Array.from({ length: 27 }, () => ({ id: createId(), target: { type: "project", projectId }, body: text, borrowedQuality: text, translation: text, limitations: text, provenance: { author: "human" } }));
+    const saved = await app.inject({ method: "PUT", url: `/api/projects/${projectId}/board`, headers: agentHeaders("large-board"), payload: { expectedRevision: 1, layout: { frames: [], items: [], annotations } } });
+    expect(saved.statusCode).toBe(200);
+    const exported = await app.inject({ url: `/api/projects/${projectId}/backup`, headers: agentHeaders() });
+    expect(exported.statusCode).toBe(200);
+    const manifestBytes = readBackupZip(exported.rawPayload).get("backup.json")!;
+    expect(manifestBytes.byteLength).toBeGreaterThan(2 * 1024 * 1024);
+    const response = await restoreZip(app, exported.rawPayload, "large-notes-restore");
+    expect(response.statusCode).toBe(201);
+    const restoredProject = projectSchema.parse(response.json());
+    const restoredBoard = boardSchema.parse((await app.inject({ url: `/api/projects/${restoredProject.id}/board`, headers: agentHeaders() })).json());
+    expect(restoredBoard.layout.annotations).toHaveLength(27);
+    expect(restoredBoard.layout.annotations![26]!.translation).toBe(text);
+    expect(restoredBoard.layout.annotations![26]!.target).toEqual({ type: "project", projectId: restoredProject.id });
+  });
+
+  it("rejects oversized manifests consistently before writing or inflating archive entries", () => {
+    const message = "project details and annotations are larger than";
+    const manifest = Buffer.alloc(MAX_BACKUP_MANIFEST_BYTES + 1, 32);
+    expect(() => writeBackupZip(new Map([["backup.json", manifest]]))).toThrow(message);
+    expect(() => writeBackupZip(new Map(Array.from({ length: 6 }, (_, index) => [`assets/${index}.png`, manifest])))).toThrow("This backup is larger than 80 MB.");
+    const archive = storedArchive([{ name: "backup.json", data: Buffer.from("{}"), uncompressedSize: MAX_BACKUP_MANIFEST_BYTES + 1 }]);
+    expect(() => readBackupZip(archive)).toThrow(message);
+  });
   it("round-trips a project onto new ids and reuses the stored image", async () => {
     const { app, database, hub, config } = await startApp();
     const atlas = await createProject(app, "Atlas", "atlas");
@@ -329,12 +361,12 @@ describe("backup and restore", () => {
     const newer = await restoreZip(
       app,
       storedArchive([
-        { name: "backup.json", data: Buffer.from(JSON.stringify({ format: BACKUP_FORMAT, formatVersion: 3 })) },
+        { name: "backup.json", data: Buffer.from(JSON.stringify({ format: BACKUP_FORMAT, formatVersion: 4 })) },
       ]),
       "newer",
     );
     expect(newer.statusCode).toBe(400);
-    expect(JSON.stringify(newer.json())).toContain(backupVersionMessage("3"));
+    expect(JSON.stringify(newer.json())).toContain(backupVersionMessage("4"));
     const pathForm = multipart(Buffer.from("zip"), "backup.zip", { path: "C:\\secret.zip" });
     const pathResponse = await app.inject({
       method: "POST",

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import {
   backupAssetPath,
+  backupManifestTooLargeMessage,
   backupTooLargeMessage,
   backupUploadRequestSchema,
   createId,
@@ -14,6 +15,7 @@ import {
   ServiceError,
   type BackupManifest,
   type Project,
+  MAX_BACKUP_MANIFEST_BYTES,
 } from "@reference-studio/core";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
@@ -192,7 +194,7 @@ export function exportProjectBackup(
   }
   const manifest = readBackupManifest({
     format: "reference-studio-backup",
-    formatVersion: 2,
+    formatVersion: 3,
     exportedAt: new Date().toISOString(),
     project: {
       originalId: project.id,
@@ -419,13 +421,19 @@ function insertRestoredProject(
   }
   if (manifest.board !== undefined) {
     const frameIds = new Map(manifest.board.frames.map((frame) => [frame.id, createId()]));
+    const annotationIds = new Map((manifest.board.annotations ?? []).map((annotation) => [annotation.id, createId()]));
     writeBoard(database, {
       projectId: project.id,
       revision: 1,
       layout: {
-        frames: manifest.board.frames.map((frame) => ({ ...frame, id: frameIds.get(frame.id)! })),
+        frames: manifest.board.frames.map((frame) => ({ ...frame, id: frameIds.get(frame.id)!, revision: frame.revision ?? 1 })),
         items: manifest.board.items.map((item) => ({ ...item, placementId: placementIds.get(item.placementId)!,
           frameId: item.frameId === null ? null : frameIds.get(item.frameId)! })),
+        ...(manifest.board.annotations === undefined ? {} : { annotations: manifest.board.annotations.map((annotation) => ({ ...annotation,
+          id: annotationIds.get(annotation.id)!,
+          target: annotation.target.type === "project" ? { type: "project" as const, projectId: project.id } : annotation.target.type === "direction" ? { type: "direction" as const, directionId: frameIds.get(annotation.target.directionId)! } : { type: "placement" as const, placementId: placementIds.get(annotation.target.placementId)! },
+          ...(annotation.decision === undefined ? {} : { decision: { ...annotation.decision, ...(annotation.decision.annotationId === undefined ? {} : { annotationId: annotationIds.get(annotation.decision.annotationId)! }) } }),
+        })) }),
       },
     });
   }
@@ -621,8 +629,8 @@ async function readBackupUpload(request: FastifyRequest): Promise<Buffer> {
 }
 
 function parseManifestJson(bytes: Buffer): unknown {
-  if (bytes.byteLength > 2 * 1024 * 1024) {
-    throw new ServiceError("validation", backupTooLargeMessage());
+  if (bytes.byteLength > MAX_BACKUP_MANIFEST_BYTES) {
+    throw new ServiceError("validation", backupManifestTooLargeMessage());
   }
   try {
     return JSON.parse(bytes.toString("utf8")) as unknown;
