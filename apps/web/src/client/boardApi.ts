@@ -1,16 +1,35 @@
-import { boardSchema, serviceErrorBodySchema, type Board, type BoardLayout } from "@reference-studio/core";
+import { boardSchema, serviceErrorBodySchema, updateDirectionSchema, duplicateDirectionSchema,
+  type Board, type BoardLayout, type BoardFrame } from "@reference-studio/core";
+
+export type DirectionPatch = Partial<Pick<BoardFrame, "name" | "concept" | "feeling" | "decisions" | "questions" | "archived">>;
 
 export class BoardRequestError extends Error {
-  constructor(message: string, readonly conflict = false) { super(message); }
+  constructor(message: string, readonly conflict = false, readonly currentRevision?: number) { super(message); }
 }
 
 async function read(response: Response): Promise<Board> {
   const body: unknown = await response.json();
   if (!response.ok) {
     const parsed = serviceErrorBodySchema.safeParse(body);
-    throw new BoardRequestError(parsed.success ? parsed.data.error.message : "The board could not be saved.", response.status === 409);
+    const details = parsed.success ? parsed.data.error.details : undefined;
+    const revision = typeof details === "object" && details !== null && "currentRevision" in details && typeof details.currentRevision === "number" ? details.currentRevision : undefined;
+    throw new BoardRequestError(parsed.success ? parsed.data.error.message : "The board could not be saved.", response.status === 409, revision);
   }
   return boardSchema.parse(body);
+}
+
+export async function patchDirection(projectId: string, directionId: string, input: DirectionPatch & { expectedRevision: number }, key: string): Promise<Board> {
+  const parsed = updateDirectionSchema.parse(input);
+  return read(await fetch(`/api/projects/${projectId}/directions/${directionId}`, {
+    method: "PATCH", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify(parsed),
+  }));
+}
+
+export async function duplicateDirection(projectId: string, directionId: string, expectedRevision: number, key: string, name?: string): Promise<Board> {
+  const parsed = duplicateDirectionSchema.parse({ expectedRevision, ...(name === undefined ? {} : { name }) });
+  return read(await fetch(`/api/projects/${projectId}/directions/${directionId}/duplicate`, {
+    method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify(parsed),
+  }));
 }
 
 export async function getBoard(projectId: string): Promise<Board> {

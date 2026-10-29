@@ -24,7 +24,18 @@ export function groupSelection(layout: BoardLayout, ids: string[], name: string,
   const y = boxes.length ? Math.min(...boxes.map((rect) => rect.y)) - 64 : 80;
   const width = boxes.length ? Math.max(...boxes.map((rect) => rect.x + rect.width)) - x + 32 : 640;
   const height = boxes.length ? Math.max(...boxes.map((rect) => rect.y + rect.height)) - y + 32 : 480;
-  return { frames: [...layout.frames, { id, name, archived: false, concept: "", feeling: "", decisions: "", questions: "", rect: { x, y, width, height } }],
+  return { ...layout, frames: [...layout.frames, { id, name, archived: false, concept: "", feeling: "", decisions: "", questions: "", rect: { x, y, width, height } }],
     items: layout.items.map((item) => { if (!ids.includes(item.placementId)) return item; const point = absoluteItem(item, layout);
       return { ...item, frameId: id, rect: { ...item.rect, x: point.x - x, y: point.y - y } }; }) };
+}
+
+/** Keyboard/list equivalent of dragging a reference into or out of a frame. */
+export function moveSelection(layout: BoardLayout, ids: string[], frameId: string | null): BoardLayout {
+  const target = layout.frames.find((frame) => frame.id === frameId && !frame.archived);
+  if (frameId !== null && !target) return layout;
+  return { ...layout, items: layout.items.map((item) => {
+    if (!ids.includes(item.placementId) || item.frameId === frameId) return item;
+    const absolute = absoluteItem(item, layout);
+    return { ...item, frameId, rect: { ...item.rect, x: absolute.x - (target?.rect.x ?? 0), y: absolute.y - (target?.rect.y ?? 0) } };
+  }) };
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addProjectLink, resetReferenceRequestMemory } from "./referenceApi.js";
+import { addProjectLink, placeReference, resetReferenceRequestMemory } from "./referenceApi.js";
 
 const reference = {
   placementId: "00000000-0000-4000-8000-000000000010",
@@ -26,6 +26,17 @@ const reference = {
 };
 
 describe("reference requests", () => {
+  it("creates a separate use of an existing reference in an explicit direction", async () => {
+    const directionId = "00000000-0000-4000-8000-000000000003";
+    const bodies: unknown[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return Response.json(reference, { status: 201 });
+    });
+    expect(await placeReference("00000000-0000-4000-8000-000000000001", reference.reference.id, { directionId, allowDuplicate: true })).toMatchObject({ placementId: reference.placementId });
+    expect(bodies).toEqual([{ referenceId: reference.reference.id, directionId, allowDuplicate: true }]);
+  });
+
   afterEach(() => {
     resetReferenceRequestMemory();
     vi.unstubAllGlobals();

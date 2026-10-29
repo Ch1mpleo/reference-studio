@@ -16,6 +16,7 @@ import {
   updateReference,
   uploadProjectImage,
   type PlacementUseInput,
+  type PlacementOptions,
   type ReferenceDetailsInput,
 } from "./referenceApi.js";
 
@@ -32,7 +33,7 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
   addNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   saveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
   savePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
-  place: (referenceId: string) => Promise<ProjectReference>;
+  place: (referenceId: string, options?: PlacementOptions) => Promise<ProjectReference>;
 } {
   const [references, setReferences] = useState<ProjectReference[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
 
   const remember = useCallback((item: ProjectReference): void => {
     generation.current += 1;
+    setRefreshing(false);
     setReferences((current) => [item, ...current.filter((entry) => entry.placementId !== item.placementId)]);
     setNotice(null);
   }, []);
@@ -135,8 +137,8 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
   );
 
   const place = useCallback(
-    async (referenceId: string): Promise<ProjectReference> => {
-      const item = await placeReference(projectId, referenceId);
+    async (referenceId: string, options?: PlacementOptions): Promise<ProjectReference> => {
+      const item = await placeReference(projectId, referenceId, options);
       remember(item);
       return item;
     },

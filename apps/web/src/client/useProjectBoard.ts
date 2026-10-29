@@ -5,6 +5,19 @@ import { BoardRequestError, getBoard, putBoard } from "./boardApi.js";
 const empty: BoardLayout = { frames: [], items: [] };
 type Attempt = { layout: BoardLayout; revision: number; key: string };
 
+/** Rebase revision preconditions only; queued edits and undo retain their own values. */
+function currentRevisions(layout: BoardLayout, authoritative: BoardLayout): BoardLayout {
+  const revisions = new Map(authoritative.frames.map((frame) => [frame.id, frame.revision]));
+  const existing = new Set(layout.frames.map((frame) => frame.id));
+  return { ...layout,
+    frames: [...layout.frames.map((frame) => {
+      const revision = revisions.get(frame.id);
+      return revision === undefined ? frame : { ...frame, revision };
+    }), ...authoritative.frames.filter((frame) => !existing.has(frame.id)).map((frame) => ({ ...frame, archived: true }))],
+    ...(layout.annotations === undefined && authoritative.annotations !== undefined ? { annotations: authoritative.annotations } : {}),
+  };
+}
+
 export function useProjectBoard(projectId: string, refreshKey: number) {
   const [layout, setLayout] = useState<BoardLayout>(empty);
   const [state, setState] = useState<"loading" | "saved" | "saving" | "error" | "conflict">("loading");
@@ -63,7 +76,12 @@ export function useProjectBoard(projectId: string, refreshKey: number) {
         pending.current = attempt;
         const board = await putBoard(projectId, attempt.revision, attempt.layout, attempt.key);
         if (!mounted.current) return;
-        saved.current = { ...board, layout: attempt.layout };
+        const next = draft.current === attempt.layout ? board.layout : currentRevisions(draft.current, board.layout);
+        saved.current = board;
+        draft.current = next;
+        past.current = past.current.map((entry) => currentRevisions(entry, board.layout));
+        future.current = future.current.map((entry) => currentRevisions(entry, board.layout));
+        setLayout(next);
         pending.current = null;
       }
       if (mounted.current) setState("saved");
@@ -119,7 +137,7 @@ export function useProjectBoard(projectId: string, refreshKey: number) {
       past.current = [];
       future.current = [];
       updateHistory();
-      if (reapply) { void flush(); }
+      if (reapply) { draft.current = currentRevisions(draft.current, latest.layout); setLayout(draft.current); void flush(); }
       else { draft.current = latest.layout; setLayout(latest.layout); setState("saved"); setMessage(null); }
     } catch { setMessage("The latest arrangement could not be loaded. Your arrangement is still here."); }
   }
@@ -136,7 +154,20 @@ export function useProjectBoard(projectId: string, refreshKey: number) {
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
   function beginGesture(): void { interacting.current = true; generation.current++; }
-  return { layout, state, message, commit, beginGesture, undo, redo, retry, recover, loaded: saved.current !== null, currentLayout: () => draft.current,
+  function completeWhenIdle(next: BoardLayout): void {
+    if (interacting.current || working.current || blocked.current) return;
+    commit(next);
+  }
+  function acceptServer(board: Board): void {
+    if (saved.current && board.revision <= saved.current.revision) return;
+    if (board.projectId !== projectId || interacting.current || working.current || pending.current || blocked.current ||
+      (saved.current && draft.current !== saved.current.layout)) return;
+    generation.current++;
+    saved.current = board; draft.current = board.layout;
+    setLayout(board.layout); setState("saved"); setMessage(null);
+    past.current = []; future.current = []; updateHistory();
+  }
+  return { layout, state, message, commit, completeWhenIdle, beginGesture, undo, redo, retry, recover, acceptServer, refresh: load, loaded: saved.current !== null, currentLayout: () => draft.current,
     unsaved: Boolean(pending.current || (saved.current && draft.current !== saved.current.layout)),
     canUndo: history.undo > 0 && state === "saved", canRedo: history.redo > 0 && state === "saved" };
 }

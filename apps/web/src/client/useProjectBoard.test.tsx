@@ -21,6 +21,7 @@ async function mount() {
 }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((accept) => { resolve = accept; }); return { promise, resolve }; }
 beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.resetAllMocks();
   vi.mocked(getBoard).mockResolvedValue({ projectId, revision: 1, layout: empty });
   vi.mocked(putBoard).mockImplementation(async (_, revision, layout) => ({ projectId, revision: revision + 1, layout }));
@@ -28,6 +29,57 @@ beforeEach(() => {
 afterEach(async () => { for (const root of roots.splice(0)) await act(async () => { root.unmount(); }); document.body.replaceChildren(); });
 
 describe("board save lifecycle", () => {
+  it("ignores an older replayed command response after newer board state was loaded", async () => {
+    vi.mocked(getBoard).mockResolvedValue({ projectId, revision: 4, layout: arrange(99) });
+    await mount();
+    await act(async () => { snapshot.acceptServer({ projectId, revision: 2, layout: arrange(10) }); });
+    expect(snapshot.layout).toEqual(arrange(99));
+  });
+
+  it("undoes frame creation by archiving its record and redoes with the same stable ID", async () => {
+    const frame = { id: "00000000-0000-4000-8000-000000000003", name: "North", archived: false, concept: "", feeling: "", decisions: "", questions: "", rect: { x: 10, y: 20, width: 640, height: 480 } };
+    vi.mocked(putBoard).mockImplementation(async (_, revision, layout) => ({ projectId, revision: revision + 1,
+      layout: { ...layout, frames: layout.frames.map((entry) => ({ ...entry, revision })) } }));
+    await mount();
+    await act(async () => { snapshot.commit({ frames: [frame], items: [] }); });
+    await act(async () => { snapshot.undo(); });
+    expect(vi.mocked(putBoard).mock.calls[1]?.[2].frames).toEqual([{ ...frame, archived: true, revision: 1 }]);
+    expect(snapshot.canRedo).toBe(true);
+    await act(async () => { snapshot.redo(); });
+    expect(vi.mocked(putBoard).mock.calls[2]?.[2].frames).toEqual([{ ...frame, archived: false, revision: 2 }]);
+  });
+
+  it("carries authoritative direction revisions through queued edits and undo", async () => {
+    const directionId = "00000000-0000-4000-8000-000000000003";
+    const directionLayout = (x: number, revision: number) => ({
+      frames: [{ id: directionId, name: "North", archived: false, concept: "", feeling: "", decisions: "", questions: "", revision,
+        rect: { x, y: 0, width: 640, height: 480 } }], items: [],
+    });
+    vi.mocked(getBoard).mockResolvedValue({ projectId, revision: 1, layout: directionLayout(0, 1) });
+    const first = deferred<Board>();
+    vi.mocked(putBoard).mockImplementationOnce(() => first.promise).mockImplementation(async (_, revision, layout) => ({
+      projectId, revision: revision + 1, layout: { ...layout, frames: layout.frames.map((frame) => ({ ...frame, revision: revision + 1 })) },
+    }));
+    await mount();
+    await act(async () => { snapshot.commit(directionLayout(10, 1)); });
+    await act(async () => { snapshot.commit(directionLayout(20, 1)); });
+    await act(async () => { first.resolve({ projectId, revision: 2, layout: directionLayout(10, 2) }); });
+    expect(vi.mocked(putBoard).mock.calls[1]?.[2]).toEqual(directionLayout(20, 2));
+    expect(snapshot.layout).toEqual(directionLayout(20, 3));
+    await act(async () => { snapshot.undo(); });
+    expect(vi.mocked(putBoard).mock.calls[2]?.slice(1, 3)).toEqual([3, directionLayout(10, 3)]);
+    expect(snapshot.layout).toEqual(directionLayout(10, 4));
+  });
+
+  it("does not replace an active local gesture with a separately accepted server operation", async () => {
+    await mount();
+    await act(async () => { snapshot.beginGesture(); });
+    await act(async () => { snapshot.acceptServer({ projectId, revision: 3, layout: arrange(99) }); });
+    expect(snapshot.layout).toEqual(empty);
+    await act(async () => { snapshot.commit(arrange(10)); });
+    expect(vi.mocked(putBoard).mock.calls[0]?.slice(0, 3)).toEqual([projectId, 1, arrange(10)]);
+  });
+
   it("queues newer arrangements and only marks the latest accepted intent saved", async () => {
     const first = deferred<Board>();
     vi.mocked(putBoard).mockImplementationOnce(() => first.promise);

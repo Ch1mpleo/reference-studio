@@ -58,6 +58,27 @@ describe("project reference loading", () => {
   afterEach(() => {
     document.body.replaceChildren();
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("clears an obsolete refresh after a successful placement response supersedes it", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    vi.stubGlobal("fetch", async () => Response.json(reference, { status: 201 }));
+    let finishRefresh: (value: ProjectReference[]) => void = () => undefined;
+    vi.mocked(listProjectReferences).mockResolvedValueOnce([]).mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; }));
+    let library!: ReturnType<typeof useProjectReferences>;
+    function Probe({ refreshKey }: { refreshKey: number }) { library = useProjectReferences("00000000-0000-4000-8000-000000000001", refreshKey); return null; }
+    const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+    await act(async () => root.render(createElement(Probe, { refreshKey: 0 })));
+    await act(async () => root.render(createElement(Probe, { refreshKey: 1 })));
+    expect(library.refreshing).toBe(true);
+    await act(async () => { await library.place(reference.reference.id, { allowDuplicate: true }); });
+    expect(library.references).toEqual([reference]);
+    expect(library.refreshing).toBe(false);
+    await act(async () => finishRefresh([]));
+    expect(library.references).toEqual([reference]);
+    expect(library.refreshing).toBe(false);
+    await act(async () => root.unmount());
   });
 
   it("keeps the loaded list during refresh and ignores an older response", async () => {

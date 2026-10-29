@@ -48,10 +48,13 @@ export type ReferenceDetailsInput = {
 
 export type PlacementUseInput = {
   expectedRevision: number;
+  expectedDirectionRevision?: number;
   role: ProjectReference["role"];
   usageNotes: string;
   crop?: ImageCrop | null;
 };
+
+export type PlacementOptions = { directionId?: string; allowDuplicate?: boolean };
 
 export type ReferenceSearchInput = {
   q: string;
@@ -131,8 +134,8 @@ export async function updateReference(referenceId: string, input: ReferenceDetai
   return parseContract(libraryReferenceSchema, await response.json(), "Reference was invalid.");
 }
 
-export async function placeReference(projectId: string, referenceId: string): Promise<ProjectReference> {
-  const parsed = parseContract(createPlacementRequestSchema, { referenceId }, "Placement is invalid.");
+export async function placeReference(projectId: string, referenceId: string, options: PlacementOptions = {}): Promise<ProjectReference> {
+  const parsed = parseContract(createPlacementRequestSchema, { referenceId, ...options }, "Placement is invalid.");
   const response = await send(`/api/projects/${projectId}/placements`, parsed, { json: parsed });
   return parseContract(projectReferenceSchema, await response.json(), "Reference was invalid.");
 }
