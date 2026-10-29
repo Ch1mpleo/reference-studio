@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { IMAGE_MEDIA_TYPES, MAX_IMAGE_BYTES, imageTooLargeMessage, isHttpUrl,
-  type BoardLayout, type CreateLinkReference, type CreateNoteReference, type ImageFields,
+  type Board, type BoardFrame, type CreateLinkReference, type CreateNoteReference, type ImageFields,
   type LibraryReference, type ProjectReference } from "@reference-studio/core";
 import { BoardCanvas, type BoardView } from "./BoardCanvas.js";
-import { completeBoard, groupSelection } from "./boardGeometry.js";
+import { completeBoard, groupSelection, moveSelection } from "./boardGeometry.js";
 import { useProjectBoard } from "./useProjectBoard.js";
 import { ReferenceDetails } from "./ReferenceDetails.js";
 import { PlacementUse } from "./PlacementUse.js";
@@ -12,12 +12,20 @@ import { LinkForm, NoteForm } from "./ReferenceForms.js";
 import { StudioButton } from "./StudioButton.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioInspector } from "./StudioInspector.js";
-import type { PlacementUseInput, ReferenceDetailsInput } from "./referenceApi.js";
+import { StudioSelect } from "./StudioSelect.js";
+import { AnnotationEditor } from "./AnnotationEditor.js";
+import { DirectionEditor } from "./DirectionEditor.js";
+import { DirectionViews } from "./DirectionViews.js";
+import { ImageRegions } from "./ImageRegions.js";
+import { GeometryEditor } from "./GeometryEditor.js";
+import { BoardRequestError, duplicateDirection, patchDirection, type DirectionPatch } from "./boardApi.js";
+import type { PlacementOptions, PlacementUseInput, ReferenceDetailsInput } from "./referenceApi.js";
 import type { ReferenceLoadStatus } from "./useProjectReferences.js";
 
 const emptyFields: ImageFields = { title: "", sourceUrl: null, creator: null, observations: "" };
 type Point = { x: number; y: number };
-type Panel = "library" | "inspect" | null;
+type Panel = "library" | "inspect" | "notes" | null;
+type ViewMode = "board" | "list" | "focus" | "compare";
 export type CollectionProps = {
   projectId: string; refreshKey: number;
   references: ProjectReference[]; notice: string | null; status?: ReferenceLoadStatus; refreshing?: boolean;
@@ -27,7 +35,7 @@ export type CollectionProps = {
   onAddNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   onSaveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
   onSavePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
-  onPlace: (referenceId: string) => Promise<ProjectReference>;
+  onPlace: (referenceId: string, options?: PlacementOptions) => Promise<ProjectReference>;
 };
 
 export function ReferenceWorkspace({ projectId, refreshKey, references, notice, status = "ready", refreshing = false,
@@ -39,7 +47,15 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   const [panel, setPanel] = useState<Panel>(null);
   const [dialog, setDialog] = useState<"add" | "frame" | "recover" | null>(null);
   const [addTab, setAddTab] = useState<"link" | "note">("note");
-  const [viewMode, setViewMode] = useState<"board" | "list">(() => window.matchMedia("(max-width: 639px)").matches ? "list" : "board");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const stored = sessionStorage.getItem(`rs-board-mode:${projectId}`);
+    return stored === "board" || stored === "list" || stored === "focus" || stored === "compare" ? stored : window.matchMedia("(max-width: 639px)").matches ? "list" : "board";
+  });
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [comparedId, setComparedId] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState("");
+  const [operation, setOperation] = useState(false);
+  const retryKeys = useRef(new Map<string, string>());
   const [hand, setHand] = useState(false);
   const [zoom, setZoom] = useState(0.8);
   const [frameName, setFrameName] = useState("");
@@ -58,10 +74,17 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   const viewed = references.find((item) => item.placementId === viewer) ?? null;
   const ready = board.loaded && status === "ready";
   const effective = completeBoard(board.layout, references);
+  const activeFrames = effective.frames.filter((frame) => !frame.archived);
+  const firstFrame = activeFrames.find((frame) => frame.id === focusedId) ?? activeFrames[0];
+  const secondFrame = activeFrames.find((frame) => frame.id === comparedId && frame.id !== firstFrame?.id) ?? activeFrames.find((frame) => frame.id !== firstFrame?.id);
+  const annotations = board.layout.annotations ?? [];
+  const selectedPlacements = selection.filter((id) => effective.items.some((item) => item.placementId === id));
+
+  useEffect(() => { sessionStorage.setItem(`rs-board-mode:${projectId}`, viewMode); }, [projectId, viewMode]);
 
   useEffect(() => {
-    if (ready && effective !== board.layout) board.commit(effective);
-  }, [references, ready, board.layout]);
+    if (ready && !operation && board.state === "saved" && effective !== board.layout) board.completeWhenIdle(effective);
+  }, [references, ready, board.layout, board.state, operation]);
 
   function inspect(id: string): void {
     setInspectedId(id); setPanel("inspect");
@@ -155,29 +178,68 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     finally { setImporting(false); }
   }
 
+  async function directionAction(frame: BoardFrame, patch?: DirectionPatch, expectedRevision = frame.revision ?? 1): Promise<Board> {
+    if (board.unsaved || operation) throw new Error("Wait for the arrangement to save before changing this direction.");
+    const signature = JSON.stringify({ directionId: frame.id, patch, expectedRevision });
+    const key = retryKeys.current.get(signature) ?? crypto.randomUUID();
+    retryKeys.current.set(signature, key); setOperation(true);
+    try {
+      const saved = patch ? await patchDirection(projectId, frame.id, { ...patch, expectedRevision }, key) : await duplicateDirection(projectId, frame.id, expectedRevision, key);
+      retryKeys.current.delete(signature);
+      board.acceptServer(saved);
+      await onRetryReferences();
+      return saved;
+    } catch (error) {
+      if (error instanceof BoardRequestError) {
+        retryKeys.current.delete(signature);
+        if (error.conflict) await board.refresh();
+      }
+      throw error;
+    } finally { setOperation(false); }
+  }
+
+  async function addAnotherUse(item: ProjectReference): Promise<void> {
+    setOperation(true); setMessage(null);
+    try {
+      const placed = await onPlace(item.reference.id, { allowDuplicate: true, ...(moveTarget ? { directionId: moveTarget } : {}) });
+      setSelection([placed.placementId]);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not add another use."); }
+    finally { await board.refresh(); await onRetryReferences(); setOperation(false); }
+  }
+
   return <section ref={root} className="canvas-workspace" aria-label="Project canvas" tabIndex={-1} data-dropping={dropping} data-panel-open={panel !== null}
     onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setDropping(true); } }}
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) setDropping(false); }} onDrop={drop}>
     <div className="canvas-surface" hidden={viewMode !== "board"}>
-      <BoardCanvas projectId={projectId} layout={effective} references={references} selection={selection} hand={hand}
+      <BoardCanvas projectId={projectId} layout={effective} references={references} selection={selection} hand={hand} readOnly={operation}
         onSelect={setSelection} onCommit={board.commit} onInspect={inspect} onView={view}
         onGestureStart={board.beginGesture}
         onReady={(instance) => { canvas.current = instance; }} onZoom={setZoom} />
     </div>
+    {viewMode === "focus" || viewMode === "compare" ? <div className="canvas-direction-view">
+      <DirectionViews mode={viewMode} frames={effective.frames} layout={effective} references={references} firstId={firstFrame?.id ?? ""} secondId={secondFrame?.id ?? null}
+        onFirstChange={setFocusedId} onSecondChange={setComparedId} onInspect={inspect} onView={view} />
+      {firstFrame ? <StudioButton className="canvas-inspect-direction" onClick={() => inspect(firstFrame.id)}>Inspect direction</StudioButton> : <p>Create a direction from the Group tool to start reviewing.</p>}
+    </div> : null}
     {viewMode === "list" ? <div className="canvas-list"><h2>References</h2>
-      {references.map((item) => <article className="canvas-list-row" key={item.placementId}>
+      {activeFrames.length ? <div className="canvas-list-directions" aria-label="Directions">{activeFrames.map((frame) => <article className="canvas-direction-row" key={frame.id}>
+        <input type="checkbox" aria-label={`Select direction ${frame.name}`} checked={selection.includes(frame.id)} onChange={(event) => setSelection(event.target.checked ? [...selection, frame.id] : selection.filter((id) => id !== frame.id))} />
+        <span>{frame.name} · Draft</span><StudioButton variant="ghost" onClick={() => { setFocusedId(frame.id); setViewMode("focus"); }}>Focus</StudioButton><StudioButton variant="ghost" onClick={() => inspect(frame.id)}>Inspect</StudioButton>
+      </article>)}</div> : null}
+      {references.map((item) => <article className="canvas-list-row" key={item.placementId} data-placement-id={item.placementId}>
         <input type="checkbox" aria-label={`Select ${item.reference.title}`} checked={selection.includes(item.placementId)}
           onChange={(event) => setSelection(event.target.checked ? [...selection, item.placementId] : selection.filter((id) => id !== item.placementId))} />
         {item.reference.asset ? <img src={`/api/assets/${item.reference.asset.id}/thumbnail`} alt="" /> : null}
-        <div><h3>{item.reference.title}</h3><p className="studio-meta">{item.reference.kind}</p></div>
+        <div><h3>{item.reference.title}</h3><p className="studio-meta">{item.reference.kind} · {effective.frames.find((frame) => frame.id === effective.items.find((entry) => entry.placementId === item.placementId)?.frameId)?.name ?? "Inbox"}</p></div>
         <StudioButton variant="ghost" onClick={() => inspect(item.placementId)}>Inspect</StudioButton>
         {item.reference.asset ? <StudioButton variant="ghost" onClick={() => view(item.placementId)}>View</StudioButton> : null}
       </article>)}
+      {selectedPlacements.length ? <div className="canvas-list-move"><StudioSelect label="Move selected to" value={moveTarget} options={[{ value: "", label: "Inbox" }, ...activeFrames.map((frame) => ({ value: frame.id, label: frame.name }))]} onChange={setMoveTarget} /><StudioButton disabled={operation || !ready} onClick={() => board.commit(moveSelection(effective, selectedPlacements, moveTarget || null))}>Move selected</StudioButton><StudioButton variant="ghost" onClick={() => setSelection([])}>Clear selection</StudioButton></div> : null}
     </div> : null}
     {ready && references.length === 0 ? <div className="canvas-empty"><pre aria-hidden="true">{"[ + ]"}</pre><h1>Drop your references here</h1><p>Paste an image, link, or thought. Arrange it into a direction.</p></div> : null}
     {dropping ? <div className="canvas-drop-hint" aria-hidden="true">Drop images onto your canvas</div> : null}
     <div className="canvas-status" role="status">
-      {status === "loading" || board.state === "loading" ? "Loading workspace" : status === "error" ? "References unavailable" : importing ? "Adding references" : board.state === "saving" ? "Saving arrangement" : board.state === "saved" ? (refreshing ? "Updating" : "Saved") : board.unsaved ? "Arrangement not saved" : board.loaded ? "Refresh failed" : "Could not load workspace"}
+      {status === "loading" || board.state === "loading" ? "Loading workspace" : status === "error" ? "References unavailable" : importing ? "Adding references" : operation ? "Saving direction" : board.state === "saving" ? "Saving arrangement" : board.state === "saved" ? (refreshing ? "Updating" : "Saved") : board.unsaved ? "Arrangement not saved" : board.loaded ? "Refresh failed" : "Could not load workspace"}
       {notice ? <p className="form-error">{notice}</p> : null}{message ? <p>{message}</p> : null}{board.message ? <p className="form-error">{board.message}</p> : null}
       {board.state === "error" ? <StudioButton onClick={board.retry}>Retry</StudioButton> : null}
       {status === "error" ? <StudioButton busy={refreshing} onClick={() => void onRetryReferences()}>Retry references</StudioButton> : null}
@@ -201,15 +263,17 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
         <span className="studio-meta canvas-zoom" hidden={viewMode !== "board"}>{Math.round(zoom * 100)}%</span>
         <StudioButton aria-label="Zoom in" hidden={viewMode !== "board"} onClick={() => void canvas.current?.zoomIn()}>+</StudioButton>
         <StudioButton hidden={viewMode !== "board"} onClick={() => void canvas.current?.fitView({ padding: 0.2, maxZoom: 1, ...(selection.length ? { nodes: selection.map((id) => ({ id })) } : {}) })}>{selection.length ? "Fit selection" : "Fit"}</StudioButton>
-        <StudioButton onClick={() => setViewMode(viewMode === "board" ? "list" : "board")}>{viewMode === "board" ? "List" : "Board"}</StudioButton>
+        <StudioSelect label="View" value={viewMode} options={[{ value: "board", label: "Board" }, { value: "list", label: "List" }, { value: "focus", label: "Focused direction" }, { value: "compare", label: "Compare directions" }]}
+          onChange={(value) => { if (value === "board" || value === "list" || value === "focus" || value === "compare") setViewMode(value); }} />
       </div>
     </div>
     <StudioInspector open={panel !== null} retainContent onClose={closePanel}>
       <div hidden={panel !== "library"} className="canvas-panel-content"><h2>Library</h2><p className="studio-meta">Find a collected reference to bring onto this board.</p>
+        <StudioButton onClick={() => setPanel("notes")}>Project notes</StudioButton>
         {board.layout.frames.length ? <section className="canvas-directions"><h3>Directions</h3>{board.layout.frames.map((frame) => <div className="canvas-direction-row" key={frame.id}>
           <span>{frame.name}{frame.archived ? " · archived" : ""}</span>
-          {frame.archived ? <StudioButton variant="ghost" onClick={() => board.commit({ ...board.layout, frames: board.layout.frames.map((entry) => entry.id === frame.id ? { ...entry, archived: false } : entry) })}>Restore</StudioButton> : <StudioButton variant="ghost" onClick={() => {
-            setSelection([frame.id]); setViewMode("board"); inspect(frame.id); void canvas.current?.fitView({ nodes: [{ id: frame.id }], padding: 0.3, maxZoom: 1 });
+          {frame.archived ? <StudioButton variant="ghost" disabled={operation} onClick={() => void directionAction(frame, { archived: false }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not restore direction."))}>Restore</StudioButton> : <StudioButton variant="ghost" onClick={() => {
+            setSelection([frame.id]); setFocusedId(frame.id); setViewMode("focus"); inspect(frame.id);
           }}>Open</StudioButton>}
         </div>)}</section> : null}
         <ReferenceSearch placedReferenceIds={references.map((item) => item.reference.id)} onPlace={async (id) => {
@@ -218,15 +282,30 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       </div>
       <div hidden={panel !== "inspect"} className="canvas-panel-content">
         {selected ? <><h2>{selected.reference.title}</h2>
-          {selected.reference.asset ? <><img className="canvas-inspector-preview" src={`/api/assets/${selected.reference.asset.id}/thumbnail`} alt={selected.reference.title} /><StudioButton onClick={() => view(selected.placementId)}>View image</StudioButton></> : null}
+          {selected.reference.asset ? <><ImageRegions reference={selected.reference} annotations={annotations.filter((note) => note.target.type === "placement" && note.target.placementId === selected.placementId)} /><StudioButton onClick={() => view(selected.placementId)}>View image</StudioButton></> : null}
         </> : inspectedFrame ? null : <p>Select an item, then Inspect.</p>}
         {references.filter((item) => visited.includes(item.placementId)).map((item) => <div key={item.placementId} hidden={item.placementId !== inspectedId}>
           <ReferenceDetails reference={item.reference} onSave={onSaveDetails} /><PlacementUse item={item} onSave={onSavePlacement} />
+          {effective.items.find((entry) => entry.placementId === item.placementId) ? <GeometryEditor rect={effective.items.find((entry) => entry.placementId === item.placementId)!.rect} relative={effective.items.find((entry) => entry.placementId === item.placementId)?.frameId !== null} saveState={board.state}
+            onSave={(rect) => { const current = board.currentLayout(); board.commit({ ...current, items: current.items.map((entry) => entry.placementId === item.placementId ? { ...entry, rect } : entry) }); }} /> : null}
+          <div className="canvas-list-move"><StudioSelect label="Direction for this reference" value={moveTarget} options={[{ value: "", label: "Inbox" }, ...activeFrames.map((frame) => ({ value: frame.id, label: frame.name }))]} onChange={setMoveTarget} />
+            <StudioButton disabled={operation || board.state !== "saved"} onClick={() => board.commit(moveSelection(effective, [item.placementId], moveTarget || null))}>Move this use</StudioButton>
+            <StudioButton busy={operation} disabled={board.state !== "saved"} onClick={() => void addAnotherUse(item)}>Add another use</StudioButton></div>
+          <AnnotationEditor target={{ type: "placement", placementId: item.placementId }} image={item.reference} annotations={annotations} saveState={board.state}
+            onChange={(next) => board.commit({ ...board.currentLayout(), annotations: next })} />
         </div>)}
         {board.layout.frames.filter((frame) => visited.includes(frame.id)).map((frame) => <div key={frame.id} hidden={frame.id !== inspectedId}>
-          <FrameEditor layout={board.layout} frameId={frame.id} onSave={board.commit} />
+          <DirectionEditor frame={frame} onSave={async (patch, expectedRevision) => {
+            const saved = await directionAction(frame, patch, expectedRevision);
+            const current = saved.layout.frames.find((entry) => entry.id === frame.id);
+            if (!current) throw new Error("Direction unavailable after saving.");
+            return current;
+          }} onDuplicate={async () => { await directionAction(frame); }} onArchive={async () => { await directionAction(frame, { archived: true }); }} onRestore={async () => { await directionAction(frame, { archived: false }); }} />
+          <GeometryEditor rect={frame.rect} saveState={board.state} onSave={(rect) => { const current = board.currentLayout(); board.commit({ ...current, frames: current.frames.map((entry) => entry.id === frame.id ? { ...entry, rect } : entry) }); }} />
+          <AnnotationEditor target={{ type: "direction", directionId: frame.id }} annotations={annotations} saveState={board.state} onChange={(next) => board.commit({ ...board.currentLayout(), annotations: next })} />
         </div>)}
       </div>
+      <div hidden={panel !== "notes"} className="canvas-panel-content"><h2>Project notes</h2><AnnotationEditor target={{ type: "project", projectId }} annotations={annotations} saveState={board.state} onChange={(next) => board.commit({ ...board.currentLayout(), annotations: next })} /></div>
     </StudioInspector>
     <StudioDialog open={dialog === "add"} title="Add a note or link" description="Images go straight onto the canvas: drop or paste them." onClose={() => setDialog(null)}>
       <div className="sample-tabs" role="group" aria-label="Reference kind"><StudioButton aria-pressed={addTab === "note"} onClick={() => setAddTab("note")}>Note</StudioButton><StudioButton aria-pressed={addTab === "link"} onClick={() => setAddTab("link")}>Link</StudioButton></div>
@@ -245,36 +324,11 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       <StudioButton onClick={() => setViewerScale(Math.max(0.5, viewerScale - 0.25))}>Zoom out</StudioButton><StudioButton onClick={() => setViewerScale(1)}>Fit image</StudioButton><StudioButton onClick={() => setViewerScale(Math.min(4, viewerScale + 0.25))}>Zoom in</StudioButton>
       {viewed?.reference.sourceUrl ? <a href={viewed.reference.sourceUrl} target="_blank" rel="noreferrer">Source</a> : null}
     </>}>
-      {viewed?.reference.asset ? <div className="canvas-image-viewer"><img src={`/api/assets/${viewed.reference.asset.id}/original`} alt={viewed.reference.title} style={{ width: `${viewerScale * 100}%`, maxWidth: "none" }} /></div> : null}
+      {viewed?.reference.asset ? <div className="canvas-image-viewer"><div style={{ width: `${viewerScale * 100}%` }}><ImageRegions reference={viewed.reference} annotations={annotations.filter((note) => note.target.type === "placement" && note.target.placementId === viewed.placementId)} /></div></div> : null}
     </StudioDialog>
   </section>;
 }
 
 function isEditing(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable='true'], [role='textbox']"));
-}
-
-function FrameEditor({ layout, frameId, onSave }: { layout: BoardLayout; frameId: string; onSave: (layout: BoardLayout) => void }) {
-  const original = layout.frames.find((frame) => frame.id === frameId)!;
-  const [draft, setDraft] = useState(original);
-  const [base, setBase] = useState(original);
-  const [conflict, setConflict] = useState(false);
-  const fields = ["name", "concept", "feeling", "decisions", "questions", "archived"] as const;
-  function save(reapply = false): void {
-    if (!reapply && fields.some((field) => original[field] !== base[field])) { setConflict(true); return; }
-    onSave({ ...layout, frames: layout.frames.map((frame) => frame.id === frameId ? { ...draft, archived: frame.archived, rect: frame.rect } : frame) });
-    setBase({ ...draft, archived: original.archived });
-    setConflict(false);
-  }
-  return <form className="studio-dialog-form" onSubmit={(event) => { event.preventDefault(); save(); }}>
-    <h2>Draft direction</h2><div className="studio-field"><label htmlFor="frame-name">Name</label><input id="frame-name" required maxLength={200} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></div>
-    {(["concept", "feeling", "decisions", "questions"] as const).map((key) => <div className="studio-field" key={key}><label htmlFor={`frame-${key}`}>{key === "questions" ? "Open questions" : key[0]?.toUpperCase() + key.slice(1)}</label><textarea id={`frame-${key}`} rows={3} maxLength={key === "feeling" ? 4000 : 20000} value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} /></div>)}
-    <StudioButton type="submit" variant="primary">Save direction</StudioButton>
-    {conflict ? <div role="status"><p className="form-error">This direction changed while you were editing. Your draft is still here. Review the current values before replacing them.</p>
-      <dl>{fields.filter((key) => key !== "archived").map((key) => <div key={key}><dt>{key}</dt><dd>{String(original[key]) || "Empty"}</dd></div>)}</dl>
-      <StudioButton onClick={() => { setDraft(original); setBase(original); setConflict(false); }}>Use current values</StudioButton>
-      <StudioButton onClick={() => save(true)}>Replace with my draft</StudioButton>
-    </div> : null}
-    <StudioButton onClick={() => onSave({ frames: layout.frames.map((frame) => frame.id === frameId ? { ...frame, archived: true } : frame), items: layout.items.map((item) => item.frameId === frameId ? { ...item, frameId: null, rect: { ...item.rect, x: item.rect.x + original.rect.x, y: item.rect.y + original.rect.y } } : item) })}>Archive direction and ungroup</StudioButton>
-  </form>;
 }

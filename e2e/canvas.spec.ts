@@ -77,7 +77,7 @@ test("drop, arrange, group, undo, inspect, and reload without opening an upload 
   await inspector.getByRole("button", { name: "Role", exact: true }).click();
   await page.getByRole("option", { name: "Candidate", exact: true }).click();
   await inspector.getByRole("button", { name: "Save use", exact: true }).click();
-  await expect(inspector.locator(".save-state").last()).toContainText("Saved");
+  await expect(inspector.locator(".save-state[data-save-state='saved']")).toContainText("Saved");
   await inspector.getByRole("button", { name: "Close inspector" }).click();
   await expect(inspector).toBeHidden();
   await dock.getByRole("button", { name: "Library", exact: true }).click();
@@ -100,10 +100,12 @@ test("drop, arrange, group, undo, inspect, and reload without opening an upload 
   await page.keyboard.press("Escape");
   await expect(details).toBeHidden();
   await page.screenshot({ path: info.outputPath("canvas-desktop.png") });
+  const savedBoard = boardSchema.parse(await browserJson(page, `/api/projects/${project.id}/board`));
+  expect(savedBoard.layout.frames[0]!.revision).toBeGreaterThan(board.layout.frames[0]!.revision ?? 0);
   await page.reload();
   await expect(page.locator(".board-frame-heading")).toContainText("Quiet editorial");
   const reopened = boardSchema.parse(await browserJson(page, `/api/projects/${project.id}/board`));
-  expect(reopened.layout).toEqual(board.layout);
+  expect(reopened.layout).toEqual(savedBoard.layout);
   const refs = projectReferenceListSchema.parse(await browserJson(page, `/api/projects/${project.id}/references`));
   expect(refs.references.find((entry) => entry.reference.title === "North light")?.role).toBe("candidate");
   expect(errors).toEqual([]);

@@ -3,23 +3,27 @@ import {
   ReactFlow, Background, BackgroundVariant, NodeResizer, applyNodeChanges,
   type Node, type NodeProps, type ReactFlowInstance, type NodeChange, type Edge,
 } from "@xyflow/react";
-import type { BoardLayout, ProjectReference } from "@reference-studio/core";
+import type { BoardAnnotation, BoardLayout, ProjectReference } from "@reference-studio/core";
 import { StudioButton } from "./StudioButton.js";
+import { ImageRegions } from "./ImageRegions.js";
 import "@xyflow/react/dist/style.css";
 
 type MaterialNode = Node<{
   title: string; item?: ProjectReference; frame: boolean;
+  annotations: BoardAnnotation[];
+  readOnly: boolean;
   inspect: () => void; view: () => void; resized: () => void; resizeStarted: () => void;
 }, "material">;
 export type BoardView = ReactFlowInstance<MaterialNode>;
 
-function Material({ data, selected }: NodeProps<MaterialNode>) {
+function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
   const reference = data.item?.reference;
+  const imageWidth = reference?.asset ? Math.min(1, ((height ?? reference.asset.height) / (width ?? reference.asset.width)) * reference.asset.width / reference.asset.height) * 100 : 100;
   return <div className={data.frame ? "board-frame" : `board-material board-material-${reference?.kind ?? "note"}`}>
-    <NodeResizer isVisible={selected} minWidth={data.frame ? 240 : 100} minHeight={data.frame ? 160 : 80}
+    <NodeResizer isVisible={selected && !data.readOnly} minWidth={data.frame ? 240 : 100} minHeight={data.frame ? 160 : 80}
       keepAspectRatio={!data.frame && reference?.kind === "image"} onResizeStart={data.resizeStarted} onResizeEnd={data.resized} />
     {data.frame ? <div className="board-frame-heading"><span>{data.title}</span><span className="studio-meta">Draft</span></div> : <>
-      {reference?.asset ? <img src={`/api/assets/${reference.asset.id}/thumbnail`} alt={reference.title} draggable={false} /> :
+      {reference?.asset ? data.annotations.some((note) => note.region) ? <div className="board-image-plane"><div style={{ width: `${imageWidth}%` }}><ImageRegions reference={reference} resolution="thumbnail" annotations={data.annotations} onSelect={data.inspect} /></div></div> : <img src={`/api/assets/${reference.asset.id}/thumbnail`} alt={reference.title} draggable={false} /> :
         <div className="board-material-text"><p className="studio-kicker">{reference?.kind}</p><h3>{data.title}</h3><p>{reference?.observations || reference?.sourceUrl || "Image unavailable"}</p></div>}
       <div className="board-item-caption"><span>{data.title}</span></div>
     </>}
@@ -32,12 +36,13 @@ function Material({ data, selected }: NodeProps<MaterialNode>) {
 const nodeTypes = { material: Material };
 const edges: Edge[] = [];
 
-export function BoardCanvas({ layout, references, selection, hand, projectId, onSelect, onCommit, onInspect, onView, onReady, onZoom, onGestureStart }: {
+export function BoardCanvas({ layout, references, selection, hand, readOnly = false, projectId, onSelect, onCommit, onInspect, onView, onReady, onZoom, onGestureStart }: {
   layout: BoardLayout; references: ProjectReference[]; selection: string[]; hand: boolean; projectId: string;
   onSelect: (ids: string[]) => void; onCommit: (layout: BoardLayout) => void;
   onInspect: (id: string) => void; onView: (id: string) => void; onReady: (view: BoardView) => void;
   onZoom: (zoom: number) => void;
   onGestureStart: () => void;
+  readOnly?: boolean;
 }) {
   const [nodes, setNodes] = useState<MaterialNode[]>([]);
   const nodesRef = useRef(nodes);
@@ -47,6 +52,7 @@ export function BoardCanvas({ layout, references, selection, hand, projectId, on
   const latest = useRef({ layout, onCommit, onInspect, onView, onSelect, onGestureStart });
   latest.current = { layout, onCommit, onInspect, onView, onSelect, onGestureStart };
   const frame = useRef<number | null>(null);
+  const gesturing = useRef(false);
 
   function persist(reparent: Set<string> = new Set()): void {
     const current = latest.current;
@@ -72,7 +78,8 @@ export function BoardCanvas({ layout, references, selection, hand, projectId, on
       }
       return { ...entry, frameId: parentId, rect: { x: point.x, y: point.y, width: node.width ?? entry.rect.width, height: node.height ?? entry.rect.height } };
     });
-    current.onCommit({ frames, items });
+    gesturing.current = false;
+    current.onCommit({ ...current.layout, frames, items });
   }
   const schedule = () => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
@@ -81,10 +88,14 @@ export function BoardCanvas({ layout, references, selection, hand, projectId, on
   useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
 
   useEffect(() => {
+    // Refetches may add references or update metadata while a pointer is held.
+    // Keep the controlled node geometry until the completed gesture commits.
+    if (gesturing.current) return;
     const byId = new Map(references.map((item) => [item.placementId, item]));
-    const data = (id: string, title: string, isFrame: boolean, item?: ProjectReference) => ({ title, frame: isFrame, item,
+    const data = (id: string, title: string, isFrame: boolean, item?: ProjectReference) => ({ title, frame: isFrame, item, readOnly,
+      annotations: (layout.annotations ?? []).filter((note) => note.target.type === "placement" && note.target.placementId === id),
       inspect: () => latest.current.onInspect(id), view: () => latest.current.onView(id), resized: schedule,
-      resizeStarted: () => latest.current.onGestureStart() });
+      resizeStarted: () => { gesturing.current = true; latest.current.onGestureStart(); } });
     const next: MaterialNode[] = [
       ...layout.frames.filter((entry) => !entry.archived).map((entry): MaterialNode => ({ id: entry.id, type: "material", position: { x: entry.rect.x, y: entry.rect.y },
         width: entry.rect.width, height: entry.rect.height, style: { width: entry.rect.width, height: entry.rect.height },
@@ -99,7 +110,7 @@ export function BoardCanvas({ layout, references, selection, hand, projectId, on
     ];
     nodesRef.current = next;
     setNodes(next);
-  }, [layout, references]);
+  }, [layout, references, readOnly]);
 
   useEffect(() => {
     setNodes((current) => {
@@ -112,7 +123,7 @@ export function BoardCanvas({ layout, references, selection, hand, projectId, on
   const scheduleRef = useRef(schedule);
   scheduleRef.current = schedule;
   const change = useCallback((changes: NodeChange<MaterialNode>[]): void => {
-    if (changes.some((change) => change.type === "position" && change.position)) latest.current.onGestureStart();
+    if (changes.some((change) => change.type === "position" && change.position)) { gesturing.current = true; latest.current.onGestureStart(); }
     const next = applyNodeChanges(changes, nodesRef.current);
     nodesRef.current = next;
     setNodes(next);
@@ -120,12 +131,12 @@ export function BoardCanvas({ layout, references, selection, hand, projectId, on
       const ids = next.filter((node) => node.selected).map((node) => node.id);
       if (ids.join("|") !== selectionRef.current.join("|")) latest.current.onSelect(ids);
     }
-    if (changes.some((change) => change.type === "position" && change.dragging === false)) scheduleRef.current();
+    if (changes.some((change) => change.type === "position" && change.dragging !== true)) scheduleRef.current();
   }, []);
 
   return <ReactFlow<MaterialNode>
     nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={change}
-    onNodeDragStart={() => latest.current.onGestureStart()}
+    onNodeDragStart={() => { gesturing.current = true; latest.current.onGestureStart(); }}
     onNodeDragStop={(_, node, moved) => {
       if (frame.current !== null) { cancelAnimationFrame(frame.current); frame.current = null; }
       persist(new Set((moved.length ? moved : [node]).map((entry) => entry.id)));
@@ -140,7 +151,7 @@ export function BoardCanvas({ layout, references, selection, hand, projectId, on
     }}
     onMove={(_, viewport) => onZoom(viewport.zoom)}
     onMoveEnd={(_, viewport) => { sessionStorage.setItem(`rs-board-view:${projectId}`, JSON.stringify(viewport)); }}
-    nodesConnectable={false} nodesDraggable={!hand} selectionOnDrag={!hand} panOnDrag={hand ? true : [1, 2]}
+    nodesConnectable={false} nodesDraggable={!hand && !readOnly} selectionOnDrag={!hand} panOnDrag={hand ? true : [1, 2]}
     panOnScroll zoomOnScroll={false} zoomOnPinch zoomOnDoubleClick={false} deleteKeyCode={null}
     minZoom={0.1} maxZoom={3} defaultViewport={{ x: 40, y: 40, zoom: 0.8 }}
     multiSelectionKeyCode="Shift" onlyRenderVisibleElements

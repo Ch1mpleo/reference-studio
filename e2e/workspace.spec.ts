@@ -24,8 +24,8 @@ async function createProject(page: Page, name: string) {
   return project;
 }
 async function list(page: Page) {
-  const button = toolbar(page).getByRole("button", { name: "List", exact: true });
-  if (await button.isVisible()) await button.click();
+  await toolbar(page).getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("option", { name: "List", exact: true }).click();
 }
 async function inspect(page: Page, title: string, phone: boolean) {
   await list(page);
