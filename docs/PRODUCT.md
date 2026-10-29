@@ -8,9 +8,9 @@ Help a person and their chosen coding agent turn a broad website idea into an in
 
 The working loop is: collect references → explore directions → review an experiment → approve a revision → export an implementation handoff.
 
-- Start with the user's growing collection. Support pasted links, clipboard images, uploaded JPEG/PNG/WebP files, and agent-added references.
-- Use a grouped canvas with an inbox, named direction frames, focused comparison, and an approved-direction view. Provide a list alternative for keyboard access and small screens.
-- The canvas is the primary workspace, with a compact dock and on-demand tools. Drop/paste images directly into open space; image collection does not require an upload form. Selection and arranging stay separate from explicit inspection. Preserve the accepted Studio visual system across every control.
+- Start with the user's growing collection. Support pasted links, clipboard images, uploaded JPEG/PNG/WebP files, and agent-added references. Reject documents and unsupported files at intake. Any note, reference, or active group clears the initial empty-board guidance.
+- Use one grouped canvas with an inbox and simple named frames. References are images/links, notes are visible free text, and groups organize either. Edit note text and group names directly on their objects; discuss design intent through visible notes and the external agent. Do not require alternate board/list/focus/compare screens for ordinary work. Approved snapshots remain later scope.
+- The canvas is the primary workspace, with a compact Note/Group/Library dock, Undo/Redo, and on-demand tools. Keep zoom as bare vertical controls at the bottom right: zoom in, slider, zoom out, percentage, and Fit. Drop/paste images directly into open space; image collection does not require an upload form. Selection and arranging stay separate from explicit inspection. Preserve the accepted Studio visual system across every control.
 - Discussion happens in the external agent's chat. The workspace persists the selected visual context, annotations, proposals, feedback, and decisions.
 - Treat imagery, atmosphere, composition, typography, material, and interaction as possible design drivers. Do not convert a liked example into a permanent aesthetic or mandatory template.
 - The workspace's controls support reviewing the material. A project direction belongs to that project, not to the application's interface as a whole.
