@@ -13,6 +13,7 @@ type StudioReferenceCardProps = {
   selected: boolean;
   loading?: boolean;
   imageState: "missing" | "ready" | "none";
+  mediaLayout?: "frame" | "text";
   onOpen: () => void;
   loadingMode?: StudioLoadingMode;
   reducedMotion?: boolean;
@@ -25,12 +26,12 @@ type StudioReferenceCardProps = {
 };
 
 /** A stable media frame and ordinary controls; the article itself is not a button. */
-export function StudioReferenceCard({ title, metadata, media, summary, selected, loading = false, imageState, onOpen, loadingMode = "reveal", reducedMotion = false, plain = false, replay = 0, placeholder = false, options, onPreviewReload, actions }: StudioReferenceCardProps) {
+export function StudioReferenceCard({ title, metadata, media, summary, selected, loading = false, imageState, mediaLayout = "frame", onOpen, loadingMode = "reveal", reducedMotion = false, plain = false, replay = 0, placeholder = false, options, onPreviewReload, actions }: StudioReferenceCardProps) {
   return (
     <article className={`studio-reference-card${selected ? " is-selected" : ""}${onPreviewReload ? " has-click-reload" : ""}`} aria-busy={loading || undefined} data-image={imageState}
       onClick={(event) => { if (!placeholder && onPreviewReload && isPreviewSurfaceClick(event)) onPreviewReload(); }}>
       <StudioLoadingRegion variant="card" pending={loading} mode={loadingMode} reducedMotion={reducedMotion} plain={plain} replay={replay} options={options}>
-        <div className="studio-card-media" data-studio-reveal>{media}</div>
+        {mediaLayout === "frame" ? <div className="studio-card-media" data-studio-reveal>{media}</div> : null}
         <div className="studio-reference-card-content">
           <p className="studio-kicker" data-studio-reveal>{metadata}</p>
           <h2 className="studio-reference-card-title" data-studio-reveal>{title}</h2>
