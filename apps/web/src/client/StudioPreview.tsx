@@ -7,7 +7,7 @@ import { StudioDialog } from "./StudioDialog.js";
 import { StudioInspector } from "./StudioInspector.js";
 import { StudioMenu } from "./StudioMenu.js";
 import { StudioLoadingPreview } from "./StudioLoadingPreview.js";
-import { StudioDirectionsPreview } from "./StudioDirectionsPreview.js";
+import { StudioCanvasPreview } from "./StudioCanvasPreview.js";
 import type { StudioLoadingMode, StudioLoadingState } from "./StudioLoadingMedia.js";
 import { StudioLoadingRegion } from "./StudioLoadingRegion.js";
 import { useStudioPreviewRequest } from "./useStudioPreviewRequest.js";
@@ -586,7 +586,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
           <StudioLoadingPreview state={loadingState} mode={loadingMode} replay={replay} reducedMotion={effectiveReducedMotion} plain={plain}
             onState={setLoadingState} onMode={changeLoadingMode} onReplay={() => setReplay((current) => current + 1)} onOpen={() => openDetails("north")}
             options={loadingOptions} onOptions={changeLoadingOptions} previewDelay={previewDelay} />
-          <StudioDirectionsPreview />
+          <StudioCanvasPreview />
           <section className="sample-control-section sample-control-wide" aria-label="Overlay samples">
             <h3>Overlays &amp; interruption</h3>
             <p className="studio-help">Open and close without waiting. Menus use arrow keys; dialogs return focus to their opener.</p>
