@@ -62,6 +62,45 @@ test("group duplication preserves material and placement identity directly on th
   expect(boardSchema.parse(await json(page, `/api/projects/${project.id}/board`)).layout).toEqual(duplicated.layout);
 });
 
+test("renaming, ungrouping and restoring a branch preserves its source and saved reasoning", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const project = await seed(page, "Direction archive journey");
+  const url = `/api/projects/${project.id}/board`;
+  const initial = boardSchema.parse(await json(page, url));
+  await page.getByRole("textbox", { name: "Group name", exact: true }).click();
+  await page.getByRole("button", { name: "Duplicate", exact: true }).click();
+  await expect(page.locator(".canvas-status")).toHaveText("Saved");
+  await expect(page.locator(".board-frame")).toHaveCount(2);
+  const branch = page.locator(".board-frame").filter({ hasText: "North copy" });
+  await branch.getByRole("textbox", { name: "Group name", exact: true }).dblclick();
+  const name = page.locator("input[aria-label='Group name']");
+  await name.fill("Expressive editorial"); await name.press("Enter");
+  await expect(page.locator(".canvas-status")).toHaveText("Saved");
+  const renamed = boardSchema.parse(await json(page, url));
+  const copy = renamed.layout.frames.find((frame) => frame.name === "Expressive editorial")!;
+  expect(copy).toMatchObject({ concept: "Quiet hierarchy", feeling: "Measured", decisions: "Lead with content", questions: "Test dense screens", revision: 2 });
+  expect(renamed.layout.frames.find((frame) => frame.id === initial.layout.frames[0]!.id)).toEqual(initial.layout.frames[0]);
+  const copyItem = renamed.layout.items.find((item) => item.frameId === copy.id)!;
+  await page.locator(".board-frame").filter({ hasText: "Expressive editorial" }).getByRole("button", { name: "Ungroup", exact: true }).click();
+  await expect(page.locator(".canvas-status")).toHaveText("Saved");
+  await expect(page.locator(".board-frame")).toHaveCount(1);
+  await expect(page.locator(".board-material")).toHaveCount(2);
+  const archived = boardSchema.parse(await json(page, url));
+  expect(archived.layout.frames.find((frame) => frame.id === copy.id)).toMatchObject({ archived: true, revision: 3 });
+  const ungrouped = archived.layout.items.find((item) => item.placementId === copyItem.placementId)!;
+  expect(ungrouped).toEqual({ ...copyItem, frameId: null, rect: { ...copyItem.rect, x: copyItem.rect.x + copy.rect.x, y: copyItem.rect.y + copy.rect.y } });
+  expect(archived.layout.items.find((item) => item.placementId === initial.layout.items[0]!.placementId)).toEqual(initial.layout.items[0]);
+  await page.getByRole("toolbar", { name: "Canvas tools" }).getByRole("button", { name: "Library", exact: true }).click();
+  await page.getByRole("button", { name: "Restore", exact: true }).click();
+  await expect(page.locator(".canvas-status")).toHaveText("Saved");
+  await expect(page.locator(".board-frame")).toHaveCount(2);
+  const restored = boardSchema.parse(await json(page, url));
+  expect(restored.layout.frames.find((frame) => frame.id === copy.id)).toEqual({ ...copy, archived: false, revision: 4 });
+  expect(restored.layout.items.find((item) => item.placementId === copyItem.placementId)).toEqual(ungrouped);
+  await page.reload(); await expect(page.locator(".canvas-status")).toHaveText("Saved");
+  expect(boardSchema.parse(await json(page, url))).toEqual(restored);
+});
+
 test("stale undo keeps remote direction changes and clears invalid redo after explicit recovery", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.route("**/api/events", (route) => route.abort());

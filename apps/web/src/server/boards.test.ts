@@ -144,6 +144,97 @@ describe("project boards", () => {
     ]) expect((await ctx.put(board.revision, { ...board.layout, annotations: [invalid] } as BoardLayout)).statusCode).toBe(400);
   });
 
+  it("branches direction reasoning without copying shared evidence or changing the source", async () => {
+    const ctx = await setup();
+    const directionId = ctx.layout.frames[0]!.id;
+    const evidenceId = createId();
+    const feedbackId = createId();
+    const decisionId = createId();
+    const annotations: NonNullable<BoardLayout["annotations"]> = [
+      { id: evidenceId, target: { type: "project", projectId: ctx.created.id }, body: "Reference discussion: compare readable editorial and dense technical layouts.", borrowedQuality: "Clear hierarchy", translation: "Keep readable long-form content", limitations: "Motion remains unobserved", provenance: { author: "agent", name: "Researcher" } },
+      { id: feedbackId, target: { type: "placement", placementId: ctx.note.placementId }, body: "Reject dense technical layout: too busy for this audience. Keep occasional large typography as an intentional exception.", borrowedQuality: "Typographic contrast", translation: "Quiet body, expressive headings", limitations: "Check mobile wrapping", provenance: { author: "human", name: "Owner" }, decision: { rationale: "Readability matters more than visual density", annotationId: evidenceId } },
+      { id: decisionId, target: { type: "direction", directionId }, body: "Use the editorial alternative; revisit the small-screen headings.", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "agent", name: "Researcher" }, decision: { rationale: "Follow the user's feedback", annotationId: feedbackId } },
+    ];
+    const initial = boardSchema.parse((await ctx.put(1, { ...ctx.layout, annotations })).json());
+    const response = await ctx.app.inject({ method: "POST", url: `/api/projects/${ctx.created.id}/directions/${directionId}/duplicate`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 1, name: "Expressive editorial" } });
+    expect(response.statusCode).toBe(201);
+    let board = boardSchema.parse(response.json());
+    const copy = board.layout.frames.find((frame) => frame.id !== directionId)!;
+    expect(copy).toMatchObject({ name: "Expressive editorial", concept: "Editorial", feeling: "Quiet", revision: 1 });
+    expect(board.layout.frames.find((frame) => frame.id === directionId)).toEqual(initial.layout.frames[0]);
+    const copiedFeedback = board.layout.annotations!.find((entry) => entry.id !== feedbackId && entry.body === annotations[1]!.body)!;
+    const copiedDecision = board.layout.annotations!.find((entry) => entry.target.type === "direction" && entry.target.directionId === copy.id)!;
+    expect(board.layout.annotations).toHaveLength(5);
+    expect(copiedFeedback.provenance).toEqual({ author: "human", name: "Owner" });
+    expect(copiedFeedback.decision?.annotationId).toBe(evidenceId);
+    expect(copiedDecision.decision?.annotationId).toBe(copiedFeedback.id);
+    expect(copiedFeedback.target).toEqual({ type: "placement", placementId: board.layout.items.find((item) => item.frameId === copy.id)!.placementId });
+    expect(ctx.database.prepare('SELECT COUNT(*) AS count FROM "references"').get()?.count).toBe(1);
+
+    const changed = structuredClone(board.layout);
+    changed.annotations!.find((entry) => entry.id === copiedDecision.id)!.body = "Try larger headings in this branch only.";
+    board = boardSchema.parse((await ctx.put(board.revision, changed)).json());
+    expect(board.layout.frames.find((frame) => frame.id === directionId)?.revision).toBe(1);
+    expect(board.layout.frames.find((frame) => frame.id === copy.id)?.revision).toBe(2);
+    expect(board.layout.annotations!.find((entry) => entry.id === decisionId)).toEqual(annotations[2]);
+
+    const directionUrl = `/api/projects/${ctx.created.id}/directions/${copy.id}`;
+    const archive = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 2, archived: true } });
+    expect(archive.statusCode).toBe(200);
+    board = boardSchema.parse(archive.json());
+    expect(board.layout.annotations).toEqual(changed.annotations);
+    expect(board.layout.frames.find((frame) => frame.id === copy.id)).toMatchObject({ archived: true, revision: 3 });
+    expect(board.layout.items.filter((item) => item.frameId === directionId)).toEqual(initial.layout.items);
+    expect(board.layout.items.find((item) => item.placementId !== ctx.note.placementId)).toMatchObject({ frameId: null, rect: { x: 30, y: 202 } });
+
+    const backup = exportProjectBackup(ctx.database, ctx.dataDir, ctx.created.id);
+    const boundary = "directionReasoning";
+    const restored = await ctx.app.inject({ method: "POST", url: "/api/projects/restore", headers: { ...ctx.headers, "idempotency-key": createId(), "content-type": `multipart/form-data; boundary=${boundary}` }, payload: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="board.zip"\r\nContent-Type: application/zip\r\n\r\n`), backup.bytes, Buffer.from(`\r\n--${boundary}--\r\n`)]) });
+    expect(restored.statusCode).toBe(201);
+    const restoredProject = projectSchema.parse(restored.json());
+    const restoredBoard = boardSchema.parse((await ctx.app.inject({ url: `/api/projects/${restoredProject.id}/board`, headers: ctx.headers })).json());
+    const restoredNotes = restoredBoard.layout.annotations!;
+    const restoredEvidence = restoredNotes.find((entry) => entry.target.type === "project")!;
+    expect(restoredEvidence.target).toEqual({ type: "project", projectId: restoredProject.id });
+    expect(restoredEvidence.id).not.toBe(evidenceId);
+    expect(restoredNotes.filter((entry) => entry.body === annotations[1]!.body).map((entry) => entry.decision?.annotationId)).toEqual([restoredEvidence.id, restoredEvidence.id]);
+    const restoredCopy = restoredBoard.layout.frames.find((frame) => frame.name === "Expressive editorial")!;
+    expect(restoredCopy).toMatchObject({ archived: true, revision: 3, concept: "Editorial" });
+    const restoredSource = restoredBoard.layout.frames.find((frame) => frame.name === "North")!;
+    const restoredSourcePlacement = restoredBoard.layout.items.find((item) => item.frameId === restoredSource.id)!.placementId;
+    const restoredSourceFeedback = restoredNotes.find((entry) => entry.target.type === "placement" && entry.target.placementId === restoredSourcePlacement)!;
+    const restoredCopyFeedback = restoredNotes.find((entry) => entry.body === annotations[1]!.body && entry.id !== restoredSourceFeedback.id)!;
+    expect(restoredNotes.find((entry) => entry.target.type === "direction" && entry.target.directionId === restoredSource.id)?.decision?.annotationId).toBe(restoredSourceFeedback.id);
+    expect(restoredNotes.find((entry) => entry.body === "Try larger headings in this branch only.")).toMatchObject({ target: { type: "direction", directionId: restoredCopy.id }, decision: { annotationId: restoredCopyFeedback.id } });
+    expect(restoredCopyFeedback.provenance).toEqual({ author: "human", name: "Owner" });
+    expect(restoredNotes.every((entry) => !board.layout.annotations!.some((old) => old.id === entry.id))).toBe(true);
+  });
+
+  it("rejects stale and foreign direction duplication without creating copies or consuming the retry key", async () => {
+    const ctx = await setup();
+    let board = boardSchema.parse((await ctx.put(1)).json());
+    const directionId = board.layout.frames[0]!.id;
+    const key = createId();
+    const duplicate = (expectedRevision: number, projectId = ctx.created.id, name = "Branch") => ctx.app.inject({ method: "POST", url: `/api/projects/${projectId}/directions/${directionId}/duplicate`, headers: { ...ctx.headers, "idempotency-key": key }, payload: { expectedRevision, name } });
+    const update = await ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/placements/${ctx.note.placementId}`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 2, expectedDirectionRevision: 1, usageNotes: "New interpretation" } });
+    expect(update.statusCode).toBe(200);
+    board = boardSchema.parse((await ctx.app.inject({ url: ctx.url, headers: ctx.headers })).json());
+    const eventCount = ctx.events.length;
+    expect((await duplicate(1)).statusCode).toBe(409);
+    expect((await duplicate(2, (await ctx.project("Other")).id)).statusCode).toBe(404);
+    expect(ctx.events.filter((event) => event.type === "changed" && event.entity === "board")).toHaveLength(2);
+    expect(ctx.database.prepare("SELECT COUNT(*) AS count FROM placements").get()?.count).toBe(1);
+    expect(boardSchema.parse((await ctx.app.inject({ url: ctx.url, headers: ctx.headers })).json())).toEqual(board);
+    const accepted = await duplicate(2);
+    expect(accepted.statusCode).toBe(201);
+    expect((await duplicate(2)).json()).toEqual(accepted.json());
+    expect((await duplicate(2, ctx.created.id, "Different request")).statusCode).toBe(409);
+    expect(ctx.database.prepare("SELECT COUNT(*) AS count FROM placements").get()?.count).toBe(2);
+    expect(ctx.events).toHaveLength(eventCount + 2); // Other project creation and one accepted duplication.
+    const copyId = boardSchema.parse(accepted.json()).layout.items.find((item) => item.placementId !== ctx.note.placementId)!.placementId;
+    expect(ctx.database.prepare("SELECT usage_notes, revision FROM placements WHERE id = ?").get(copyId)).toMatchObject({ usage_notes: "New interpretation", revision: 1 });
+  });
+
   it("reuses references in independent direction placements, validates revisions, and restores archived directions", async () => {
     const ctx = await setup();
     let board = boardSchema.parse((await ctx.put(1)).json());
