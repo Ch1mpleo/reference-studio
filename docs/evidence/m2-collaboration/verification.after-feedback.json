@@ -1,0 +1,33 @@
+{
+  "stage": "post-feedback-save-and-reload",
+  "date": "2026-10-31",
+  "browser": "Microsoft Edge 156.0.4314.42",
+  "viewport": "1600x1080",
+  "reducedMotion": true,
+  "projectId": "d933e2ad-dbf5-4f3e-8627-41d1a0057b94",
+  "currentDirectionId": "7cf020f5-344e-4689-8355-ce81080dc6dc",
+  "boardRevisionBeforeReload": 13,
+  "boardRevisionAfterReload": 13,
+  "directionRevision": 4,
+  "frames": 3,
+  "placements": 9,
+  "annotations": 11,
+  "checks": [
+    "actual human feedback has human provenance",
+    "mixed direction and open questions visible on board",
+    "original A/B records and image facts unchanged",
+    "source assets reused; roles stay inspiration",
+    "source-region links retained",
+    "packet matches service state",
+    "exact board retained after reload"
+  ],
+  "result": "passed",
+  "notVerified": [
+    "specific Marathon footage",
+    "glitch timing/trigger/frequency",
+    "target-site implementation",
+    "MCP integration",
+    "approval snapshot",
+    "fresh-context recovery (separate check)"
+  ]
+}
