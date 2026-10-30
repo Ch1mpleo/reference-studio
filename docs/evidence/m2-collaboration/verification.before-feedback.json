@@ -1,0 +1,21 @@
+{
+  "stage": "pre-feedback-browser-check",
+  "browser": "Microsoft Edge 156.0.4314.42",
+  "viewport": "1600x1080",
+  "reducedMotion": true,
+  "projectId": "d933e2ad-dbf5-4f3e-8627-41d1a0057b94",
+  "revisionBeforeReload": 9,
+  "revisionAfterReload": 9,
+  "frames": 2,
+  "placements": 6,
+  "annotations": 4,
+  "imagesLoaded": 4,
+  "result": "passed",
+  "notVerified": [
+    "human correction",
+    "revised decision",
+    "fresh-context resume",
+    "MCP integration",
+    "system rules or motion behavior"
+  ]
+}

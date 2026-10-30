@@ -1,0 +1,397 @@
+{
+  "stage": "awaiting-human-feedback",
+  "transferMethod": "Manual CLI HTTP through authenticated existing application service; copied JSON and downloaded reference images. Not MCP.",
+  "project": {
+    "id": "d933e2ad-dbf5-4f3e-8627-41d1a0057b94",
+    "name": "M2.11 rehearsal - Beyond the Horizon",
+    "brief": "Sample target website, not Studio chrome or a real commissioned exhibition. Create an online exhibition companion contrasting observed space photography with imagined space travel. Visitors should browse two entries, read their credits and context, and distinguish a documentary photograph from speculative illustration.",
+    "audience": "Curious non-experts viewing on a phone or desktop; no design or astronomy vocabulary required.",
+    "purpose": "Let each artwork feel distinctive while keeping the catalogue and entry reading experience coherent.",
+    "constraints": "Real source content: Earthrise, Bill Anders/NASA, 24 December 1968; The Grand Tour, Invisible Creature, NASA/JPL-Caltech Visions of the Future. Two routes: catalogue and entry detail. Credits adjacent to each image; readable mobile captions; no copy embedded in images; preserve source image proportions. All references are inspiration only. No assets, direction, fonts or motion are approved. No fabricated exhibition opening date or ticket availability. Rehearsal choices do not establish a permanent user taste profile.",
+    "status": "active",
+    "revision": 1,
+    "createdAt": "2026-10-30T16:38:39.572Z",
+    "updatedAt": "2026-10-30T16:38:39.572Z"
+  },
+  "board": {
+    "projectId": "d933e2ad-dbf5-4f3e-8627-41d1a0057b94",
+    "revision": 9,
+    "layout": {
+      "frames": [
+        {
+          "id": "ba25dc04-aa57-4d65-a16d-c09e4825c65e",
+          "revision": 4,
+          "name": "A - Quiet exhibition",
+          "archived": false,
+          "concept": "Agent proposal: image-led exhibition guide",
+          "feeling": "Spacious, observant, intimate",
+          "decisions": "No human decision yet. All design choices are agent proposals.",
+          "questions": "Which qualities matter to the user? What interpretation should change? How should the catalogue and entry differ while sharing an identity?",
+          "rect": {
+            "x": 40,
+            "y": 40,
+            "width": 900,
+            "height": 1080
+          }
+        },
+        {
+          "id": "5a2b028d-60b7-4410-a036-b23bc68e85bb",
+          "revision": 5,
+          "name": "B - Graphic catalogue",
+          "archived": false,
+          "concept": "Agent proposal: expressive catalogue with quiet reading",
+          "feeling": "Bold, rhythmic, curious",
+          "decisions": "No human decision yet. All design choices are agent proposals.",
+          "questions": "Which qualities matter to the user? What interpretation should change? How should the catalogue and entry differ while sharing an identity?",
+          "rect": {
+            "x": 1000,
+            "y": 40,
+            "width": 900,
+            "height": 1080
+          }
+        }
+      ],
+      "items": [
+        {
+          "placementId": "fc46cf78-0b13-440e-9598-c3d1435aa702",
+          "frameId": "ba25dc04-aa57-4d65-a16d-c09e4825c65e",
+          "rect": {
+            "x": 24,
+            "y": 68,
+            "width": 340,
+            "height": 340
+          }
+        },
+        {
+          "placementId": "faef69e5-6e95-4f8e-a2cd-1749e9ba1164",
+          "frameId": "ba25dc04-aa57-4d65-a16d-c09e4825c65e",
+          "rect": {
+            "x": 398,
+            "y": 68,
+            "width": 230,
+            "height": 343
+          }
+        },
+        {
+          "placementId": "72543a18-c4db-4c13-85d2-423b70849763",
+          "frameId": "ba25dc04-aa57-4d65-a16d-c09e4825c65e",
+          "rect": {
+            "x": 24,
+            "y": 454,
+            "width": 840,
+            "height": 590
+          }
+        },
+        {
+          "placementId": "faf6b36a-3f49-47a5-8fb8-1bc478e25363",
+          "frameId": "5a2b028d-60b7-4410-a036-b23bc68e85bb",
+          "rect": {
+            "x": 24,
+            "y": 454,
+            "width": 840,
+            "height": 590
+          }
+        },
+        {
+          "placementId": "0156af58-01fd-489c-9432-c579b692babc",
+          "frameId": "5a2b028d-60b7-4410-a036-b23bc68e85bb",
+          "rect": {
+            "x": 24,
+            "y": 68,
+            "width": 340,
+            "height": 340
+          }
+        },
+        {
+          "placementId": "8dcaab8a-96c1-4183-bfdc-1e40bb5dfbbc",
+          "frameId": "5a2b028d-60b7-4410-a036-b23bc68e85bb",
+          "rect": {
+            "x": 398,
+            "y": 68,
+            "width": 230,
+            "height": 343
+          }
+        }
+      ],
+      "annotations": [
+        {
+          "id": "58dec474-097f-4861-a50d-c7e1835b275f",
+          "target": {
+            "type": "placement",
+            "placementId": "fc46cf78-0b13-440e-9598-c3d1435aa702"
+          },
+          "body": "Agent observation: the small Earth, large surrounding dark field, and lunar horizon create a strong contrast in scale. This is one interpretation, not the user's stated preference.",
+          "borrowedQuality": "Scale contrast and negative space",
+          "translation": "Give a complete artwork visual priority, with captions outside the image.",
+          "limitations": "Image region is an approximate normalized selection on the inspected rendition. No user confirmation or motion observation.",
+          "provenance": {
+            "author": "agent",
+            "name": "Codex rehearsal"
+          },
+          "region": {
+            "x": 0.46,
+            "y": 0.42,
+            "width": 0.23,
+            "height": 0.22
+          }
+        },
+        {
+          "id": "5594a8fb-1a94-4c7c-bdb7-262b8865264b",
+          "target": {
+            "type": "direction",
+            "directionId": "ba25dc04-aa57-4d65-a16d-c09e4825c65e"
+          },
+          "body": "AGENT PROPOSAL A - QUIET EXHIBITION\n\nBorrow: Earthrise's scale contrast and breathing room. Let one complete artwork lead each entry, with readable captions and a short story. Catalogue uses varied image proportions rather than repeated hero banners.\n\nLeave behind: copying the photograph's black field into every page or treating every work as a space backdrop.\n\nTradeoff: gives art and reading room, but feels less immediately graphic than B. Keep one strong display title if useful; do not shrink navigation or captions to get that effect.\n\nStatus: proposal only. No user choice recorded.\nQuestion: should the catalogue feel primarily contemplative or energetic?",
+          "borrowedQuality": "Scale and breathing room",
+          "translation": "Agent proposal: image-led exhibition guide",
+          "limitations": "Awaiting actual human correction; neither proposal is selected or approved.",
+          "provenance": {
+            "author": "agent",
+            "name": "Codex rehearsal"
+          },
+          "decision": {
+            "rationale": "Proposed translation only; compare with the user before deciding.",
+            "annotationId": "58dec474-097f-4861-a50d-c7e1835b275f"
+          }
+        },
+        {
+          "id": "7d94ca3d-8b9f-49fb-98f8-a939b06c58a8",
+          "target": {
+            "type": "placement",
+            "placementId": "8dcaab8a-96c1-4183-bfdc-1e40bb5dfbbc"
+          },
+          "body": "Agent observation: the poster layers coloured circular forms with horizontal paths; a large title anchors the lower part of the complete image. The selected region shows the layered illustration, not a motion sequence. This is an interpretation, not the user's stated preference.",
+          "borrowedQuality": "Layered graphic rhythm and strong title hierarchy",
+          "translation": "Use graphic chapter markers and an expressive catalogue title while keeping entry reading calm.",
+          "limitations": "Image region is an approximate normalized selection on the inspected rendition. No user confirmation or motion observation.",
+          "provenance": {
+            "author": "agent",
+            "name": "Codex rehearsal"
+          },
+          "region": {
+            "x": 0.12,
+            "y": 0.12,
+            "width": 0.78,
+            "height": 0.6
+          }
+        },
+        {
+          "id": "e02eae76-c896-4ca4-a5d4-926ee3e63368",
+          "target": {
+            "type": "direction",
+            "directionId": "5a2b028d-60b7-4410-a036-b23bc68e85bb"
+          },
+          "body": "AGENT PROPOSAL B - GRAPHIC CATALOGUE\n\nBorrow: Grand Tour's layered shapes, strong title and repeated directional rhythm. Translate this into chapter markers and a distinctive catalogue header; keep credits and entry reading calm.\n\nLeave behind: tracing the poster layout, forcing its full palette into controls, or moving every horizontal line. Static artwork does not establish a motion recipe.\n\nTradeoff: more recognisable graphic identity, but dense overlays could compete with the artwork or wrap poorly on phones.\n\nEarly critique: a generic dark space hero plus glowing gradient cards would flatten both sources into a familiar template. Compare source-specific scale or graphic rhythm instead. Dark backgrounds remain an option if chosen for a reason.\n\nStatus: proposal only. No user choice recorded.",
+          "borrowedQuality": "Graphic rhythm and title hierarchy",
+          "translation": "Agent proposal: expressive catalogue with quiet reading",
+          "limitations": "Awaiting actual human correction; neither proposal is selected or approved.",
+          "provenance": {
+            "author": "agent",
+            "name": "Codex rehearsal"
+          },
+          "decision": {
+            "rationale": "Proposed translation only; compare with the user before deciding.",
+            "annotationId": "7d94ca3d-8b9f-49fb-98f8-a939b06c58a8"
+          }
+        }
+      ]
+    }
+  },
+  "references": {
+    "references": [
+      {
+        "placementId": "8dcaab8a-96c1-4183-bfdc-1e40bb5dfbbc",
+        "role": "inspiration",
+        "usageNotes": "",
+        "crop": null,
+        "revision": 1,
+        "reference": {
+          "id": "77574940-0d4e-43c8-b531-1f49a6c4fd5c",
+          "kind": "image",
+          "title": "The Grand Tour - poster",
+          "sourceUrl": "https://www.jpl.nasa.gov/galleries/visions-of-the-future/",
+          "creator": "Invisible Creature; NASA/JPL-Caltech",
+          "observations": "Official gallery credits Invisible Creature for Grand Tour; series credit NASA/JPL-Caltech. Inspected the 1024px gallery image. Visible: overlapping coloured circular forms, horizontal trajectories, cream ground, large condensed title. Speculative travel illustration; not a factual photograph or a website layout. Inspiration only; source credit retained.",
+          "tags": [],
+          "availability": "available",
+          "archived": false,
+          "motion": null,
+          "asset": {
+            "id": "ae3edf57-4fac-4037-b9e2-24c0a1727467",
+            "sha256": "b864d30c0a89110cb6ed736fa398115c233d317989593e06be3f27da22034f0d",
+            "mediaType": "image/jpeg",
+            "byteSize": 168520,
+            "width": 1024,
+            "height": 1526
+          },
+          "revision": 1,
+          "createdAt": "2026-10-30T16:38:39.737Z",
+          "updatedAt": "2026-10-30T16:38:39.737Z"
+        }
+      },
+      {
+        "placementId": "0156af58-01fd-489c-9432-c579b692babc",
+        "role": "inspiration",
+        "usageNotes": "",
+        "crop": null,
+        "revision": 1,
+        "reference": {
+          "id": "3cebc930-1be6-477e-8615-b39d5cc9f0b6",
+          "kind": "image",
+          "title": "Earthrise - photography",
+          "sourceUrl": "https://science.nasa.gov/resource/apollo-8s-iconic-earthrise/",
+          "creator": "NASA/Bill Anders",
+          "observations": "Source attribution: NASA/Bill Anders; historical date 24 December 1968. Inspected the downloaded source rendition. Visible: small blue-white Earth against a broad black field above a grey lunar horizon. This is a photograph, not evidence of interface motion.",
+          "tags": [],
+          "availability": "available",
+          "archived": false,
+          "motion": null,
+          "asset": {
+            "id": "c6ba7319-ad56-48c0-acb4-9fda15ec2e30",
+            "sha256": "f83f37e38692372161a7cc7e726df3e2fb7dda760037a80ae194ceaee384da12",
+            "mediaType": "image/jpeg",
+            "byteSize": 114188,
+            "width": 1280,
+            "height": 1280
+          },
+          "revision": 1,
+          "createdAt": "2026-10-30T16:38:39.666Z",
+          "updatedAt": "2026-10-30T16:38:39.666Z"
+        }
+      },
+      {
+        "placementId": "faf6b36a-3f49-47a5-8fb8-1bc478e25363",
+        "role": "inspiration",
+        "usageNotes": "",
+        "crop": null,
+        "revision": 2,
+        "reference": {
+          "id": "87326e68-66a5-40e2-8053-ad8e3dd91f74",
+          "kind": "note",
+          "title": "B - Graphic catalogue",
+          "sourceUrl": null,
+          "creator": "Agent proposal - Codex",
+          "observations": "AGENT PROPOSAL B - GRAPHIC CATALOGUE\n\nBorrow: Grand Tour's layered shapes, strong title and repeated directional rhythm. Translate this into chapter markers and a distinctive catalogue header; keep credits and entry reading calm.\n\nLeave behind: tracing the poster layout, forcing its full palette into controls, or moving every horizontal line. Static artwork does not establish a motion recipe.\n\nTradeoff: more recognisable graphic identity, but dense overlays could compete with the artwork or wrap poorly on phones.\n\nEarly critique: a generic dark space hero plus glowing gradient cards would flatten both sources into a familiar template. Compare source-specific scale or graphic rhythm instead. Dark backgrounds remain an option if chosen for a reason.\n\nStatus: proposal only. No user choice recorded.",
+          "tags": [],
+          "availability": "unknown",
+          "archived": false,
+          "motion": null,
+          "asset": null,
+          "revision": 1,
+          "createdAt": "2026-10-30T16:38:39.751Z",
+          "updatedAt": "2026-10-30T16:38:39.751Z"
+        }
+      },
+      {
+        "placementId": "72543a18-c4db-4c13-85d2-423b70849763",
+        "role": "inspiration",
+        "usageNotes": "",
+        "crop": null,
+        "revision": 2,
+        "reference": {
+          "id": "df3864e4-0fcf-4573-91f7-739af55e8a41",
+          "kind": "note",
+          "title": "A - Quiet exhibition",
+          "sourceUrl": null,
+          "creator": "Agent proposal - Codex",
+          "observations": "AGENT PROPOSAL A - QUIET EXHIBITION\n\nBorrow: Earthrise's scale contrast and breathing room. Let one complete artwork lead each entry, with readable captions and a short story. Catalogue uses varied image proportions rather than repeated hero banners.\n\nLeave behind: copying the photograph's black field into every page or treating every work as a space backdrop.\n\nTradeoff: gives art and reading room, but feels less immediately graphic than B. Keep one strong display title if useful; do not shrink navigation or captions to get that effect.\n\nStatus: proposal only. No user choice recorded.\nQuestion: should the catalogue feel primarily contemplative or energetic?",
+          "tags": [],
+          "availability": "unknown",
+          "archived": false,
+          "motion": null,
+          "asset": null,
+          "revision": 1,
+          "createdAt": "2026-10-30T16:38:39.744Z",
+          "updatedAt": "2026-10-30T16:38:39.744Z"
+        }
+      },
+      {
+        "placementId": "faef69e5-6e95-4f8e-a2cd-1749e9ba1164",
+        "role": "inspiration",
+        "usageNotes": "",
+        "crop": null,
+        "revision": 2,
+        "reference": {
+          "id": "77574940-0d4e-43c8-b531-1f49a6c4fd5c",
+          "kind": "image",
+          "title": "The Grand Tour - poster",
+          "sourceUrl": "https://www.jpl.nasa.gov/galleries/visions-of-the-future/",
+          "creator": "Invisible Creature; NASA/JPL-Caltech",
+          "observations": "Official gallery credits Invisible Creature for Grand Tour; series credit NASA/JPL-Caltech. Inspected the 1024px gallery image. Visible: overlapping coloured circular forms, horizontal trajectories, cream ground, large condensed title. Speculative travel illustration; not a factual photograph or a website layout. Inspiration only; source credit retained.",
+          "tags": [],
+          "availability": "available",
+          "archived": false,
+          "motion": null,
+          "asset": {
+            "id": "ae3edf57-4fac-4037-b9e2-24c0a1727467",
+            "sha256": "b864d30c0a89110cb6ed736fa398115c233d317989593e06be3f27da22034f0d",
+            "mediaType": "image/jpeg",
+            "byteSize": 168520,
+            "width": 1024,
+            "height": 1526
+          },
+          "revision": 1,
+          "createdAt": "2026-10-30T16:38:39.737Z",
+          "updatedAt": "2026-10-30T16:38:39.737Z"
+        }
+      },
+      {
+        "placementId": "fc46cf78-0b13-440e-9598-c3d1435aa702",
+        "role": "inspiration",
+        "usageNotes": "",
+        "crop": null,
+        "revision": 2,
+        "reference": {
+          "id": "3cebc930-1be6-477e-8615-b39d5cc9f0b6",
+          "kind": "image",
+          "title": "Earthrise - photography",
+          "sourceUrl": "https://science.nasa.gov/resource/apollo-8s-iconic-earthrise/",
+          "creator": "NASA/Bill Anders",
+          "observations": "Source attribution: NASA/Bill Anders; historical date 24 December 1968. Inspected the downloaded source rendition. Visible: small blue-white Earth against a broad black field above a grey lunar horizon. This is a photograph, not evidence of interface motion.",
+          "tags": [],
+          "availability": "available",
+          "archived": false,
+          "motion": null,
+          "asset": {
+            "id": "c6ba7319-ad56-48c0-acb4-9fda15ec2e30",
+            "sha256": "f83f37e38692372161a7cc7e726df3e2fb7dda760037a80ae194ceaee384da12",
+            "mediaType": "image/jpeg",
+            "byteSize": 114188,
+            "width": 1280,
+            "height": 1280
+          },
+          "revision": 1,
+          "createdAt": "2026-10-30T16:38:39.666Z",
+          "updatedAt": "2026-10-30T16:38:39.666Z"
+        }
+      }
+    ]
+  },
+  "sources": [
+    {
+      "file": "earthrise.jpg",
+      "title": "Earthrise - photography",
+      "creator": "NASA/Bill Anders",
+      "sourceUrl": "https://science.nasa.gov/resource/apollo-8s-iconic-earthrise/",
+      "media": "image/jpeg",
+      "observations": "Source attribution: NASA/Bill Anders; historical date 24 December 1968. Inspected the downloaded source rendition. Visible: small blue-white Earth against a broad black field above a grey lunar horizon. This is a photograph, not evidence of interface motion.",
+      "sha256": "f83f37e38692372161a7cc7e726df3e2fb7dda760037a80ae194ceaee384da12"
+    },
+    {
+      "file": "grand-tour.jpg",
+      "title": "The Grand Tour - poster",
+      "creator": "Invisible Creature; NASA/JPL-Caltech",
+      "sourceUrl": "https://www.jpl.nasa.gov/galleries/visions-of-the-future/",
+      "media": "image/jpeg",
+      "observations": "Official gallery credits Invisible Creature for Grand Tour; series credit NASA/JPL-Caltech. Inspected the 1024px gallery image. Visible: overlapping coloured circular forms, horizontal trajectories, cream ground, large condensed title. Speculative travel illustration; not a factual photograph or a website layout. Inspiration only; source credit retained.",
+      "sha256": "b864d30c0a89110cb6ed736fa398115c233d317989593e06be3f27da22034f0d"
+    }
+  ],
+  "userQuestion": "What would you borrow, reject, or change in A or B for this sample exhibition? Correct one interpretation in your own words. Neither option is selected yet.",
+  "limitations": [
+    "No actual human preference or correction yet",
+    "No approval snapshot, system records, motion observation, or MCP integration",
+    "Fresh-context resume still pending",
+    "Temporary service uses isolated data; auth token deliberately omitted"
+  ]
+}
