@@ -1,6 +1,6 @@
 import {
   assertExpectedRevision, boardLayoutSchema, boardSchema, createId, duplicateDirectionSchema, mutationScope, parseContract, ServiceError, updateBoardSchema, updateDirectionSchema,
-  type Board, type BoardAnnotation, type BoardLayout,
+  systemContexts, systemChildren, remapSystem, type Board, type BoardAnnotation, type BoardLayout,
 } from "@reference-studio/core";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
@@ -38,6 +38,10 @@ export function validateBoardPlacements(database: DatabaseSync, projectId: strin
       throw new ServiceError("validation", "Image regions belong to image placements.");
     }
   }
+  for (const system of layout.systems ?? []) {
+    if (systemContexts(system).some((value) => value.placementIds.some((id) => !ids.has(id)))) throw new ServiceError("validation", "System evidence contains a placement outside this project.");
+    if (system.kind === "design" && system.content.imagery.some((image) => rows.find((row) => row.id === image.placementId)?.kind !== "image")) throw new ServiceError("validation", "Image guidance must identify an image placement in this project.");
+  }
 }
 
 function directionContent(layout: BoardLayout, id: string): unknown {
@@ -45,13 +49,23 @@ function directionContent(layout: BoardLayout, id: string): unknown {
   const items = layout.items.filter((item) => item.frameId === id);
   const placements = new Set(items.map((item) => item.placementId));
   return { frame: frame === undefined ? null : { ...frame, revision: undefined }, items,
-    annotations: (layout.annotations ?? []).filter((annotation) => (annotation.target.type === "direction" && annotation.target.directionId === id) || (annotation.target.type === "placement" && placements.has(annotation.target.placementId))) };
+    annotations: (layout.annotations ?? []).filter((annotation) => (annotation.target.type === "direction" && annotation.target.directionId === id) || (annotation.target.type === "placement" && placements.has(annotation.target.placementId))),
+    systems: (layout.systems ?? []).filter((system) => system.directionId === id) };
 }
 
 /** Called inside the same transaction as every related service mutation. */
 export function saveBoardLayout(database: DatabaseSync, current: Board, input: BoardLayout, initialPlacementIds: ReadonlySet<string> = new Set()): Board {
-  const layout = parseContract(boardLayoutSchema, { ...input, ...(input.annotations === undefined && current.layout.annotations !== undefined ? { annotations: current.layout.annotations } : {}) }, "The board arrangement is invalid.");
+  const layout = parseContract(boardLayoutSchema, { ...input, ...(input.annotations === undefined && current.layout.annotations !== undefined ? { annotations: current.layout.annotations } : {}), ...(input.systems === undefined && current.layout.systems !== undefined ? { systems: current.layout.systems } : {}) }, "The board arrangement is invalid.");
   validateBoardPlacements(database, current.projectId, layout);
+  for (const previous of current.layout.systems ?? []) if (!layout.systems?.some((entry) => entry.id === previous.id)) throw new ServiceError("validation", "Archive a system to preserve its history.");
+  for (const system of layout.systems ?? []) {
+    const previous = current.layout.systems?.find((entry) => entry.id === system.id);
+    if (previous) {
+      assertExpectedRevision(previous.revision, system.revision, { type: "system", id: system.id });
+      if (previous.kind !== system.kind || previous.directionId !== system.directionId) throw new ServiceError("validation", "A system cannot change its kind or direction.");
+      system.revision = previous.revision + (hashCanonicalRequest({ ...previous, revision: 0 }) === hashCanonicalRequest({ ...system, revision: 0 }) ? 0 : 1);
+    } else system.revision = 1;
+  }
   for (const frame of current.layout.frames) {
     if (!layout.frames.some((entry) => entry.id === frame.id)) throw new ServiceError("validation", "Archive a direction to preserve its history.");
   }
@@ -122,6 +136,7 @@ export function registerBoardRoutes(app: FastifyInstance, database: DatabaseSync
       execute: () => {
         const current = readBoard(database, projectId);
         assertExpectedRevision(current.revision, input.expectedRevision, { type: "board", id: projectId });
+        if (input.layout.systems !== undefined && hashCanonicalRequest(input.layout.systems) !== hashCanonicalRequest(current.layout.systems ?? [])) throw new ServiceError("validation", "Change system records through the direction system operations.");
         const board = saveBoardLayout(database, current, input.layout);
         return { statusCode: 200, body: board, revision: board.revision, changed: board.revision !== current.revision };
       },
@@ -186,9 +201,13 @@ export function registerBoardRoutes(app: FastifyInstance, database: DatabaseSync
         });
         const annotations = (current.layout.annotations ?? []).filter((entry) => (entry.target.type === "direction" && entry.target.directionId === directionId) || (entry.target.type === "placement" && placementIds.has(entry.target.placementId)));
         const annotationIds = new Map(annotations.map((entry) => [entry.id, createId()]));
+        const systems = (current.layout.systems ?? []).filter((entry) => entry.directionId === directionId);
+        const systemIds = new Map(systems.map((entry) => [entry.id, createId()]));
+        const children = new Map(systems.flatMap(systemChildren).map((entry) => [entry.id, createId()]));
         const layout = { ...current.layout,
           frames: [...current.layout.frames, { ...source, id, revision: 1, name: input.name ?? `${source.name} copy`.slice(0, 200), rect: { ...source.rect, x: source.rect.x + 48, y: source.rect.y + 48 } }],
           items: [...current.layout.items, ...items],
+          ...(systems.length === 0 ? {} : { systems: [...(current.layout.systems ?? []), ...systems.map((system) => remapSystem(system, { systems: systemIds, directions: new Map([[directionId, id]]), placements: placementIds, annotations: annotationIds, children }))] }),
           ...(annotations.length === 0 ? {} : { annotations: [...(current.layout.annotations ?? []), ...annotations.map((entry) => copyAnnotation(entry, new Map([[directionId, id]]), placementIds, annotationIds))] }) };
         const board = saveBoardLayout(database, current, layout, new Set(placementIds.values()));
         return { statusCode: 201, body: board, revision: board.revision, changed: true };

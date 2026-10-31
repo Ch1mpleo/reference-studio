@@ -32,10 +32,10 @@ describe("migrate", () => {
       const frame = { id: "direction", name: "Quiet", concept: "Preserve me", rect: { x: -100, y: 42, width: 700, height: 600 } };
       const layout = { frames: [frame], items: [{ placementId: "placement", frameId: "direction", rect: { x: 20, y: 30, width: 260, height: 180 } }] };
       database.prepare("INSERT INTO project_boards VALUES ('existing', 12, ?)").run(JSON.stringify(layout));
-      expect(migrate(database, defaultMigrationsDir())).toEqual(["005_direction_revisions.sql"]);
+      expect(migrate(database, defaultMigrationsDir())).toEqual(["005_direction_revisions.sql", "006_system_records.sql"]);
       const row = database.prepare("SELECT revision, layout_json FROM project_boards WHERE project_id = 'existing'").get()!;
       expect(row.revision).toBe(12);
-      expect(JSON.parse(String(row.layout_json))).toEqual({ ...layout, frames: [{ ...frame, revision: 1 }] });
+      expect(JSON.parse(String(row.layout_json))).toEqual({ ...layout, frames: [{ ...frame, revision: 1 }], systems: [] });
       expect(migrate(database, defaultMigrationsDir())).toEqual([]);
     } finally { database.close(); }
   });

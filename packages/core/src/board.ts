@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { httpUrlSchema, imageCropSchema } from "./references.js";
+import { systemRecordSchema, systemChildren, systemContexts } from "./systems.js";
 
 export const annotationTargetSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("project"), projectId: z.uuid() }).strict(),
@@ -55,6 +56,7 @@ export const boardLayoutSchema = z.object({
   frames: z.array(boardFrameSchema).max(100),
   items: z.array(boardItemSchema).max(500),
   annotations: z.array(boardAnnotationSchema).max(1_000).optional(),
+  systems: z.array(systemRecordSchema).max(200).optional(),
 }).strict().superRefine((layout, context) => {
   const frames = new Set(layout.frames.map((frame) => frame.id));
   const items = new Set(layout.items.map((item) => item.placementId));
@@ -80,6 +82,18 @@ export const boardLayoutSchema = z.object({
     }
     if (annotation.region !== undefined && annotation.target.type !== "placement") {
       context.addIssue({ code: "custom", message: "Image regions belong to image placements." });
+    }
+  }
+  const systems = layout.systems ?? [];
+  const allIds = [...systems.map((system) => system.id), ...systems.flatMap(systemChildren).map((entry) => entry.id)];
+  if (new Set(allIds).size !== allIds.length || allIds.some((id) => frames.has(id) || items.has(id) || annotationIds.has(id))) context.addIssue({ code: "custom", message: "System records and entries need distinct stable IDs." });
+  if (new Set(systems.map((system) => `${system.directionId}:${system.kind}`)).size !== systems.length) context.addIssue({ code: "custom", message: "Each direction has one design system and one motion system, including archived records." });
+  for (const system of systems) {
+    if (!frames.has(system.directionId)) context.addIssue({ code: "custom", message: "A system belongs to a missing direction." });
+    for (const value of systemContexts(system)) {
+      if ([...value.sourceAnnotationIds, ...value.feedbackAnnotationIds, ...value.decisionAnnotationIds].some((id) => !annotationIds.has(id))) context.addIssue({ code: "custom", message: "A system links to a missing annotation." });
+      if (value.feedbackAnnotationIds.some((id) => annotations.find((annotation) => annotation.id === id)?.provenance.author !== "human")) context.addIssue({ code: "custom", message: "Feedback links must identify human-authored annotations." });
+      if (value.decisionAnnotationIds.some((id) => annotations.find((annotation) => annotation.id === id)?.decision === undefined)) context.addIssue({ code: "custom", message: "Decision links must identify decision annotations." });
     }
   }
 });

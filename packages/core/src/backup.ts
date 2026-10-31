@@ -15,9 +15,10 @@ import {
 } from "./references.js";
 import { PROJECT_STATUSES } from "./projects.js";
 import { boardLayoutSchema } from "./board.js";
+import { systemContexts } from "./systems.js";
 
 export const BACKUP_FORMAT = "reference-studio-backup";
-export const BACKUP_FORMAT_VERSION = 3;
+export const BACKUP_FORMAT_VERSION = 4;
 
 /** 80 MiB across the archive, declared uncompressed size, and the upload. */
 export const MAX_BACKUP_BYTES = 80 * 1024 * 1024;
@@ -112,7 +113,7 @@ const emptySection = z.array(z.never()).length(0);
 export const backupManifestSchema = z
   .object({
     format: z.literal(BACKUP_FORMAT),
-    formatVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    formatVersion: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
     exportedAt: z.iso.datetime(),
     project: z
       .object({
@@ -156,7 +157,7 @@ export function readBackupManifest(value: unknown): BackupManifest {
   if (!isRecord(value) || value.format !== BACKUP_FORMAT) {
     throw new ServiceError("validation", "This file is not a Reference Studio backup.");
   }
-  if (value.formatVersion !== 1 && value.formatVersion !== 2 && value.formatVersion !== BACKUP_FORMAT_VERSION) {
+  if (value.formatVersion !== 1 && value.formatVersion !== 2 && value.formatVersion !== 3 && value.formatVersion !== BACKUP_FORMAT_VERSION) {
     throw new ServiceError("validation", backupVersionMessage(shownVersion(value.formatVersion)));
   }
   if (isRecord(value.sections)) {
@@ -188,6 +189,7 @@ export function readBackupManifest(value: unknown): BackupManifest {
     throw new ServiceError("validation", "This backup is missing its board.");
   }
   validateBackupGraph(manifest);
+  if (manifest.formatVersion < 4 && (manifest.board?.systems?.length ?? 0) > 0) throw new ServiceError("validation", "System records require backup format 4.");
   return manifest;
 }
 
@@ -247,6 +249,13 @@ function validateBackupGraph(manifest: BackupManifest): void {
       const placement = target.type === "placement" ? manifest.placements.find((entry) => entry.originalId === target.placementId) : undefined;
       if (placement === undefined || references.get(placement.referenceOriginalId)?.kind !== "image") throw new ServiceError("validation", "Image regions belong to image placements.");
     }
+  }
+  for (const system of manifest.board?.systems ?? []) {
+    if (systemContexts(system).some((value) => value.placementIds.some((id) => !placementIds.has(id)))) throw new ServiceError("validation", "A system links to a missing placement.");
+    if (system.kind === "design" && system.content.imagery.some((image) => {
+      const placement = manifest.placements.find((entry) => entry.originalId === image.placementId);
+      return placement === undefined || references.get(placement.referenceOriginalId)?.kind !== "image";
+    })) throw new ServiceError("validation", "Image guidance must identify an image placement.");
   }
 }
 

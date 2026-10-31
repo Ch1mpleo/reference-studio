@@ -16,6 +16,7 @@ import {
   type BackupManifest,
   type Project,
   MAX_BACKUP_MANIFEST_BYTES,
+  BACKUP_FORMAT_VERSION, remapSystem, systemChildren,
 } from "@reference-studio/core";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
@@ -194,7 +195,7 @@ export function exportProjectBackup(
   }
   const manifest = readBackupManifest({
     format: "reference-studio-backup",
-    formatVersion: 3,
+    formatVersion: BACKUP_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
     project: {
       originalId: project.id,
@@ -422,11 +423,14 @@ function insertRestoredProject(
   if (manifest.board !== undefined) {
     const frameIds = new Map(manifest.board.frames.map((frame) => [frame.id, createId()]));
     const annotationIds = new Map((manifest.board.annotations ?? []).map((annotation) => [annotation.id, createId()]));
+    const systemIds = new Map((manifest.board.systems ?? []).map((system) => [system.id, createId()]));
+    const childIds = new Map((manifest.board.systems ?? []).flatMap(systemChildren).map((entry) => [entry.id, createId()]));
     writeBoard(database, {
       projectId: project.id,
       revision: 1,
       layout: {
         frames: manifest.board.frames.map((frame) => ({ ...frame, id: frameIds.get(frame.id)!, revision: frame.revision ?? 1 })),
+        ...(manifest.board.systems === undefined ? {} : { systems: manifest.board.systems.map((system) => remapSystem(system, { systems: systemIds, children: childIds, directions: frameIds, placements: placementIds, annotations: annotationIds })) }),
         items: manifest.board.items.map((item) => ({ ...item, placementId: placementIds.get(item.placementId)!,
           frameId: item.frameId === null ? null : frameIds.get(item.frameId)! })),
         ...(manifest.board.annotations === undefined ? {} : { annotations: manifest.board.annotations.map((annotation) => ({ ...annotation,
