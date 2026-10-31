@@ -6,6 +6,7 @@ import { StudioButton } from "./StudioButton.js";
 import { studioMotionStyle, useStudioReducedMotion } from "./studioMotion.js";
 import { useProjectLibrary } from "./useProjectLibrary.js";
 import { useServiceConnection, type ServiceState } from "./useServiceConnection.js";
+import { SystemDraftHostProvider } from "./SystemDraftHost.js";
 
 const StudioPreview = lazy(async () => ({ default: (await import("./StudioPreview.js")).StudioPreview }));
 
@@ -39,6 +40,9 @@ function useLocationHash(): string {
 }
 
 export function App() {
+  return <SystemDraftHostProvider><AppContent /></SystemDraftHostProvider>;
+}
+function AppContent() {
   const connection = useServiceConnection();
   const library = useProjectLibrary(connection);
   const hash = useLocationHash();

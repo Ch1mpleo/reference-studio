@@ -7,7 +7,7 @@ export class BoardRequestError extends Error {
   constructor(message: string, readonly conflict = false, readonly currentRevision?: number) { super(message); }
 }
 
-async function read(response: Response): Promise<Board> {
+export async function readBoardResponse(response: Response): Promise<Board> {
   const body: unknown = await response.json();
   if (!response.ok) {
     const parsed = serviceErrorBodySchema.safeParse(body);
@@ -20,26 +20,28 @@ async function read(response: Response): Promise<Board> {
 
 export async function patchDirection(projectId: string, directionId: string, input: DirectionPatch & { expectedRevision: number }, key: string): Promise<Board> {
   const parsed = updateDirectionSchema.parse(input);
-  return read(await fetch(`/api/projects/${projectId}/directions/${directionId}`, {
+  return readBoardResponse(await fetch(`/api/projects/${projectId}/directions/${directionId}`, {
     method: "PATCH", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify(parsed),
   }));
 }
 
 export async function duplicateDirection(projectId: string, directionId: string, expectedRevision: number, key: string, name?: string): Promise<Board> {
   const parsed = duplicateDirectionSchema.parse({ expectedRevision, ...(name === undefined ? {} : { name }) });
-  return read(await fetch(`/api/projects/${projectId}/directions/${directionId}/duplicate`, {
+  return readBoardResponse(await fetch(`/api/projects/${projectId}/directions/${directionId}/duplicate`, {
     method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify(parsed),
   }));
 }
 
 export async function getBoard(projectId: string): Promise<Board> {
-  return read(await fetch(`/api/projects/${projectId}/board`, { credentials: "same-origin", cache: "no-store" }));
+  return readBoardResponse(await fetch(`/api/projects/${projectId}/board`, { credentials: "same-origin", cache: "no-store" }));
 }
 
 export async function putBoard(projectId: string, expectedRevision: number, layout: BoardLayout, key: string): Promise<Board> {
-  return read(await fetch(`/api/projects/${projectId}/board`, {
+  // Geometry/history never owns independent system drafts.
+  const { systems: _, ...arrangement } = layout;
+  return readBoardResponse(await fetch(`/api/projects/${projectId}/board`, {
     method: "PUT", credentials: "same-origin",
     headers: { "content-type": "application/json", "idempotency-key": key },
-    body: JSON.stringify({ expectedRevision, layout }),
+    body: JSON.stringify({ expectedRevision, layout: arrangement }),
   }));
 }

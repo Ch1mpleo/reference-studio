@@ -1,0 +1,13 @@
+.studio-ui .system-editor { min-width: 0; }
+.studio-ui .system-fields { display: grid; gap: 12px; min-width: 0; }
+.studio-ui .system-details { min-width: 0; padding-block: 12px; border-top: 1px solid var(--color-line); }
+.studio-ui .system-details > summary { cursor: pointer; font: var(--type-label); margin-bottom: 12px; }
+.studio-ui .system-editor fieldset { display: grid; gap: 12px; min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid var(--color-line); border-radius: var(--radius-control); }
+.studio-ui .system-editor legend { max-width: 100%; overflow-wrap: anywhere; font: var(--type-label); }
+.studio-ui .system-choice { display: flex; align-items: flex-start; gap: 8px; font: var(--type-caption); min-width: 0; }
+.studio-ui .system-choice input { flex: 0 0 auto; margin-top: 3px; }
+.studio-ui .system-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; position: sticky; bottom: 0; z-index: 1; padding-block: 8px; background: var(--color-bg); }
+.studio-ui .system-recovery { display: grid; gap: 12px; margin-block: 16px; }
+.studio-ui .system-editor .studio-select { width: 100%; }
+.studio-ui .system-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
+.studio-ui .sample-system-editor { max-width: 520px; width: 100%; }

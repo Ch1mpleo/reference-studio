@@ -15,7 +15,7 @@ type MaterialNode = Node<{
   readOnly: boolean;
   editing: boolean; revision: number; count: number; groupCommandsDisabled: boolean;
   edit: () => void; done: () => void; saveText: (text: string, revision: number) => Promise<number | void>;
-  duplicate: () => void; archive: () => void;
+  duplicate: () => void; archive: () => void; systems: () => void;
   inspect: () => void; view: () => void; resized: () => void; resizeStarted: () => void;
 }, "material">;
 export type BoardView = ReactFlowInstance<MaterialNode>;
@@ -32,7 +32,7 @@ function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
       <div className="board-item-caption"><span>{data.title}</span></div>
     </>}
     {selected && !data.editing ? <div className="board-item-actions nodrag nopan">
-      {data.frame ? <><StudioButton variant="ghost" disabled={data.readOnly} onClick={data.edit}>Rename</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.duplicate}>Duplicate</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.archive}>Ungroup</StudioButton></> : reference?.kind === "note" ? <StudioButton variant="ghost" onClick={data.edit}>Edit note</StudioButton> : <StudioButton variant="ghost" onClick={data.inspect}>Details</StudioButton>}
+      {data.frame ? <><StudioButton variant="ghost" disabled={data.readOnly} onClick={data.edit}>Rename</StudioButton><StudioButton variant="ghost" onClick={data.systems}>Systems</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.duplicate}>Duplicate</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.archive}>Ungroup</StudioButton></> : reference?.kind === "note" ? <StudioButton variant="ghost" onClick={data.edit}>Edit note</StudioButton> : <StudioButton variant="ghost" onClick={data.inspect}>Details</StudioButton>}
       {reference?.asset ? <StudioButton variant="ghost" onClick={data.view}>View image</StudioButton> : null}
     </div> : null}
   </div>;
@@ -41,7 +41,7 @@ const nodeTypes = { material: Material };
 const edges: Edge[] = [];
 
 export function BoardCanvas({ layout, references, selection, readOnly = false, projectId, onSelect, onCommit, onInspect, onView, onReady, onZoom, onGestureStart,
-  editingId, onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, groupCommandsDisabled }: {
+  editingId, onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems, groupCommandsDisabled }: {
   layout: BoardLayout; references: ProjectReference[]; selection: string[]; projectId: string;
   onSelect: (ids: string[]) => void; onCommit: (layout: BoardLayout) => void;
   onInspect: (id: string) => void; onView: (id: string) => void; onReady: (view: BoardView) => void;
@@ -52,6 +52,7 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
   onEditNote: (id: string, text: string, revision: number) => Promise<number>;
   onRenameGroup: (id: string, text: string, revision: number) => Promise<void>;
   onDuplicateGroup: (id: string) => void; onArchiveGroup: (id: string) => void; groupCommandsDisabled: boolean;
+  onOpenSystems: (id: string) => void;
 }) {
   const [spacePanning, setSpacePanning] = useState(false);
   const [nodes, setNodes] = useState<MaterialNode[]>([]);
@@ -61,8 +62,8 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
   const view = useRef<BoardView | null>(null);
   const latest = useRef({ layout, onCommit, onInspect, onView, onSelect, onGestureStart });
   latest.current = { layout, onCommit, onInspect, onView, onSelect, onGestureStart };
-  const actions = useRef({ onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup });
-  actions.current = { onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup };
+  const actions = useRef({ onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems });
+  actions.current = { onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems };
   const frame = useRef<number | null>(null);
   const gesturing = useRef(false);
   useEffect(() => {
@@ -120,6 +121,7 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
       edit: () => actions.current.onEdit(id), done: () => actions.current.onEditDone(id),
       saveText: (text: string, revision: number) => isFrame ? actions.current.onRenameGroup(id, text, revision) : actions.current.onEditNote(id, text, revision),
       duplicate: () => actions.current.onDuplicateGroup(id), archive: () => actions.current.onArchiveGroup(id),
+      systems: () => actions.current.onOpenSystems(id),
       annotations: (layout.annotations ?? []).filter((note) => note.target.type === "placement" && note.target.placementId === id),
       inspect: () => latest.current.onInspect(id), view: () => latest.current.onView(id), resized: schedule,
       resizeStarted: () => { gesturing.current = true; latest.current.onGestureStart(); } });
