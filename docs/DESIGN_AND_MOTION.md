@@ -1,6 +1,6 @@
 # Design and motion systems
 
-Agreed product scope, 2026-10-21. This is planned behavior, not shipped functionality. See [STATUS.md](STATUS.md) for implementation tasks and [PRODUCT.md](PRODUCT.md) for ownership and approval boundaries.
+Agreed product scope, 2026-10-21. This document describes the complete intended behavior; [STATUS.md](STATUS.md) distinguishes delivered draft records/editors from remaining playground, approval, and export work. See [PRODUCT.md](PRODUCT.md) for ownership and approval boundaries.
 
 ## Two uses
 

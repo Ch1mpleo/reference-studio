@@ -38,7 +38,7 @@ The working loop is: collect references → explore directions → review an exp
 - Treat spatial continuity, interruption, repetitive-task speed, reduced motion, and deliberate no-animation decisions as part of the direction. Review behavior in runnable experiments; screenshots alone cannot validate motion.
 - Provide a project-scoped motion playground: interactive examples, comparable variants, model-appropriate sliders/options, instant and reduced-motion alternatives, and named draft recipes. Users tune behavior directly before approving it.
 - Studio also needs its own shared UI and motion primitives. Keep those separate from each target project's style and system records.
-- Read [design and motion scope](DESIGN_AND_MOTION.md) for deliverables, review criteria, and the milestone integration. These systems are planned, not implemented.
+- Read [design and motion scope](DESIGN_AND_MOTION.md) for deliverables, review criteria, and milestone integration. STATUS distinguishes delivered draft records/editors from remaining playground, approval, and export work.
 
 ## References and assets
 
