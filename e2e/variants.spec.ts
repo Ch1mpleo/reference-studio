@@ -153,6 +153,43 @@ test("keeps slider values when a save fails or loses a revision race", async ({ 
   expect((await readVariants(page)).find((entry) => entry.name === "Held locally")?.motion).toMatchObject({ model: "tween", durationMs: 480, easing: "ease-out" });
 });
 
+test("retains a local name through a stale direction save", async ({ page }) => {
+  test.setTimeout(60_000);
+  const { saved } = await openStudy(page);
+  await saved.getByLabel("Variant name", { exact: true }).fill("Quiet menu");
+  await saved.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(saved.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  const raced = await page.evaluate(async () => {
+    const projects = await (await fetch("/api/projects")).json() as { projects: Array<{ id: string }> };
+    const project = projects.projects[0]!;
+    const board = await (await fetch(`/api/projects/${project.id}/board`)).json() as {
+      layout: { frames: Array<{ id: string; revision?: number }>; systems?: Array<{ id: string; kind: string; directionId: string; revision: number }> };
+    };
+    const system = board.layout.systems?.find((entry) => entry.kind === "motion");
+    const frame = board.layout.frames.find((entry) => entry.id === system?.directionId);
+    if (!system || frame?.revision === undefined) return 0;
+    const response = await fetch(`/api/projects/${project.id}/directions/${frame.id}/systems/${system.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+      body: JSON.stringify({ expectedRevision: system.revision, expectedDirectionRevision: frame.revision, name: "Remote motion system" }),
+    });
+    return response.status;
+  });
+  expect(raced).toBe(200);
+  const name = saved.getByLabel("Variant name", { exact: true });
+  await name.fill("Local retained name");
+  await saved.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(saved.getByRole("status")).toContainText("Conflict");
+  await expect(name).toHaveValue("Local retained name");
+  await saved.getByRole("button", { name: "Review latest", exact: true }).click();
+  await expect(saved.getByRole("button", { name: "Reapply my draft", exact: true })).toBeEnabled();
+  await saved.getByRole("button", { name: "Reapply my draft", exact: true }).click();
+  await expect(name).toHaveValue("Local retained name");
+  await saved.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(saved.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  expect((await readVariants(page)).some((entry) => entry.name === "Local retained name")).toBe(true);
+});
+
 test("compares a saved variant with local tuning in neutral words", async ({ page }) => {
   test.setTimeout(60_000);
   const { study, tuning, saved } = await openStudy(page);
