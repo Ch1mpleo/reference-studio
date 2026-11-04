@@ -298,4 +298,23 @@ describe("useServiceConnection", () => {
       view.root.unmount();
     });
   });
+
+  it("keeps the workspace reachable when the stream errors before it opens", async () => {
+    installConnectionDoubles();
+    const view = await mountProbe();
+    await settleSession();
+    await settle(latest("/api/health"), healthResponse());
+    expect(text(view.container, "[data-state]")).toBe("ready");
+    const source = FakeEventSource.instances[0];
+    if (source === undefined) throw new Error("Expected an event stream.");
+    await act(async () => {
+      source.emit("error");
+    });
+    expect(text(view.container, "[data-state]")).toBe("reconnecting");
+    expect(text(view.container, "[data-health]")).toBe("1");
+
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
 });
