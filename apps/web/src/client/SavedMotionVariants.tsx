@@ -57,13 +57,13 @@ export function SavedMotionVariants({ projectId, directionId, draft, onLoad }: {
         if (copy) setName(variant.name);
         baseline.current = copy ? JSON.stringify({ parameters: draft.parameters, preset: draft.preset, name: variant.name, rationale, observations, responsive }) : submitted;
         setStatus("Saved");
-      } else setStatus("Saved submitted version Â· newer edits remain unsaved");
+      } else setStatus("Saved submitted version · newer edits remain unsaved");
     } catch (error) {
-      if (error instanceof BoardRequestError && error.conflict) { setConflict(true); setStatus("Conflict Â· your tuning is retained. Review latest before reapplying."); attempt.current = null; }
-      else setStatus(error instanceof Error ? error.message : "Save failed Â· your tuning is retained");
+      if (error instanceof BoardRequestError && error.conflict) { setConflict(true); setStatus("Conflict · your tuning is retained. Review latest before reapplying."); attempt.current = null; }
+      else setStatus(error instanceof Error ? error.message : "Save failed · your tuning is retained");
     } finally { setBusy(false); }
   }
-  return <details className="sample-disclosure playground-saved"><summary>Saved variants</summary><section aria-label="Saved motion variants" className="playground-tuning-fields">
+  return <details className="studio-disclosure playground-saved"><summary>Saved variants</summary><section aria-label="Saved motion variants" className="playground-tuning-fields">
     <p className="studio-help">Draft variants belong to a group. Saving does not approve a direction.</p>
     <StudioSelect field label="Variant group" disabled={busy || selected !== ""} value={owner} options={[{ value: "", label: "Choose a group" }, ...(board?.layout.frames.filter((frame) => !frame.archived).map((frame) => ({ value: frame.id, label: frame.name })) ?? [])]} onChange={setOwner} />
     {!board ? <StudioButton onClick={() => void getBoard(projectId).then(setBoard).catch(() => setStatus("Could not read saved variants"))}>Retry reading variants</StudioButton> : null}
@@ -74,8 +74,8 @@ export function SavedMotionVariants({ projectId, directionId, draft, onLoad }: {
     <StudioTextArea label="Why this motion fits" value={rationale} onChange={setRationale} />
     <StudioField label="Responsive context" value={responsive} onChange={setResponsive} />
     <StudioTextArea label="Review observations" value={observations} onChange={setObservations} />
-    <p className="studio-meta" role="status">{status}{status === "Saved" && dirty ? " Â· unsaved changes" : ""}</p>
-    {conflict ? <div><StudioButton onClick={() => void getBoard(projectId).then(setReview).catch(() => setStatus("Could not read latest; your tuning is retained"))}>Review latest</StudioButton>{review ? <><p className="studio-help">Latest saved names: {review.layout.systems?.filter((entry) => entry.directionId === owner).flatMap((entry) => entry.kind === "motion" ? (entry.content.variants ?? []).map((variant) => `${variant.name}: ${JSON.stringify(variant.settings)}, ${variant.distancePx}px ${variant.direction}; ${variant.context.rationale}`) : []).join("; ") || "No motion variants"}</p><StudioButton onClick={() => { setBoard(review); setReview(null); setConflict(false); setStatus("Latest reviewed Â· save deliberately to reapply"); }}>Reapply my draft</StudioButton></> : null}</div> : null}
-    <div className="sample-control-row"><StudioButton busy={busy} disabled={!owner || !board || conflict || !name.trim()} onClick={() => void save(false)}>Save variation</StudioButton><StudioButton disabled={busy || !selected || conflict} onClick={() => void save(true)}>Duplicate variation</StudioButton><StudioButton disabled={busy || !selected || conflict} onClick={() => { const variant = variants.find((entry) => entry.id === selected); if (variant) load(variant); }}>Discard local changes</StudioButton></div>
+    <p className="studio-meta" role="status">{status}{status === "Saved" && dirty ? " · unsaved changes" : ""}</p>
+    {conflict ? <div><StudioButton onClick={() => void getBoard(projectId).then(setReview).catch(() => setStatus("Could not read latest; your tuning is retained"))}>Review latest</StudioButton>{review ? <><p className="studio-help">Latest saved names: {review.layout.systems?.filter((entry) => entry.directionId === owner).flatMap((entry) => entry.kind === "motion" ? (entry.content.variants ?? []).map((variant) => `${variant.name}: ${JSON.stringify(variant.settings)}, ${variant.distancePx}px ${variant.direction}; ${variant.context.rationale}`) : []).join("; ") || "No motion variants"}</p><StudioButton onClick={() => { setBoard(review); setReview(null); setConflict(false); setStatus("Latest reviewed · save deliberately to reapply"); }}>Reapply my draft</StudioButton></> : null}</div> : null}
+    <div className="playground-saved-actions"><StudioButton busy={busy} disabled={!owner || !board || conflict || !name.trim()} onClick={() => void save(false)}>Save variation</StudioButton><StudioButton disabled={busy || !selected || conflict} onClick={() => void save(true)}>Duplicate variation</StudioButton><StudioButton disabled={busy || !selected || conflict} onClick={() => { const variant = variants.find((entry) => entry.id === selected); if (variant) load(variant); }}>Discard local changes</StudioButton></div>
   </section></details>;
 }

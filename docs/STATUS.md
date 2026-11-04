@@ -7,8 +7,7 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 - Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance, M2.0a, M2.0b, M2.0c, M2.1, M2.2, M2.3, M2.4 (current records), M2.5, M2.6, M2.7, M2.8, M2.11 (manual rehearsal).
 - Active milestone: M2. The board/annotation foundation, direction-scoped draft design/motion records/editors, and trusted dropdown playground with local model-aware tuning are implemented. Ordinary work stays on the board with inline notes/simple groups and compact controls. M2.6 includes system-graph duplication and backup format 4; variant duplication remains part of M2.9 when those records ship. This does not complete all of M2.
 - Loader-specimen replay checkpoint: resolved on 2026-10-29. The failure was test synchronization with an already-running reveal; runtime animation behavior did not need changing.
-<<<<<<< HEAD
-- Next task: M2.9 named persisted motion variants, exact settings/rationale, revision/conflict recovery, direction duplication, and backup integration. M2.10 acceptance and M3 live MCP remain open. The user requested the next task after the M2.7 correction; M2.8 continues on the canvas. Changes remain uncommitted on `feat/m2-system-records`.
+- Next task: M2.9 named persisted motion variants, exact settings/rationale, revision/conflict recovery, direction duplication, and backup integration. The merged branch already includes a canvas saved-variant section; that does not close this gate. M2.10 acceptance and M3 live MCP remain open.
 
 ## M2.8 — Compare and tune on the canvas — 2026-11-02
 
@@ -35,8 +34,6 @@ The versioned registry and strict parameter validation remain. The dropdown supp
 **Correction checks:** selected groups initially intercepted the study because React Flow elevates selected materials; the local experiment now has an explicit layer within the flow, below ordinary workspace chrome. An initial combined note journey intermittently failed before its edit readiness was established; synchronization now requires the actual textarea to hold focus and the board save to finish before Escape. The focused fixture suite also passed three consecutive repetitions. Screenshots now wait for settled playback and reset body scroll before recording the resting view.
 
 **Historical checkpoint:** the revised visual presentation was inspected by the agent. The user subsequently requested the next task, authorizing the M2.8 continuation recorded above; this does not infer blanket aesthetic approval. M2.8 owns editable presets/model-aware tuning; M2.9 owns persisted named variants/conflicts/duplication/backup. Additional fixtures can follow when representative reuse needs them. Native 200% browser zoom, broader browsers/runtimes, populated-system performance, full M2.10 acceptance, target-product validation, and MCP remain open.
-=======
-- Open work, ordered in PLAN.md: M2.7 trusted interactive fixtures, M2.8 tuning and comparison, M2.9 persisted variants, M2.10 acceptance, and M3's live MCP/client loop. M2.6 is committed on `feat/m2-system-records`; the pre-existing lockfile edit remains uncommitted.
 
 ## Design ruleset slim — 2026-11-04
 
@@ -45,7 +42,16 @@ Slimmed the Studio design ruleset and aligned the product chrome with it. `desig
 **Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 35 files, 141 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 41 tests. Microsoft Edge is not installed in this environment, so the browser suite used Chrome. Before and after screenshots, desktop dark, desktop light, and 390px dark, cover the product, Projects dialog, selected note, Library, and `#/studio`.
 
 **Remaining:** the Library still uses the stacked search form; the kind radio, optional tag, and chips are documentation only. Human visual acceptance, native 200% zoom, and Edge were not run. The Vite main-chunk warning remains.
->>>>>>> e6ad89c4b5007dde7785a2b012fe1362d5f473ed
+
+## Merge review — 2026-11-04
+
+The M2.7/M2.8 merge left conflict markers in `design.md`, this file, and `ReferenceWorkspace.tsx`. It put the retired design spec back beside the slim one, re-encoded the dock arrows and playground status text, and kept `sample-*` classes plus a blurred glass card on the canvas study.
+
+Restored the slim design file and recorded `StudioParameter` in its shared-component table. Kept the study opener and the sans Library help. The study card and the fixture menu are solid overlays. Spacing uses the existing tokens. Selection stays the brighter glass edge. Motion timing, presets, and save behavior were not changed. `PLAN.md` names M2.9 next. The saved-variant section that arrived with the branch does not close that gate.
+
+**Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 38 files, 147 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 54 tests. Microsoft Edge is not installed. A Chrome pass of the canvas study covered 1440×900 light, 1440×900 dark, and 390×844 dark, with Tune open and reduced motion checked. The selected note border was `rgba(0, 0, 0, 0.22)` in light and `rgba(255, 255, 255, 0.2)` in dark. The study card was the solid overlay (`#ffffff` / `#1c1c22`) with no backdrop filter.
+
+**Remaining:** the reduced-motion control is still the shared preview checkbox; there is no checkbox primitive. The Library kind segment is still not built. Native 200% zoom and Edge were not run. The Vite main-chunk warning remains.
 
 ## M2.6 — Draft design/motion records and editors — 2026-11-01
 

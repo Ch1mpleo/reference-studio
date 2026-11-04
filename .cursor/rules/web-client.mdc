@@ -11,4 +11,4 @@ Follow [design.md](../../design.md) for tokens, primitives, and core rules.
 - Functional React and plain CSS. This is Vite, not Next.js: no Server Components, Server Actions, `next/image`, or `use client`.
 - Persisted project state stays in the application service. Local state is selection, panels, and unsaved edits.
 - Parse external responses with shared core schemas. Reuse the connection hook and drop obsolete responses.
-- Keep artwork legible. Use real thumbnails and only recorded crops. Verify changed screens in a browser at desktop and phone widths.
+- Keep artwork legible. Use real thumbnails and only recorded crops. Verify changed screens in a browser at desktop width. Phone layout is not required.

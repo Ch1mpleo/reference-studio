@@ -29,7 +29,6 @@ type SampleConnection = {
 type SampleKind = "image" | "link" | "note";
 type SampleRole = "inspiration" | "candidate" | "approved";
 type SaveState = "conflict" | "error" | "saving" | "saved";
-type ThemeChoice = "system" | "light" | "dark";
 type KindFilter = "all" | SampleKind;
 type AddTab = "image" | "link" | "note";
 
@@ -168,7 +167,6 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
     onRetry: () => undefined,
   };
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [themeChoice, setThemeChoice] = useState<ThemeChoice>("system");
   const [plain, setPlain] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [dialog, setDialog] = useState<null | "note" | "add">(null);
@@ -353,7 +351,6 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
       data-reduced-motion={effectiveReducedMotion ? "true" : "false"}
       data-plain={plain ? "true" : "false"}
       data-details-open={detailsOpen ? "true" : "false"}
-      data-studio-theme={themeChoice === "system" ? undefined : themeChoice}
       style={motionStyle}
     >
       <header className="sample-topbar">
@@ -552,13 +549,6 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
         <div className="sample-specimen-grid">
           <section className="sample-control-section" aria-label="Appearance samples">
             <h3>Appearance</h3>
-            <div className="sample-views" role="group" aria-label="Theme">
-              {(["system", "light", "dark"] as const).map((choice) => (
-                <StudioButton key={choice} aria-pressed={themeChoice === choice} onClick={() => setThemeChoice(choice)}>
-                  {choice === "system" ? "System" : choice === "light" ? "Light" : "Dark"}
-                </StudioButton>
-              ))}
-            </div>
             <label className="preview-switch">
               <input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} />
               Preview reduced motion

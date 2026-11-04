@@ -48,13 +48,13 @@ test("board-native groups and notes edit in place without view modes or geometry
   await expect(page.locator(".board-frame-heading")).toContainText("Typography");
 });
 
-test("zoom stays bare, vertical and bottom-right on the phone board", async ({ page }, info) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
-  const created = await project(page, "Phone board controls");
+test("zoom stays bare, vertical, and bottom-right", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const created = await project(page, "Board zoom");
   const zoom = page.getByRole("toolbar", { name: "Canvas zoom", exact: true });
   const bounds = await zoom.boundingBox(); if (!bounds) throw new Error("Zoom controls missing");
-  expect(bounds.x + bounds.width).toBeGreaterThan(366); expect(bounds.y + bounds.height).toBeGreaterThan(800);
+  expect(bounds.x + bounds.width).toBeGreaterThan(1360);
+  expect(bounds.y + bounds.height).toBeGreaterThan(820);
   expect(bounds.height).toBeGreaterThan(bounds.width * 2);
   await expect(zoom).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(zoom).toHaveCSS("border-top-width", "0px");
@@ -69,12 +69,6 @@ test("zoom stays bare, vertical and bottom-right on the phone board", async ({ p
   await zoom.getByRole("button", { name: "Fit selection", exact: true }).click();
   await expect.poll(async () => Number(await zoom.getByLabel("Canvas scale", { exact: true }).innerText().then((value) => value.replace("%", "")))).toBeGreaterThan(10);
   expect(projectReferenceListSchema.parse(await json(page, `/api/projects/${created.id}/references`)).references).toHaveLength(1);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: info.outputPath("simple-board-phone.png") });
-  await page.setViewportSize({ width: 720, height: 480 });
-  const short = await zoom.boundingBox(); if (!short) throw new Error("Zoom controls missing in short window");
-  expect(short.y).toBeGreaterThan(56); expect(short.y + short.height).toBeLessThanOrEqual(480);
-  await page.screenshot({ path: info.outputPath("simple-board-short.png") });
 });
 
 test("inline note failures retain text when another object becomes active and can be retried", async ({ page }) => {

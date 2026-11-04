@@ -114,22 +114,6 @@ test("drop, arrange, group, undo, inspect, and reload without opening an upload 
   expect(errors).toEqual([]);
 });
 
-test("phone board keeps pasted notes and the library reachable", async ({ page }, info) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
-  await openProject(page, "Canvas phone");
-  await page.evaluate(() => {
-    const clipboardData = new DataTransfer(); clipboardData.setData("text/plain", "Keep generous breathing room.");
-    document.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }));
-  });
-  await expect(page.locator(".board-material")).toContainText("Keep generous breathing room.");
-  await page.getByRole("toolbar", { name: "Canvas tools" }).getByRole("button", { name: "Library", exact: true }).click();
-  const panel = page.getByRole("dialog", { name: "Reference details" });
-  await expect(panel).toBeVisible(); await page.keyboard.press("Escape"); await expect(panel).toBeHidden();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: info.outputPath("canvas-phone.png") });
-});
-
 test("a populated board keeps frame movement and image resizing persistent", async ({ page }, info) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   // Seed without live refetches racing fixture construction. Production GETs and

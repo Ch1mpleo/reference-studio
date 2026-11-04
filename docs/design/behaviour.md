@@ -62,6 +62,6 @@ Menus use arrow keys, Home, End, Enter, Space, and Escape. A select chooses a va
 
 ## Theme and structure
 
-Light defaults live on the Studio scope. OS dark applies when theme is not explicit. Then an explicit light or dark override wins. Portaled popovers stay in the Studio theme scope. Native dialogs inherit it. Target previews use an isolated root.
+Studio is dark. There is no light theme and no theme toggle. Portaled popovers stay in the Studio scope. Native dialogs inherit it. Target previews use an isolated root.
 
 One page heading, named navigation, a main board, and a labeled inspector. A nonmodal desktop inspector does not steal focus on every selection.
