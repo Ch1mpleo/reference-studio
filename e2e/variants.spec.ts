@@ -152,3 +152,24 @@ test("keeps slider values when a save fails or loses a revision race", async ({ 
   await expect(saved.getByRole("status")).toHaveText("Saved");
   expect((await readVariants(page)).find((entry) => entry.name === "Held locally")?.motion).toMatchObject({ model: "tween", durationMs: 480, easing: "ease-out" });
 });
+
+test("compares a saved variant with local tuning in neutral words", async ({ page }) => {
+  test.setTimeout(60_000);
+  const { study, tuning, saved } = await openStudy(page);
+  await tuning.getByLabel("Duration (ms)", { exact: true }).fill("640");
+  await saved.getByLabel("Variant name", { exact: true }).fill("Quiet menu");
+  await saved.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(saved.getByRole("status")).toHaveText("Saved");
+  await study.getByRole("button", { name: "Compare A/B", exact: true }).click();
+  const comparison = study.getByRole("region", { name: "Variant comparison", exact: true });
+  await expect(comparison).toContainText("640 ms");
+  await expect(comparison).toContainText("Saved record Quiet menu.");
+  await expect(comparison).toContainText("no timed transition");
+  await expect(comparison).toContainText("Local tuning.");
+  const text = await comparison.innerText();
+  expect(text).not.toMatch(/winner|universal score|\bscore\b|✓|✔|✗|✘|\bbetter\b|\bworse\b|Approved|\bSelected\b/i);
+  if (process.env.REFERENCE_STUDIO_CAPTURE === "1") {
+    await comparison.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: "docs/evidence/m2-variants/comparison-desktop-dark.png" });
+  }
+});

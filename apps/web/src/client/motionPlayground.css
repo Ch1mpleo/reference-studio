@@ -11,6 +11,9 @@
 .studio-ui .playground-content { padding: var(--space-5) var(--space-6); max-height: max(140px, calc(100dvh - 320px)); overflow: auto; overscroll-behavior: contain; }
 .studio-ui .motion-playground { display: grid; gap: var(--space-5); }
 .studio-ui .playground-toolbar, .studio-ui .playground-comparison-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.studio-ui .playground-comparison { display: grid; gap: var(--space-2); }
+.studio-ui .playground-comparison p { margin: 0; }
+.studio-ui .motion-playground[data-tuning="true"] > .playground-comparison { grid-column: 1 / -1; }
 .studio-ui .playground-toolbar { justify-content: space-between; gap: var(--space-4); }
 .studio-ui .playground-toolbar h3 { font: var(--type-card); margin: 0 0 var(--space-1); }
 .studio-ui .playground-toolbar p { margin: 0; }

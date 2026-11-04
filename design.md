@@ -100,6 +100,7 @@ Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one op
 | Segment | `StudioSegment.tsx` | Radio group. Arrow keys move the selection. The selected option uses the glass edge. |
 | Field | `StudioField.tsx` | Visible label, helper, error, and `aria-describedby`. `StudioTextArea` uses the same anatomy. |
 | Parameter | `StudioParameter.tsx` | Labeled range and number. Invalid text stays visible. Only a finite in-range value updates the preview. |
+| Comparison | `VariantComparison.tsx` | Neutral A/B readout for a saved record or local tuning. No winner, score, or quality mark. |
 | Select | `StudioSelect.tsx` | Short option list, keyboard, popover kept in the dialog or Studio scope. |
 | Card | `StudioReferenceCard.tsx` | Glass card, reserved media, selected glass edge, named Open details. |
 | Dialog | `StudioDialog.tsx` | Native dialog, focus return. The dialog element itself has no filter or transform. |

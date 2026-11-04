@@ -9,6 +9,7 @@ import { StudioDialog } from "./StudioDialog.js";
 import { StudioField } from "./StudioField.js";
 import { StudioSelect } from "./StudioSelect.js";
 import { useVariantDraftHosts, variantDraftKey } from "./VariantDraftHost.js";
+import { variantLaneSource } from "./VariantComparison.js";
 import { VariantRequestError, variantClient, type DirectionVariants, type VariantClient } from "./variantApi.js";
 
 export type VariantTarget = { variantId: string; baseRevision: number; record: VariantRecord | null; saved?: boolean };
@@ -54,6 +55,7 @@ export type VariantEditorProps = {
   tuning: boolean;
   onTuning: (open: boolean) => void;
   onDraft: (draft: MotionDraft) => void;
+  onSource?: (source: string) => void;
   onBoard?: (board: Board) => void;
   onRetarget: (next: VariantTarget) => void;
   initialRecord: VariantRecord | null;
@@ -64,7 +66,7 @@ export type VariantEditorProps = {
 type WriteKind = "save" | "save-as" | "rename" | "duplicate";
 
 /** Save controls for one study lane. The host keeps this instance mounted. */
-export function VariantEditor({ projectId, directionId, preset, laneLabel, hidden, tuning, onTuning, onDraft, onBoard, onRetarget, initialRecord, startSaved = false, client = variantClient }: VariantEditorProps) {
+export function VariantEditor({ projectId, directionId, preset, laneLabel, hidden, tuning, onTuning, onDraft, onSource, onBoard, onRetarget, initialRecord, startSaved = false, client = variantClient }: VariantEditorProps) {
   const [draft, setDraft] = useState<MotionDraft>(() => initialRecord ? draftFromVariant(initialRecord) : createMotionDraft(preset));
   const [name, setName] = useState(() => initialRecord?.name ?? motionPresets[preset].label);
   const [variants, setVariants] = useState<VariantRecord[]>(() => initialRecord ? [initialRecord] : []);
@@ -87,12 +89,15 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
   const attempt = useRef<{ signature: string; key: string } | null>(null);
   const loadGeneration = useRef(0);
   const onDraftRef = useRef(onDraft); onDraftRef.current = onDraft;
+  const onSourceRef = useRef(onSource); onSourceRef.current = onSource;
   const openingSig = useRef(signature(name, draft));
   const savedSig = base ? signature(base.name, draftFromVariant(base)) : null;
   const dirty = savedSig === null ? signature(name, draft) !== openingSig.current : signature(name, draft) !== savedSig;
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { onDraftRef.current(draft); }, [draft]);
+  const source = variantLaneSource(base?.name ?? null, dirty);
+  useEffect(() => { onSourceRef.current?.(source); }, [source]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       const currentBase = baseRef.current;
