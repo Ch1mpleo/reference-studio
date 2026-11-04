@@ -43,6 +43,16 @@ Slimmed the Studio design ruleset and aligned the product chrome with it. `desig
 
 **Remaining:** the Library still uses the stacked search form; the kind radio, optional tag, and chips are documentation only. Human visual acceptance, native 200% zoom, and Edge were not run. The Vite main-chunk warning remains.
 
+## Merge review — 2026-11-04
+
+The M2.7/M2.8 merge left conflict markers in `design.md`, this file, and `ReferenceWorkspace.tsx`. It put the retired design spec back beside the slim one, re-encoded the dock arrows and playground status text, and kept `sample-*` classes plus a blurred glass card on the canvas study.
+
+Restored the slim design file and recorded `StudioParameter` in its shared-component table. Kept the study opener and the sans Library help. The study card and the fixture menu are solid overlays. Spacing uses the existing tokens. Selection stays the brighter glass edge. Motion timing, presets, and save behavior were not changed. `PLAN.md` names M2.9 next. The saved-variant section that arrived with the branch does not close that gate.
+
+**Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 38 files, 147 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 54 tests. Microsoft Edge is not installed. A Chrome pass of the canvas study covered 1440×900 light, 1440×900 dark, and 390×844 dark, with Tune open and reduced motion checked. The selected note border was `rgba(0, 0, 0, 0.22)` in light and `rgba(255, 255, 255, 0.2)` in dark. The study card was the solid overlay (`#ffffff` / `#1c1c22`) with no backdrop filter.
+
+**Remaining:** the reduced-motion control is still the shared preview checkbox; there is no checkbox primitive. The Library kind segment is still not built. Native 200% zoom and Edge were not run. The Vite main-chunk warning remains.
+
 ## M2.6 — Draft design/motion records and editors — 2026-11-01
 
 Delivered versioned core schemas and service-owned records within the existing board aggregate, with migration 006, independent system/direction revisions, authenticated idempotent create/read/update/archive/restore, and retained history. Design records cover semantic values/units/context, component/layout/image recipes, accessibility, and rationale. Motion records cover roles/presets/recipes and strict Instant/tween/physics-spring settings with engine-specific assumptions, input/focus/interruption behavior, no-motion and reduced-motion choices. Observations, human feedback, proposals, exceptions, and questions remain distinct; still images cannot validate motion, and Save does not approve anything.
