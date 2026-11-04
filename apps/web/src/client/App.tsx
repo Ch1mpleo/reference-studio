@@ -7,6 +7,7 @@ import { studioMotionStyle, useStudioReducedMotion } from "./studioMotion.js";
 import { useProjectLibrary } from "./useProjectLibrary.js";
 import { useServiceConnection, type ServiceState } from "./useServiceConnection.js";
 import { SystemDraftHostProvider } from "./SystemDraftHost.js";
+import { VariantDraftHostProvider } from "./VariantDraftHost.js";
 
 const StudioPreview = lazy(async () => ({ default: (await import("./StudioPreview.js")).StudioPreview }));
 
@@ -40,7 +41,7 @@ function useLocationHash(): string {
 }
 
 export function App() {
-  return <SystemDraftHostProvider><AppContent /></SystemDraftHostProvider>;
+  return <VariantDraftHostProvider><SystemDraftHostProvider><AppContent /></SystemDraftHostProvider></VariantDraftHostProvider>;
 }
 function AppContent() {
   const connection = useServiceConnection();

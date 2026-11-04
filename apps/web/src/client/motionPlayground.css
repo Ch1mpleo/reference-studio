@@ -54,6 +54,8 @@
   .studio-ui .motion-playground[data-active="1"] .playground-variant[data-variant="0"] { display: none; }
 }
 
-.studio-ui .playground-saved { grid-column: 1 / -1; }
-.studio-ui .playground-saved > section { padding-top: var(--space-4); }
+.studio-ui .variant-host, .studio-ui .variant-host-mount { display: contents; }
+.studio-ui .playground-saved { display: grid; gap: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-line); }
+.studio-ui .motion-playground[data-tuning="true"] .playground-saved { grid-column: 1 / -1; }
+.studio-ui .playground-saved .studio-kicker { margin: 0; }
 .studio-ui .playground-saved-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }

@@ -4,11 +4,23 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance, M2.0a, M2.0b, M2.0c, M2.1, M2.2, M2.3, M2.4 (current records), M2.5, M2.6, M2.7, M2.8, M2.11 (manual rehearsal). M2.9's variant service, direction-graph copy, and backup format 5 are recorded below. The save/compare UI is still open.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance, M2.0a, M2.0b, M2.0c, M2.1, M2.2, M2.3, M2.4 (current records), M2.5, M2.6, M2.7, M2.8, M2.11 (manual rehearsal). M2.9's variant service and the study save, reopen, and conflict controls are recorded below. Neutral comparison and recommendation editing are still open.
 - Active milestone: M2. The board, direction-scoped design/motion records, and the canvas motion study with local tuning are implemented. Ordinary work stays on the board. M2.9 variants live in their own table, not in the board aggregate. Studio is dark. Desktop is the target. This does not complete all of M2.
 - Loader-specimen replay checkpoint: resolved on 2026-10-29. The failure was test synchronization with an already-running reveal; runtime animation behavior did not need changing.
-- Next task: M2.9 save and compare on the variant service. The canvas section that writes variants into the motion system does not close this gate. M2.10 acceptance and M3 live MCP remain open.
+- Next task: M2.9 neutral comparison and recommendation editing. M2.10 acceptance and M3 live MCP remain open.
 - Library search uses the kind radio, optional tag, and filter chips from design.md. Evidence is in the entry below.
+
+## M2.9 — Save, reopen, and conflict in the study — 2026-11-04
+
+The motion study can save the active lane's tuning through the variant service. Save creates a variant when none is open and updates the open one after that. Save as always creates another named record. Rename, Duplicate, Reset to preset, and Discard local changes are separate controls. The reopen list is the direction's saved variants. Save is not approval. There is no Approve control, and local tuning is not labeled Saved or Approved. A saved notice appears beside the action only after the service accepts that edit. A later edit during the request stays unsaved.
+
+Drafts are held above the study by project, direction, variant id, and the revision they were opened against. Closing the study, resizing the card, or switching projects leaves the draft in place. Reload does not. A failed save or a dropped network keeps the slider and number. A 409 keeps the draft and offers Review latest, Reapply my draft, and Discard. The next Save writes. The same idempotency key is not reused after a conflict.
+
+Entry distance and direction stay on the local study draft. The variant record stores the motion model, its values, and its units, not the fixture travel. Reopen restores that motion onto the named preset's distance and direction. This slice does not set Selected and does not edit recommendation fields. Studio stays dark. There is no phone layout.
+
+**Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 43 files, 163 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 52 tests on Chrome 156.0.8078.47. Microsoft Edge is not installed. The desktop dark capture, with reduced motion so the study was still, is [docs/evidence/m2-variants/desktop-dark.png](evidence/m2-variants/desktop-dark.png). The Vite main-chunk warning remains at about 659 kB. The study chunk is about 102 kB.
+
+**Remaining:** neutral comparison, recommendation fields, and defect lists are still open. Entry distance and direction are not part of the saved record. Node 24 was not run. Human visual acceptance, native 200% zoom, and Edge were not run.
 
 ## Library segment filter — 2026-11-04
 
@@ -50,7 +62,7 @@ Saved variants live in `motion_variants`, not in the board aggregate. A variant 
 
 `selected` is a human marker, separate from approval. Only a browser session can change it, and only one variant per motion system can hold it. Agents receive a validation error. Create and same-system duplicate always store `selected: false`. Direction duplication copies the recorded marker onto the new motion system with fresh ids. Restore keeps that recorded marker. Placement and annotation links inside the copy are remapped. Links to shared or other-direction evidence stay. Backup format is 5. The export writes a top-level `variants` array beside the board. Formats 1–4 still import. A format below 5 that contains variants is rejected. Format 6 returns the version message.
 
-Fixture id/version and engine name/version are checked for shape, and motion values reuse the existing instant/tween/spring schema. The service does not invent a second fixture catalog. There is no `approved` field. Studio stays dark, and this slice adds no phone layout.
+Fixture id/version and engine name/version are checked for shape, and motion values reuse the existing instant/tween/spring schema. The service does not invent a second fixture catalog. There is no `approved` field. Studio stays dark, and this slice adds no phone layout. A format 5 backup does not import into a build from before this variant service. Those builds read formats 1–4 only.
 
 **Verification:** Rebased onto `feat/m2-system-records` at `6fa0a6b`. Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 41 files, 158 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` is 51 scenarios on Chrome 156.0.8078.47. Microsoft Edge is not installed. The full run passed 50, including the Library kind segment. The canvas-study visibility check failed once and passed in isolation. This rebase did not change the canvas client or the Library filter. The Vite main-chunk warning remains at about 658 kB.
 

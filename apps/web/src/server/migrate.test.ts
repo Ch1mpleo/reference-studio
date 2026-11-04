@@ -39,6 +39,29 @@ describe("migrate", () => {
       expect(migrate(database, defaultMigrationsDir())).toEqual([]);
     } finally { database.close(); }
   });
+
+  it("records migration 007 once and does not add variants to layout JSON", () => {
+    const directory = tempDir();
+    const migrationsDir = path.join(directory, "migrations");
+    mkdirSync(migrationsDir);
+    for (const name of readdirSync(defaultMigrationsDir()).filter((name) => name < "007")) copyFileSync(path.join(defaultMigrationsDir(), name), path.join(migrationsDir, name));
+    const database = openDatabase(path.join(directory, "data"));
+    try {
+      migrate(database, migrationsDir);
+      database.prepare("INSERT INTO projects VALUES (?, ?, '', '', '', '', 'active', 1, ?, ?)").run("populated", "Populated", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+      const layoutJson = JSON.stringify({ frames: [{ id: "direction", name: "Quiet", revision: 4, concept: "Keep", rect: { x: 1, y: 2, width: 700, height: 600 } }], items: [{ placementId: "placement", frameId: "direction" }], systems: [{ id: "system", kind: "motion" }], marker: "keep" });
+      database.prepare("INSERT INTO project_boards VALUES ('populated', 9, ?)").run(layoutJson);
+      expect(migrate(database, defaultMigrationsDir())).toEqual(["007_variants.sql"]);
+      const row = database.prepare("SELECT revision, layout_json FROM project_boards WHERE project_id = 'populated'").get() as { revision: number; layout_json: string };
+      expect(row).toEqual({ revision: 9, layout_json: layoutJson });
+      expect(JSON.parse(row.layout_json)).not.toHaveProperty("variants");
+      expect(appliedMigrationNames(database).filter((name) => name === "007_variants.sql")).toEqual(["007_variants.sql"]);
+      expect(database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'motion_variants_system_idx'").all()).toEqual([{ name: "motion_variants_system_idx" }]);
+      expect(migrate(database, defaultMigrationsDir())).toEqual([]);
+      expect(appliedMigrationNames(database).filter((name) => name === "007_variants.sql")).toEqual(["007_variants.sql"]);
+    } finally { database.close(); }
+  });
+
   it("adds independent direction revisions to existing boards without changing notes, geometry, or aggregate revisions", () => {
     const directory = tempDir();
     const migrationsDir = path.join(directory, "migrations");

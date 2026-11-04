@@ -251,7 +251,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       editingId={editingId} onEdit={setEditingId} onEditDone={(id) => { setEditingId((current) => current === id ? null : current); setFailedNotes((ids) => ids.filter((entry) => entry !== id)); }} onEditNote={editNote} onRenameGroup={renameGroup}
       onDuplicateGroup={(id) => groupCommand(id, false)} onArchiveGroup={(id) => groupCommand(id, true)} onOpenSystems={openSystems} groupCommandsDisabled={board.unsaved || operation}
       onSelect={setSelection} onCommit={board.commit} onInspect={inspect} onView={view} onGestureStart={board.beginGesture}
-      playground={playground} onMovePlayground={(position) => setPlayground((current) => current ? { ...current, position } : current)} onClosePlayground={removePlayground}
+      playground={playground} onMovePlayground={(position) => setPlayground((current) => current ? { ...current, position } : current)} onClosePlayground={removePlayground} onAcceptBoard={board.acceptServer}
       onReady={(instance) => { canvas.current = instance; }} onZoom={setZoom} /></div>
     {ready && !playground && references.length === 0 && activeFrames.length === 0 ? <div className="canvas-empty"><pre aria-hidden="true">{"[ + ]"}</pre><h1>Drop your references here</h1><p>Drop images, paste links, or add a note. Make room for an idea.</p></div> : null}
     {dropping ? <div className="canvas-drop-hint" aria-hidden="true">Drop JPEG, PNG, or WebP images</div> : null}

@@ -3,7 +3,7 @@ import {
   ReactFlow, Background, BackgroundVariant, NodeResizer, applyNodeChanges,
   type Node, type NodeProps, type ReactFlowInstance, type NodeChange, type Edge,
 } from "@xyflow/react";
-import type { BoardAnnotation, BoardLayout, ProjectReference } from "@reference-studio/core";
+import type { Board, BoardAnnotation, BoardLayout, ProjectReference } from "@reference-studio/core";
 import { StudioButton } from "./StudioButton.js";
 import { ImageRegions } from "./ImageRegions.js";
 import { BoardInlineText } from "./BoardInlineText.js";
@@ -19,13 +19,13 @@ type MaterialNode = Node<{
   duplicate: () => void; archive: () => void; systems: () => void;
   inspect: () => void; view: () => void; resized: () => void; resizeStarted: () => void;
 }, "material">;
-type PlaygroundNode = Node<{ study: CanvasPlayground; close: () => void; move: (point: { x: number; y: number }) => void }, "playground">;
+type PlaygroundNode = Node<{ study: CanvasPlayground; close: () => void; move: (point: { x: number; y: number }) => void; acceptBoard: (board: Board) => void }, "playground">;
 type BoardNode = MaterialNode | PlaygroundNode;
 export type BoardView = ReactFlowInstance<BoardNode>;
 const PlaygroundCard = lazy(async () => ({ default: (await import("./MotionPlayground.js")).PlaygroundCard }));
 
 function Playground({ data }: NodeProps<PlaygroundNode>) {
-  return <Suspense fallback={<p className="studio-help" role="status">Loading motion study</p>}><PlaygroundCard projectId={data.study.projectId} directionId={data.study.directionId} directionName={data.study.directionName} onClose={data.close} onMove={(dx, dy) => data.move({ x: data.study.position.x + dx, y: data.study.position.y + dy })} /></Suspense>;
+  return <Suspense fallback={<p className="studio-help" role="status">Loading motion study</p>}><PlaygroundCard projectId={data.study.projectId} directionId={data.study.directionId} directionName={data.study.directionName} onClose={data.close} onMove={(dx, dy) => data.move({ x: data.study.position.x + dx, y: data.study.position.y + dy })} onBoard={data.acceptBoard} /></Suspense>;
 }
 
 function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
@@ -49,7 +49,7 @@ const nodeTypes = { material: Material, playground: Playground };
 const edges: Edge[] = [];
 
 export function BoardCanvas({ layout, references, selection, readOnly = false, projectId, onSelect, onCommit, onInspect, onView, onReady, onZoom, onGestureStart,
-  editingId, onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems, groupCommandsDisabled, playground, onMovePlayground, onClosePlayground }: {
+  editingId, onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems, groupCommandsDisabled, playground, onMovePlayground, onClosePlayground, onAcceptBoard }: {
   layout: BoardLayout; references: ProjectReference[]; selection: string[]; projectId: string;
   onSelect: (ids: string[]) => void; onCommit: (layout: BoardLayout) => void;
   onInspect: (id: string) => void; onView: (id: string) => void; onReady: (view: BoardView) => void;
@@ -62,11 +62,12 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
   onDuplicateGroup: (id: string) => void; onArchiveGroup: (id: string) => void; groupCommandsDisabled: boolean;
   onOpenSystems: (id: string) => void;
   playground: CanvasPlayground | null; onMovePlayground: (point: { x: number; y: number }) => void; onClosePlayground: () => void;
+  onAcceptBoard?: (board: Board) => void;
 }) {
   const [spacePanning, setSpacePanning] = useState(false);
   const [nodes, setNodes] = useState<BoardNode[]>([]);
-  const playgroundActions = useRef({ playground, onMovePlayground, onClosePlayground });
-  playgroundActions.current = { playground, onMovePlayground, onClosePlayground };
+  const playgroundActions = useRef({ playground, onMovePlayground, onClosePlayground, onAcceptBoard });
+  playgroundActions.current = { playground, onMovePlayground, onClosePlayground, onAcceptBoard };
   const nodesRef = useRef(nodes);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
@@ -149,7 +150,7 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
       }),
     ];
     // React Flow raises selected materials by 1000; a study stays interactive above them.
-    if (playground) next.push({ id: playground.id, type: "playground", position: playground.position, width: playground.width, style: { width: playground.width }, dragHandle: ".playground-handle", selectable: false, focusable: false, zIndex: 1001, data: { study: playground, close: () => playgroundActions.current.onClosePlayground(), move: (point) => playgroundActions.current.onMovePlayground(point) } });
+    if (playground) next.push({ id: playground.id, type: "playground", position: playground.position, width: playground.width, style: { width: playground.width }, dragHandle: ".playground-handle", selectable: false, focusable: false, zIndex: 1001, data: { study: playground, close: () => playgroundActions.current.onClosePlayground(), move: (point) => playgroundActions.current.onMovePlayground(point), acceptBoard: (board) => playgroundActions.current.onAcceptBoard?.(board) } });
     nodesRef.current = next;
     setNodes(next);
   }, [layout, references, readOnly, editingId, groupCommandsDisabled, playground]);
