@@ -27,7 +27,7 @@ Reference cards are glass: `--color-surface`, a 1px control line, an inset highl
 
 Glass controls and the top bar use `blur(14px) saturate(160%)`. There is no second 8px blur.
 
-Board nodes and group frames are opaque. They do not use backdrop blur. Product screens use this accepted system in both themes.
+Board nodes and group frames are opaque. They do not use backdrop blur. A selected node or group frame takes the brighter glass edge and never a blue perimeter. Product screens use this accepted system in both themes.
 
 Focus is a 2px `--color-focus` outline with a 2px offset, outside the selection edge.
 
