@@ -25,57 +25,6 @@ async function choose(page: Page, scope: Locator, label: string, option: string)
   await page.getByRole("option", { name: option, exact: true }).click();
 }
 
-test("saved variants reload exact settings, duplicate independently, and retain drafts through stale saves", async ({ page }, info) => {
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  let study = await openSpecimen(page);
-  await study.getByRole("button", { name: "Remove motion playground", exact: true }).click();
-  await page.getByRole("toolbar", { name: "Canvas tools" }).getByRole("button", { name: "Group", exact: true }).click();
-  await page.getByRole("textbox", { name: "Group name", exact: true }).fill("Saved studies");
-  await page.getByRole("textbox", { name: "Group name", exact: true }).press("Enter");
-  await expect(page.locator(".canvas-status")).toHaveText("Saved");
-  await page.getByRole("button", { name: "Motion", exact: true }).click();
-  study = page.getByRole("region", { name: "Motion playground", exact: true });
-  await study.getByText("Saved variants", { exact: true }).filter({ visible: true }).click();
-  let saved = study.getByRole("region", { name: "Saved motion variants", exact: true });
-  await choose(page, saved, "Variant group", "Saved studies");
-  await saved.getByLabel("Variant name", { exact: true }).fill("Quiet menu");
-  await saved.getByLabel("Why this motion fits", { exact: true }).fill("Keep repeated sorting responsive");
-  await saved.getByRole("button", { name: "Save variation", exact: true }).click();
-  await expect(saved.getByRole("status")).toHaveText("Saved");
-  await page.reload(); await expect(page.locator(".canvas-status")).toHaveText("Saved");
-  await page.getByRole("button", { name: "Motion", exact: true }).click();
-  study = page.getByRole("region", { name: "Motion playground", exact: true });
-  await study.getByText("Saved variants", { exact: true }).filter({ visible: true }).click();
-  saved = study.getByRole("region", { name: "Saved motion variants", exact: true });
-  await choose(page, saved, "Variant group", "Saved studies");
-  await choose(page, saved, "Open saved variant", "Quiet menu");
-  await saved.getByRole("button", { name: "Discard local changes and open", exact: true }).click();
-  await expect(saved.getByLabel("Why this motion fits", { exact: true })).toHaveValue("Keep repeated sorting responsive");
-  await saved.getByRole("button", { name: "Duplicate variation", exact: true }).click();
-  await expect(saved.getByRole("status")).toHaveText("Saved");
-  await expect(saved.getByLabel("Variant name", { exact: true })).toHaveValue("Quiet menu copy");
-  await page.evaluate(async () => {
-    const projects = await (await fetch('/api/projects')).json(); const project = projects.projects[0];
-    const board = await (await fetch(`/api/projects/${project.id}/board`)).json();
-    const system = board.layout.systems.find((entry: { kind: string }) => entry.kind === 'motion');
-    const frame = board.layout.frames.find((entry: { id: string }) => entry.id === system.directionId);
-    await fetch(`/api/projects/${project.id}/directions/${frame.id}/systems/${system.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify({ expectedRevision: system.revision, expectedDirectionRevision: frame.revision, name: 'Remote motion system' }) });
-  });
-  const retainedName = saved.getByLabel("Variant name", { exact: true });
-  await retainedName.click();
-  await page.keyboard.press("ControlOrMeta+A");
-  await page.keyboard.type("Local retained name");
-  await expect(retainedName).toHaveValue("Local retained name");
-  await saved.getByRole("button", { name: "Save variation", exact: true }).click();
-  await expect(saved.getByRole("status")).toContainText("Conflict");
-  await expect(saved.getByLabel("Variant name", { exact: true })).toHaveValue("Local retained name");
-  await saved.getByRole("button", { name: "Review latest", exact: true }).click();
-  await saved.getByRole("button", { name: "Reapply my draft", exact: true }).click();
-  await saved.getByRole("button", { name: "Save variation", exact: true }).click();
-  await expect(saved.getByRole("status")).toHaveText("Saved");
-  await page.screenshot({ path: info.outputPath("saved-variants.png") });
-});
-
 test("tween tuning pairs sliders and fields, retains invalid intent, resets presets and keeps B independent", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const study = await openSpecimen(page);

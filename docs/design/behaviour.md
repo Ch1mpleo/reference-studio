@@ -14,6 +14,8 @@ Identify an editor by project id, record type, record id, and base revision. Do 
 
 Unsaved system drafts are transient app-session memory, held by project, direction, and kind above the replaceable shells. Crossing a breakpoint, closing the panel, switching tabs, or visiting another project must not drop that draft. Browser unload warns. A full reload is not in-memory draft recovery.
 
+A motion-study variant draft is held the same way, keyed by project, direction, variant id, and the revision it was opened against. Closing the study, resizing the card, or switching projects leaves that draft in place. Save writes the variant record. It does not approve the direction. Local tuning is not labeled saved or approved. There is no Approve control. Reset to preset restores the named starting hypothesis. Discard local changes restores the saved variant. Those stay different from Review latest and Reapply my draft.
+
 ## Connection, empty, and feedback
 
 Production has no healthy Connected control. Reconnecting shows a banner that current data may be stale. Unavailable explains how to start the service. Both offer Retry connection. Keep content and drafts usable while disconnected. Do not report a write as successful when it was not.

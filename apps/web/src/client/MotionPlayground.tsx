@@ -8,7 +8,8 @@ import { dropdownFixtureCss } from "./DropdownFixture.js";
 import { MotionTuningControls } from "./MotionTuningControls.js";
 import { createMotionDraft, describeFixtureMotion, type MotionDraft } from "./motionPresets.js";
 import { StudioSelect } from "./StudioSelect.js";
-import { SavedMotionVariants } from "./SavedMotionVariants.js";
+import type { Board } from "@reference-studio/core";
+import { HostedVariantStudy } from "./SavedMotionVariants.js";
 import "./motionPlayground.css";
 
 const fixture = resolveInteractionFixture("dropdown", 2);
@@ -16,7 +17,7 @@ const fixture = resolveInteractionFixture("dropdown", 2);
 export type CanvasPlayground = { id: string; directionName: string; position: { x: number; y: number }; width: number; projectId?: string; directionId?: string };
 
 /** A movable board object; interactive content never handles canvas gestures. */
-export function PlaygroundCard({ directionName, onClose, onMove, projectId, directionId }: { projectId?: string; directionId?: string; directionName: string; onClose: () => void; onMove: (dx: number, dy: number) => void }) {
+export function PlaygroundCard({ directionName, onClose, onMove, projectId, directionId, onBoard }: { projectId?: string; directionId?: string; directionName: string; onClose: () => void; onMove: (dx: number, dy: number) => void; onBoard?: (board: Board) => void }) {
   return <section className="playground-card" aria-label="Motion playground">
     <header className="playground-handle" tabIndex={0} aria-label="Move motion playground" title="Drag to move, or use the arrow keys" onKeyDown={(event) => {
       const step = event.shiftKey ? 64 : 16;
@@ -27,12 +28,12 @@ export function PlaygroundCard({ directionName, onClose, onMove, projectId, dire
       <div><p className="studio-kicker">Motion study</p><h2>{directionName}</h2></div>
       <StudioButton variant="ghost" className="studio-icon-button nodrag nopan" aria-label="Remove motion playground" title="Remove motion playground" onClick={onClose}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg></StudioButton>
     </header>
-    <div className="playground-content nodrag nopan nowheel" onKeyDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}><MotionPlayground projectId={projectId} directionId={directionId} /></div>
+    <div className="playground-content nodrag nopan nowheel" onKeyDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}><MotionPlayground projectId={projectId} directionId={directionId} onBoard={onBoard} /></div>
   </section>;
 }
 
-/** Transient experiments; persisted/tuned variants belong to M2.8/M2.9. */
-export function MotionPlayground({ projectId, directionId }: { projectId?: string; directionId?: string } = {}) {
+/** Local A/B tuning. Named variants are stored by the variant service when a project is open. */
+export function MotionPlayground({ projectId, directionId, onBoard }: { projectId?: string; directionId?: string; onBoard?: (board: Board) => void } = {}) {
   const [compare, setCompare] = useState(false);
   const [active, setActive] = useState<0 | 1>(0);
   const [opened, setOpened] = useState([false, false]);
@@ -65,10 +66,12 @@ export function MotionPlayground({ projectId, directionId }: { projectId?: strin
           <IsolatedFixture parameters={drafts[index].parameters} open={opened[index]!} onOpen={(value) => setOpened((current) => current.map((entry, i) => i === index ? value : entry))} sort={sorts[index]!} onSort={(value) => setSorts((current) => current.map((entry, i) => i === index ? value : entry))} reducedMotion={reduced} replay={replays[index]!} playbackRate={playbackRate} />
         </section>)}
       </div>
-    <details className="studio-disclosure playground-tuning" open={tuning} onToggle={(event) => { if (event.target === event.currentTarget) setTuning(event.currentTarget.open); }}><summary>Tune motion <span className="studio-meta">Variant {active === 0 ? "A" : "B"}</span></summary>
+    {projectId ? (["a", "b"] as const).map((lane) => {
+      const index = lane === "a" ? 0 : 1;
+      return <HostedVariantStudy key={lane} projectId={projectId} directionId={directionId ?? ""} lane={lane} preset={lane === "a" ? "quick" : "instant"} hidden={active !== index} tuning={tuning && active === index} onTuning={setTuning} onBoard={onBoard} onDraft={(draft) => setDrafts((current) => JSON.stringify(current[index]) === JSON.stringify(draft) ? current : index === 0 ? [draft, current[1]] : [current[0], draft])} />;
+    }) : <details className="studio-disclosure playground-tuning" open={tuning} onToggle={(event) => { if (event.target === event.currentTarget) setTuning(event.currentTarget.open); }}><summary>Tune motion <span className="studio-meta">Variant {active === 0 ? "A" : "B"}</span></summary>
       {([0, 1] as const).map((index) => <section key={index} hidden={active !== index} aria-label={`Tune variant ${index === 0 ? "A" : "B"}`}><MotionTuningControls draft={drafts[index]} onChange={(draft) => setDrafts((current) => index === 0 ? [draft, current[1]] : [current[0], draft])} /></section>)}
-    </details>
-    {projectId ? <div className="playground-saved">{([0, 1] as const).map((index) => <div key={index} hidden={active !== index}><SavedMotionVariants projectId={projectId} directionId={directionId} draft={drafts[index]} onLoad={(draft) => setDrafts((current) => index === 0 ? [draft, current[1]] : [current[0], draft])} /></div>)}</div> : null}
+    </details>}
     <footer className="playground-footer"><label className="preview-switch"><input type="checkbox" checked={previewReduced} onChange={(event) => setPreviewReduced(event.target.checked)} />Reduced motion</label><StudioSelect label="Playback speed" value={String(playbackRate)} options={[{ value: "1", label: "Normal speed" }, { value: "0.5", label: "0.5× inspection" }, { value: "0.25", label: "0.25× inspection" }]} onChange={(value) => { if (["1", "0.5", "0.25"].includes(value)) setPlaybackRate(Number(value)); }} /><span className="studio-meta" role="status">{reduced ? "Instant playback · reduced motion" : playbackRate === 1 ? "Normal playback" : `Slow inspection · ${playbackRate}×`}</span></footer>
     <p className="playground-note studio-help">Local experiment · sample values · kept until removed or this project is left.</p>
   </section>;
