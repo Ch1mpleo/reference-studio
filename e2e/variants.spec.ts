@@ -89,7 +89,9 @@ test("saves tuned motion, reopens the same values, discards local edits, and dup
   await expect(page.getByRole("option", { name: "Quiet menu copy", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await again.saved.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "docs/evidence/m2-variants/desktop-dark.png" });
+  if (process.env.REFERENCE_STUDIO_CAPTURE === "1") {
+    await page.screenshot({ path: "docs/evidence/m2-variants/desktop-dark.png" });
+  }
 });
 
 test("keeps slider values when a save fails or loses a revision race", async ({ page }) => {
