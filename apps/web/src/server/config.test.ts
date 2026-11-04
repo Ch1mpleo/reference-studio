@@ -46,7 +46,8 @@ describe("runtime configuration", () => {
   it("finds the repository root", () => {
     expect(findRepoRoot()).toBe(path.resolve(findRepoRoot(), "."));
     const root = findRepoRoot();
-    expect(root.endsWith("reference-studio") || root.includes("reference-studio")).toBe(true);
+    const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as { name?: string };
+    expect(manifest.name).toBe("reference-studio");
   });
 
   it("rejects an invalid port before creating a token", () => {

@@ -32,6 +32,7 @@ export function useServiceConnection(): ServiceConnection {
   const [refreshKey, setRefreshKey] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const opened = useRef(false);
+  const reached = useRef(false);
   const generation = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
 
@@ -58,12 +59,14 @@ export function useServiceConnection(): ServiceConnection {
       if (!isCurrent(requestGeneration, generation.current)) {
         return;
       }
+      reached.current = true;
       setHealth(healthResponseSchema.parse(body));
       setState("ready");
     } catch {
       if (!isCurrent(requestGeneration, generation.current) || controller.signal.aborted) {
         return;
       }
+      reached.current = false;
       setHealth(null);
       setState(opened.current ? "reconnecting" : "unavailable");
     }
@@ -96,7 +99,9 @@ export function useServiceConnection(): ServiceConnection {
         return;
       }
       setLive(false);
-      setState(opened.current ? "reconnecting" : "unavailable");
+      // A stream that never opens is still only a dropped update when health already succeeded.
+      // Calling that unavailable hides the workspace, and the project list will not load again.
+      setState(opened.current || reached.current ? "reconnecting" : "unavailable");
     };
 
     const onChanged = (event: Event) => {

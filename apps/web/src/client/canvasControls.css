@@ -12,7 +12,7 @@
 .board-inline-editor { position: relative; width: 100%; min-width: 0; }
 .studio-ui .board-inline-input {
   width: 100%; min-width: 0; min-height: 0; box-sizing: border-box; margin: 0; padding: 0;
-  border: 0; border-radius: 2px; background: transparent; color: inherit; box-shadow: none; font: inherit; resize: none;
+  border: 0; border-radius: 0; background: transparent; color: inherit; box-shadow: none; font: inherit; resize: none;
 }
 .studio-ui textarea.board-inline-input { height: 100%; min-height: 112px; }
 .board-inline-feedback {

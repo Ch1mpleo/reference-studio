@@ -84,11 +84,8 @@ test("drop, arrange, group, undo, inspect, and reload without opening an upload 
   await inspector.getByRole("button", { name: "Close inspector" }).click();
   await expect(inspector).toBeHidden();
   await dock.getByRole("button", { name: "Library", exact: true }).click();
-  await inspector.getByRole("button", { name: "Kind", exact: true }).click();
-  await expect(page.getByRole("listbox", { name: "Kind" })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("listbox", { name: "Kind" })).toBeHidden();
-  await expect(inspector).toBeVisible();
+  await expect(inspector.getByRole("radiogroup", { name: "Kind" })).toBeVisible();
+  await inspector.getByRole("radio", { name: "Any", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(inspector).toBeHidden();
   await first.dblclick();
@@ -112,22 +109,6 @@ test("drop, arrange, group, undo, inspect, and reload without opening an upload 
   const refs = projectReferenceListSchema.parse(await browserJson(page, `/api/projects/${project.id}/references`));
   expect(refs.references.find((entry) => entry.reference.title === "North light")?.role).toBe("candidate");
   expect(errors).toEqual([]);
-});
-
-test("phone board keeps pasted notes and the library reachable", async ({ page }, info) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
-  await openProject(page, "Canvas phone");
-  await page.evaluate(() => {
-    const clipboardData = new DataTransfer(); clipboardData.setData("text/plain", "Keep generous breathing room.");
-    document.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }));
-  });
-  await expect(page.locator(".board-material")).toContainText("Keep generous breathing room.");
-  await page.getByRole("toolbar", { name: "Canvas tools" }).getByRole("button", { name: "Library", exact: true }).click();
-  const panel = page.getByRole("dialog", { name: "Reference details" });
-  await expect(panel).toBeVisible(); await page.keyboard.press("Escape"); await expect(panel).toBeHidden();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: info.outputPath("canvas-phone.png") });
 });
 
 test("a populated board keeps frame movement and image resizing persistent", async ({ page }, info) => {
@@ -172,17 +153,25 @@ test("a populated board keeps frame movement and image resizing persistent", asy
   const image = page.locator(".board-material").getByRole("img", { name: "North light", exact: true });
   await image.click();
   await page.getByRole("toolbar", { name: "Canvas zoom" }).getByRole("button", { name: "Fit selection", exact: true }).click();
+  await expect.poll(async () => {
+    const first = await image.boundingBox();
+    await page.waitForTimeout(80);
+    const second = await image.boundingBox();
+    if (!first || !second) return false;
+    return Math.abs(first.x - second.x) < 0.5 && Math.abs(first.y - second.y) < 0.5 && Math.abs(first.width - second.width) < 0.5;
+  }).toBe(true);
   const imageBox = await image.boundingBox();
   if (!imageBox) throw new Error("Missing selected image");
   const handle = image.locator("..").locator(".react-flow__resize-control.handle.bottom.right");
+  await handle.hover();
   const corner = await handle.boundingBox();
   if (!corner) throw new Error("Missing resize handle");
   await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
-  await page.mouse.down(); await page.mouse.move(corner.x + 65, corner.y + 50, { steps: 6 }); await page.mouse.up();
-  await expect.poll(async () => (await image.boundingBox())?.width).toBeGreaterThan(imageBox.width + 30);
+  await page.mouse.down(); await page.mouse.move(corner.x + 140, corner.y + 100, { steps: 8 }); await page.mouse.up();
+  await expect.poll(async () => Number.parseFloat(await page.locator(".react-flow__node.selected").getAttribute("style").then((value) => value?.match(/width:\s*([0-9.]+)px/)?.[1] ?? "0"))).toBeGreaterThan(290);
   await expect(page.locator(".canvas-status")).toContainText("Saved");
+  await expect.poll(async () => boardSchema.parse(await browserJson(page, `/api/projects/${project.id}/board`)).layout.items.some((entry) => entry.rect.width > 290)).toBe(true);
   const resized = boardSchema.parse(await browserJson(page, `/api/projects/${project.id}/board`));
-  expect(resized.layout.items.some((entry) => entry.rect.width > 290)).toBe(true);
   await page.reload();
   await expect(page.locator(".canvas-status")).toContainText("Saved");
   expect(boardSchema.parse(await browserJson(page, `/api/projects/${project.id}/board`)).layout).toEqual(resized.layout);

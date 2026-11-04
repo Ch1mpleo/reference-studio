@@ -1,0 +1,69 @@
+.studio-ui .playground-card {
+  container-type: inline-size; overflow: hidden; border: 1px solid var(--color-control-line);
+  border-radius: var(--radius-panel); background: var(--color-overlay); color: var(--color-ink);
+  box-shadow: inset 0 1px 0 var(--color-glass-hi), var(--shadow-popover);
+}
+.studio-ui .playground-handle { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--color-line); cursor: grab; }
+.studio-ui .playground-handle:active { cursor: grabbing; }
+.studio-ui .playground-handle:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -4px; border-radius: var(--radius-panel) var(--radius-panel) 0 0; }
+.studio-ui .playground-handle h2 { font: var(--type-section); margin: var(--space-1) 0 0; }
+.studio-ui .playground-handle .studio-kicker { margin: 0; }
+.studio-ui .playground-content { padding: var(--space-5) var(--space-6); max-height: max(140px, calc(100dvh - 320px)); overflow: auto; overscroll-behavior: contain; }
+.studio-ui .motion-playground { display: grid; gap: var(--space-5); }
+.studio-ui .playground-toolbar, .studio-ui .playground-comparison-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.studio-ui .playground-comparison { display: grid; gap: var(--space-2); }
+.studio-ui .playground-comparison p { margin: 0; }
+.studio-ui .motion-playground[data-tuning="true"] > .playground-comparison { grid-column: 1 / -1; }
+.studio-ui .playground-toolbar { justify-content: space-between; gap: var(--space-4); }
+.studio-ui .playground-toolbar h3 { font: var(--type-card); margin: 0 0 var(--space-1); }
+.studio-ui .playground-toolbar p { margin: 0; }
+.studio-ui .playground-previews { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); min-width: 0; }
+.studio-ui .motion-playground[data-comparison="true"] .playground-previews { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.studio-ui .playground-variant { min-width: 0; }
+.studio-ui .playground-variant[hidden] { display: none; }
+.studio-ui .playground-variant > header { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2); justify-content: space-between; margin-bottom: var(--space-3); }
+.studio-ui .playground-variant h4 { font: var(--type-control); margin: 0; }
+.studio-ui .playground-variant-actions { display: flex; gap: var(--space-1); margin-left: auto; }
+.studio-ui .playground-tuning > summary { display: flex; gap: var(--space-3); align-items: center; cursor: pointer; }
+.studio-ui .playground-tuning > section { padding-block: var(--space-4) var(--space-1); }
+.studio-ui .playground-tuning-fields { display: grid; gap: var(--space-4); }
+.studio-ui .playground-tuning-fields > .studio-help { margin: 0; }
+.studio-ui .playground-tuning-start { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.studio-ui .playground-tuning-start .studio-select { flex: 1 1 220px; }
+.studio-ui .playground-tuning-start > .studio-field { flex: 1 1 200px; }
+.studio-ui .playground-parameter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.studio-ui .playground-spring > .studio-help { margin: var(--space-3) 0 var(--space-4); }
+.studio-ui .motion-playground[data-tuning="true"] { grid-template-columns: minmax(0, 1fr) 256px; align-items: start; }
+.studio-ui .motion-playground[data-tuning="true"] > :is(.playground-toolbar, .playground-comparison-controls, .playground-footer, .playground-note, .playground-saved) { grid-column: 1 / -1; }
+.studio-ui .playground-tuning[open] { min-width: 0; padding-left: var(--space-4); border-left: 1px solid var(--color-line); }
+.studio-ui .playground-tuning[open] .playground-parameter-grid { grid-template-columns: minmax(0, 1fr); }
+.studio-ui .playground-tuning[open] > section { max-height: max(200px, min(460px, calc(100dvh - 360px))); overflow-y: auto; padding-right: var(--space-1); overscroll-behavior: contain; }
+.studio-ui .playground-mobile-switch { display: none; gap: var(--space-1); }
+.studio-ui .playground-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--color-line); }
+.studio-ui .playground-footer .preview-switch { margin: 0; }
+.studio-ui .playground-note { margin: calc(var(--space-2) * -1) 0 0; }
+.canvas-workspace .react-flow__node-playground { border: 0; background: transparent; border-radius: var(--radius-panel); box-shadow: none; }
+.studio-ui .sample-playground { padding: var(--space-3); background: var(--color-field); border-radius: var(--radius-panel); }
+@container (max-width: 660px) {
+  .studio-ui .playground-handle { padding: var(--space-4); }
+  .studio-ui .playground-content { padding: var(--space-4); }
+  .studio-ui .motion-playground[data-comparison="true"] .playground-previews { grid-template-columns: minmax(0, 1fr); }
+  .studio-ui .playground-mobile-switch { display: flex; }
+  .studio-ui .playground-parameter-grid { grid-template-columns: minmax(0, 1fr); }
+  .studio-ui .motion-playground[data-tuning="true"] { grid-template-columns: minmax(0, 1fr); }
+  .studio-ui .playground-tuning[open] { border-left: 0; padding-left: 0; }
+  .studio-ui .playground-tuning[open] > section { max-height: none; overflow: visible; }
+  .studio-ui .motion-playground[data-active="0"] .playground-variant[data-variant="1"],
+  .studio-ui .motion-playground[data-active="1"] .playground-variant[data-variant="0"] { display: none; }
+}
+
+.studio-ui .variant-host, .studio-ui .variant-host-mount { display: contents; }
+.studio-ui .playground-saved { display: grid; gap: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-line); }
+.studio-ui .motion-playground[data-tuning="true"] .playground-saved { grid-column: 1 / -1; }
+.studio-ui .playground-saved .studio-kicker { margin: 0; }
+.studio-ui .playground-saved-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.studio-ui .variant-recommendation { display: grid; gap: var(--space-3); }
+.studio-ui .variant-defects { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--color-line); }
+.studio-ui .variant-defects ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.studio-ui .variant-defects li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.studio-ui .motion-playground[data-tuning="true"] > .variant-defects { grid-column: 1 / -1; }

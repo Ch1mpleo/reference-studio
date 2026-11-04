@@ -1,11 +1,20 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { LibraryReference, ProjectReference } from "@reference-studio/core";
 import { ReferenceRequestError, searchReferences } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
-import { StudioSelect } from "./StudioSelect.js";
+import { StudioField } from "./StudioField.js";
 import { StudioReferenceCard } from "./StudioReferenceCard.js";
+import { StudioSegment } from "./StudioSegment.js";
 
 type Kind = "" | "image" | "link" | "note";
+type Query = { q: string; tag: string; kind: Kind };
+
+const kindOptions = [
+  { value: "", label: "Any" },
+  { value: "image", label: "Image" },
+  { value: "link", label: "Link" },
+  { value: "note", label: "Note" },
+] as const;
 
 export function ReferenceSearch({
   placedReferenceIds,
@@ -15,6 +24,8 @@ export function ReferenceSearch({
   onPlace: (referenceId: string) => Promise<ProjectReference>;
 }) {
   const [q, setQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
   const [tag, setTag] = useState("");
   const [kind, setKind] = useState<Kind>("");
   const [results, setResults] = useState<LibraryReference[]>([]);
@@ -23,27 +34,86 @@ export function ReferenceSearch({
   const [status, setStatus] = useState<"idle" | "searching" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [placingId, setPlacingId] = useState<string | null>(null);
+  const request = useRef(0);
   const placed = new Set(placedReferenceIds);
+  const filtersActive = kind !== "" || tag !== "" || tagDraft.trim() !== "";
 
-  async function search(event?: FormEvent<HTMLFormElement>, cursor?: string): Promise<void> {
-    event?.preventDefault();
+  function run(query: Query, cursor?: string): void {
+    const id = ++request.current;
     setStatus("searching");
     setMessage(null);
-    try {
-      const result = await searchReferences({
-        q,
-        tag,
-        kind,
-        ...(cursor === undefined ? {} : { cursor }),
-      });
+    if (cursor === undefined) setNextCursor(null);
+    void searchReferences({
+      q: query.q,
+      tag: query.tag,
+      kind: query.kind,
+      ...(cursor === undefined ? {} : { cursor }),
+    }).then((result) => {
+      if (id !== request.current) return;
       setResults((current) => (cursor === undefined ? result.references : [...current, ...result.references]));
       setNextCursor(result.nextCursor);
       setSearched(true);
       setStatus("idle");
-    } catch (error) {
+    }).catch((error: unknown) => {
+      if (id !== request.current) return;
       setStatus("error");
       setMessage(error instanceof ReferenceRequestError ? error.message : "Search failed");
-    }
+    });
+  }
+
+  function submitKeyword(): void {
+    setAppliedQ(q);
+    run({ q, tag, kind });
+  }
+
+  function commitTag(): void {
+    const next = tagDraft.trim();
+    setTag(next);
+    setTagDraft(next);
+    run({ q: appliedQ, tag: next, kind });
+  }
+
+  function chooseKind(value: string): void {
+    if (value !== "" && value !== "image" && value !== "link" && value !== "note") return;
+    if (value === kind) return;
+    setKind(value);
+    run({ q: appliedQ, tag, kind: value });
+  }
+
+  function removeKind(): void {
+    setKind("");
+    run({ q: appliedQ, tag, kind: "" });
+  }
+
+  function removeTag(): void {
+    setTag("");
+    setTagDraft("");
+    run({ q: appliedQ, tag: "", kind });
+  }
+
+  function clearFilters(): void {
+    const applied = kind !== "" || tag !== "";
+    setKind("");
+    setTag("");
+    setTagDraft("");
+    if (applied) run({ q: appliedQ, tag: "", kind: "" });
+  }
+
+  function onKeywordKey(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    submitKeyword();
+  }
+
+  function onTagKey(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commitTag();
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    submitKeyword();
   }
 
   async function place(referenceId: string): Promise<void> {
@@ -59,42 +129,31 @@ export function ReferenceSearch({
   }
 
   return (
-    <form className="reference-form" onSubmit={(event) => void search(event)}>
+    <form className="reference-form" onSubmit={onSubmit}>
       <h4>Find a reference</h4>
-      <label htmlFor="reference-search">Keyword</label>
-      <input
-        id="reference-search"
-        value={q}
-        maxLength={200}
-        disabled={status === "searching"}
-        onChange={(event) => setQ(event.target.value)}
-      />
-      <label htmlFor="reference-search-tag">Tag</label>
-      <input
-        id="reference-search-tag"
-        value={tag}
-        maxLength={40}
-        disabled={status === "searching"}
-        onChange={(event) => setTag(event.target.value)}
-      />
-      <label htmlFor="reference-search-kind">Kind</label>
-      <StudioSelect
-        id="reference-search-kind"
-        label="Kind"
-        field
-        value={kind}
-        disabled={status === "searching"}
-        options={[{ value: "", label: "Any" }, { value: "image", label: "Image" }, { value: "link", label: "Link" }, { value: "note", label: "Note" }]}
-        onChange={(value) => { if (value === "" || value === "image" || value === "link" || value === "note") setKind(value); }}
-      />
-      <div className="form-actions">
-        <StudioButton type="submit" variant="primary" busy={status === "searching"} disabled={status === "searching"}>
-          Search
-        </StudioButton>
-        <p className="save-state" aria-live="polite">
-          {status === "searching" ? "Searching" : null}
-        </p>
+      <div className="library-filters">
+        <StudioField id="reference-search" label="Keyword" value={q} maxLength={200} onChange={setQ} onKeyDown={onKeywordKey} />
+        <StudioSegment label="Kind" value={kind} options={kindOptions} onChange={chooseKind} />
+        <StudioField id="reference-search-tag" label="Tag" optional value={tagDraft} maxLength={40} onChange={setTagDraft} onKeyDown={onTagKey} />
+        {kind !== "" || tag !== "" ? (
+          <div className="library-filter-chips" role="list" aria-label="Active filters">
+            {kind !== "" ? (
+              <span role="listitem">
+                <StudioButton type="button" aria-label={`Remove ${kindName(kind)} filter`} onClick={removeKind}>{kindName(kind)}</StudioButton>
+              </span>
+            ) : null}
+            {tag !== "" ? (
+              <span role="listitem">
+                <StudioButton type="button" aria-label={`Remove tag ${tag}`} onClick={removeTag}>{tag}</StudioButton>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+        <StudioButton type="button" variant="ghost" disabled={!filtersActive} onClick={clearFilters}>Clear</StudioButton>
       </div>
+      <p className="save-state" aria-live="polite">
+        {status === "searching" ? "Searching" : null}
+      </p>
       {message !== null ? <p className="form-error">{message}</p> : null}
       {searched && status !== "searching" && results.length === 0 ? <p>No references match.</p> : null}
       {results.length > 0 ? (
@@ -103,7 +162,7 @@ export function ReferenceSearch({
             const inProject = placed.has(reference.id);
             return (
               <li key={reference.id}>
-                <StudioReferenceCard title={reference.title} metadata={kindLabel(reference.kind)} selected={false}
+                <StudioReferenceCard title={reference.title} metadata={kindName(reference.kind)} selected={false}
                   loadingMode="instant" imageState={reference.kind === "image" ? (reference.asset ? "ready" : "missing") : "none"}
                   onOpen={() => void place(reference.id)}
                   media={reference.asset !== null ? (
@@ -113,12 +172,12 @@ export function ReferenceSearch({
                       width={reference.asset.width}
                       height={reference.asset.height}
                     />
-                  ) : <p className="studio-meta">{reference.kind === "image" ? "Image unavailable" : kindLabel(reference.kind)}</p>}
+                  ) : <p className="studio-meta">{reference.kind === "image" ? "Image unavailable" : kindName(reference.kind)}</p>}
                   summary={<div className="reference-search-summary">
                     {reference.creator !== null ? <p className="studio-help">{reference.creator}</p> : null}
                     {reference.sourceUrl !== null ? (
-                      <a className="sample-url" href={reference.sourceUrl} rel="noreferrer noopener" target="_blank">
-                        <span className="sample-link-text">{reference.sourceUrl}</span>
+                      <a className="studio-url" href={reference.sourceUrl} rel="noreferrer noopener" target="_blank">
+                        <span className="studio-link-text">{reference.sourceUrl}</span>
                       </a>
                     ) : null}
                     {reference.creator === null && reference.sourceUrl === null ? (
@@ -141,7 +200,7 @@ export function ReferenceSearch({
         </ul>
       ) : null}
       {nextCursor !== null ? (
-        <StudioButton type="button" disabled={status === "searching"} onClick={() => void search(undefined, nextCursor)}>
+        <StudioButton type="button" disabled={status === "searching"} onClick={() => run({ q: appliedQ, tag, kind }, nextCursor)}>
           More
         </StudioButton>
       ) : null}
@@ -149,12 +208,9 @@ export function ReferenceSearch({
   );
 }
 
-function kindLabel(kind: LibraryReference["kind"]): string {
-  if (kind === "image") {
-    return "Image";
-  }
-  if (kind === "link") {
-    return "Link";
-  }
-  return "Note";
+function kindName(kind: "" | LibraryReference["kind"]): string {
+  if (kind === "image") return "Image";
+  if (kind === "link") return "Link";
+  if (kind === "note") return "Note";
+  return "Any";
 }

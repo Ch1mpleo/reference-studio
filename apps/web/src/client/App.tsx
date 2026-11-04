@@ -6,6 +6,8 @@ import { StudioButton } from "./StudioButton.js";
 import { studioMotionStyle, useStudioReducedMotion } from "./studioMotion.js";
 import { useProjectLibrary } from "./useProjectLibrary.js";
 import { useServiceConnection, type ServiceState } from "./useServiceConnection.js";
+import { SystemDraftHostProvider } from "./SystemDraftHost.js";
+import { VariantDraftHostProvider } from "./VariantDraftHost.js";
 
 const StudioPreview = lazy(async () => ({ default: (await import("./StudioPreview.js")).StudioPreview }));
 
@@ -39,6 +41,9 @@ function useLocationHash(): string {
 }
 
 export function App() {
+  return <VariantDraftHostProvider><SystemDraftHostProvider><AppContent /></SystemDraftHostProvider></VariantDraftHostProvider>;
+}
+function AppContent() {
   const connection = useServiceConnection();
   const library = useProjectLibrary(connection);
   const hash = useLocationHash();
@@ -70,15 +75,15 @@ export function App() {
 
   return (
     <div className="studio-ui studio-canvas-app" data-reduced-motion={reducedMotion ? "true" : "false"} style={studioMotionStyle(reducedMotion)}>
-      <header className="sample-topbar">
-        <p className="sample-wordmark">Reference Studio</p>
+      <header className="studio-topbar">
+        <p className="studio-wordmark">Reference Studio</p>
         {import.meta.env.DEV ? <a href="#/studio">Interface preview</a> : null}
       </header>
       {connection.state === "reconnecting" ? (
-        <div className="sample-banner" role="status">Reconnecting. Current data may be stale.<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
+        <div className="studio-banner" role="status">Reconnecting. Current data may be stale.<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
       ) : null}
       {connection.state === "unavailable" ? (
-        <div className="sample-banner" role="status">{status.detail}<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
+        <div className="studio-banner" role="status">{status.detail}<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
       ) : null}
       {libraryVisible ? (
         <ProjectScreen
@@ -95,8 +100,8 @@ export function App() {
           }
         />
       ) : (
-        <main className="sample-frame">
-          <p className="sample-loading-status" role="status">{status.title}</p>
+        <main className="studio-frame">
+          <p className="studio-loading-status" role="status">{status.title}</p>
         </main>
       )}
       <div className="studio-layer" />

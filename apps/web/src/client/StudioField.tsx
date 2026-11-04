@@ -21,3 +21,10 @@ export function StudioField({ id, label, optional = false, helper, error, onChan
     </div>
   );
 }
+
+export function StudioTextArea({ label, helper, error, onChange, id, ...input }: Omit<ComponentProps<"textarea">, "onChange"> & { label: string; helper?: string; error?: string; onChange: (value: string) => void }) {
+  const generated = useId(); const fieldId = id ?? generated;
+  const describedBy = [input["aria-describedby"], helper ? `${fieldId}-help` : null, error ? `${fieldId}-error` : null].filter(Boolean).join(" ");
+  return <div className="studio-field"><label htmlFor={fieldId}>{label}</label><textarea {...input} id={fieldId} aria-label={input["aria-label"] ?? label} onChange={(event) => onChange(event.target.value)} aria-invalid={error ? true : input["aria-invalid"]} aria-describedby={describedBy || undefined} />
+    {helper ? <p id={`${fieldId}-help`} className="studio-help">{helper}</p> : null}{error ? <p id={`${fieldId}-error`} className="studio-error">{error}</p> : null}</div>;
+}

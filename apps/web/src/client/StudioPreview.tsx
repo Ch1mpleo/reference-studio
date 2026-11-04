@@ -2,12 +2,14 @@ import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { StudioButton } from "./StudioButton.js";
 import { StudioField } from "./StudioField.js";
 import { StudioReferenceCard } from "./StudioReferenceCard.js";
+import { StudioSegment } from "./StudioSegment.js";
 import { StudioSelect } from "./StudioSelect.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioInspector } from "./StudioInspector.js";
 import { StudioMenu } from "./StudioMenu.js";
 import { StudioLoadingPreview } from "./StudioLoadingPreview.js";
 import { StudioCanvasPreview } from "./StudioCanvasPreview.js";
+import { StudioSystemPreview } from "./StudioSystemPreview.js";
 import type { StudioLoadingMode, StudioLoadingState } from "./StudioLoadingMedia.js";
 import { StudioLoadingRegion } from "./StudioLoadingRegion.js";
 import { useStudioPreviewRequest } from "./useStudioPreviewRequest.js";
@@ -28,7 +30,6 @@ type SampleConnection = {
 type SampleKind = "image" | "link" | "note";
 type SampleRole = "inspiration" | "candidate" | "approved";
 type SaveState = "conflict" | "error" | "saving" | "saved";
-type ThemeChoice = "system" | "light" | "dark";
 type KindFilter = "all" | SampleKind;
 type AddTab = "image" | "link" | "note";
 
@@ -167,7 +168,6 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
     onRetry: () => undefined,
   };
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [themeChoice, setThemeChoice] = useState<ThemeChoice>("system");
   const [plain, setPlain] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [dialog, setDialog] = useState<null | "note" | "add">(null);
@@ -184,6 +184,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   const [savedId, setSavedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
+  const [filterKind, setFilterKind] = useState("");
   const [emptyCollection, setEmptyCollection] = useState(false);
   const [loadingState, setLoadingState] = useState<StudioLoadingState>("loaded");
   const [loadingMode, setLoadingMode] = useState<StudioLoadingMode>("reveal");
@@ -352,7 +353,6 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
       data-reduced-motion={effectiveReducedMotion ? "true" : "false"}
       data-plain={plain ? "true" : "false"}
       data-details-open={detailsOpen ? "true" : "false"}
-      data-studio-theme={themeChoice === "system" ? undefined : themeChoice}
       style={motionStyle}
     >
       <header className="sample-topbar">
@@ -551,13 +551,13 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
         <div className="sample-specimen-grid">
           <section className="sample-control-section" aria-label="Appearance samples">
             <h3>Appearance</h3>
-            <div className="sample-views" role="group" aria-label="Theme">
-              {(["system", "light", "dark"] as const).map((choice) => (
-                <StudioButton key={choice} aria-pressed={themeChoice === choice} onClick={() => setThemeChoice(choice)}>
-                  {choice === "system" ? "System" : choice === "light" ? "Light" : "Dark"}
-                </StudioButton>
-              ))}
-            </div>
+            <p className="studio-help">Library kind</p>
+            <StudioSegment label="Library kind" value={filterKind} options={[
+              { value: "", label: "Any" },
+              { value: "image", label: "Image" },
+              { value: "link", label: "Link" },
+              { value: "note", label: "Note" },
+            ]} onChange={setFilterKind} />
             <label className="preview-switch">
               <input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} />
               Preview reduced motion
@@ -587,6 +587,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
             onState={setLoadingState} onMode={changeLoadingMode} onReplay={() => setReplay((current) => current + 1)} onOpen={() => openDetails("north")}
             options={loadingOptions} onOptions={changeLoadingOptions} previewDelay={previewDelay} />
           <StudioCanvasPreview />
+          <StudioSystemPreview />
           <section className="sample-control-section sample-control-wide" aria-label="Overlay samples">
             <h3>Overlays &amp; interruption</h3>
             <p className="studio-help">Open and close without waiting. Menus use arrow keys; dialogs return focus to their opener.</p>

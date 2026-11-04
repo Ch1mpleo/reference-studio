@@ -1,6 +1,7 @@
 import { AsciiReveal, type AsciiRevealHandle } from "ascii-reveal";
 import { useEffect, useRef, type ReactNode } from "react";
 import { useStudioReducedMotion } from "./studioMotion.js";
+import { useStudioEffectsPaused } from "./studioEffects.js";
 import { STUDIO_LOADING_DEFAULTS, type StudioLoadingOptions } from "./studioLoadingOptions.js";
 
 type StudioRevealProps = {
@@ -17,7 +18,8 @@ type StudioRevealProps = {
 /** Bound decoration to marked content; inputs and actions stay outside the targets. */
 export function StudioReveal({ loading, enabled, reducedMotion = false, replay, children, selector = "img", layout = "media", options = STUDIO_LOADING_DEFAULTS }: StudioRevealProps) {
   const reduced = useStudioReducedMotion(reducedMotion);
-  const animate = enabled && !reduced;
+  const paused = useStudioEffectsPaused();
+  const animate = enabled && !reduced && !paused;
   const handle = useRef<AsciiRevealHandle>(null);
   const previousReplay = useRef(replay);
   const revealAfterLoad = useRef(loading);

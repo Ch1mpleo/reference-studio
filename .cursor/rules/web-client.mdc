@@ -6,16 +6,9 @@ alwaysApply: false
 
 # Web client
 
-- Read [the Studio design specification](../../design.md) before visual/interface changes. Follow its foundation, affected component recipes, and acceptance guidance; keep design values there rather than duplicating them in this rule or the task plan.
-- Use the implemented Studio primitives and [reuse route](../../design.md#19-reuse-route-for-subsequent-core-tasks) for core-flow UI. Extend a shared control and its `#/studio` specimen together instead of copying feature-specific hover, field, dialog, or motion styles.
-- Use functional React components and plain CSS tokens, following `apps/web/src/client/App.tsx` and `styles.css`. This is a Vite client, not Next.js: do not introduce Server Components, Server Actions, `next/image`, or `use client` directives.
-- Keep persisted project state in the application service. Local state owns transient interaction such as selection, panels, and in-progress edits; do not turn local storage into a second project database.
-- Parse external responses with shared core schemas. Reuse the existing connection hook for service/SSE lifecycle; clean up listeners and prevent obsolete requests from overwriting newer state.
-- Surface loading, saving, empty, failed, and conflict states accurately. Preserve unsaved input on failure; do not mark a change saved before the service accepts it or add artificial delay to service requests. The explicitly labeled `#/studio` demo latency is a specimen-only exception documented in design.md section 7; never move that timer into product request hooks.
-- Add React Flow for the planned canvas milestone, not as unrelated scaffolding. Keep placements keyed by stable IDs; viewport coordinates and original-image annotation coordinates are different spaces.
-- Keep the artwork legible and controls subordinate. Use actual thumbnails with reserved dimensions; preserve original aspect ratios unless a deliberate crop is recorded. Do not replace missing artwork with fabricated content.
-- Keep project/board session and selected IDs explicit in agent handoffs. Updating a selection does not send a message to an external agent.
-- Use semantic controls with accessible names, visible focus, keyboard alternatives to pointer actions, and correct dialog focus restoration. Never make an action depend on hover alone.
-- Respect reduced motion, keep content available without decorative animation, and compose small-screen review layouts rather than shrinking the desktop canvas.
-- Verify changed interactions in a real browser at desktop and phone widths; include keyboard, 200% zoom, short windows, themes, and reduced motion when affected. For annotation changes, verify image-region alignment after zoom/resize.
-- Treat production-build behavior as shipping evidence. Read `docs/STATUS.md` before relying on browser suites that may not exist yet.
+Follow [design.md](../../design.md) for tokens, primitives, and core rules.
+
+- Functional React and plain CSS. This is Vite, not Next.js: no Server Components, Server Actions, `next/image`, or `use client`.
+- Persisted project state stays in the application service. Local state is selection, panels, and unsaved edits.
+- Parse external responses with shared core schemas. Reuse the connection hook and drop obsolete responses.
+- Keep artwork legible. Use real thumbnails and only recorded crops. Verify changed screens in a browser at desktop width. Phone layout is not required.

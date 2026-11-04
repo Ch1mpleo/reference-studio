@@ -10,7 +10,7 @@ The working loop is: collect references → explore directions → review an exp
 
 - Start with the user's growing collection. Support pasted links, clipboard images, uploaded JPEG/PNG/WebP files, and agent-added references. Reject documents and unsupported files at intake. Any note, reference, or active group clears the initial empty-board guidance.
 - Use one grouped canvas with an inbox and simple named frames. References are images/links, notes are visible free text, and groups organize either. Edit note text and group names directly on their objects; discuss design intent through visible notes and the external agent. Do not require alternate board/list/focus/compare screens for ordinary work. Approved snapshots remain later scope.
-- The canvas is the primary workspace, with a compact Note/Group/Library dock, Undo/Redo, and on-demand tools. Keep zoom as bare vertical controls at the bottom right: zoom in, slider, zoom out, percentage, and Fit. Drop/paste images directly into open space; image collection does not require an upload form. Selection and arranging stay separate from explicit inspection. Preserve the accepted Studio visual system across every control.
+- The canvas is the primary workspace, with a compact Note/Group/Library/Motion dock, Undo/Redo, and on-demand tools. Keep zoom as bare vertical controls at the bottom right: zoom in, slider, zoom out, percentage, and Fit. Drop/paste images directly into open space; image collection does not require an upload form. Selection and arranging stay separate from explicit inspection. Preserve the accepted Studio visual system across every control.
 - Discussion happens in the external agent's chat. The workspace persists the selected visual context, annotations, proposals, feedback, and decisions.
 - Treat imagery, atmosphere, composition, typography, material, and interaction as possible design drivers. Do not convert a liked example into a permanent aesthetic or mandatory template.
 - The workspace's controls support reviewing the material. A project direction belongs to that project, not to the application's interface as a whole.
@@ -36,9 +36,10 @@ The working loop is: collect references → explore directions → review an exp
 
 - Develop project-specific visual tokens, component/state recipes, and motion behavior for use across the target product's app or website.
 - Treat spatial continuity, interruption, repetitive-task speed, reduced motion, and deliberate no-animation decisions as part of the direction. Review behavior in runnable experiments; screenshots alone cannot validate motion.
+- Core experimentation stays on the canvas. Motion studies are movable board objects alongside references and notes; the board remains usable during testing. Use contextual controls or inspectors for supporting detail rather than moving ordinary experiments into a dialog.
 - Provide a project-scoped motion playground: interactive examples, comparable variants, model-appropriate sliders/options, instant and reduced-motion alternatives, and named draft recipes. Users tune behavior directly before approving it.
 - Studio also needs its own shared UI and motion primitives. Keep those separate from each target project's style and system records.
-- Read [design and motion scope](DESIGN_AND_MOTION.md) for deliverables, review criteria, and the milestone integration. These systems are planned, not implemented.
+- Read [design and motion scope](DESIGN_AND_MOTION.md) for deliverables, review criteria, and milestone integration. STATUS distinguishes delivered draft records/editors from remaining playground, approval, and export work.
 
 ## References and assets
 

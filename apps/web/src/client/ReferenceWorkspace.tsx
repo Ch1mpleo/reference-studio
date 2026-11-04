@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { MAX_IMAGE_BYTES, imageTooLargeMessage, isHttpUrl, titleFromNote,
   type Board, type BoardFrame, type CreateLinkReference, type CreateNoteReference, type ImageFields,
-  type LibraryReference, type ProjectReference } from "@reference-studio/core";
+  type LibraryReference, type ProjectReference, type SystemRecord } from "@reference-studio/core";
 import { BoardCanvas, type BoardView } from "./BoardCanvas.js";
 import { completeBoard, groupSelection } from "./boardGeometry.js";
 import { useProjectBoard } from "./useProjectBoard.js";
@@ -14,13 +14,17 @@ import { StudioInspector } from "./StudioInspector.js";
 import { StudioZoomControl } from "./StudioZoomControl.js";
 import { ImageRegions } from "./ImageRegions.js";
 import { isCanvasImage } from "./canvasFiles.js";
+import { DirectionSystems } from "./DirectionSystems.js";
+import type { CanvasPlayground } from "./MotionPlayground.js";
+import { saveSystem } from "./systemApi.js";
+import type { SystemSaveResult } from "./SystemEditor.js";
 import { BoardRequestError, duplicateDirection, patchDirection, type DirectionPatch } from "./boardApi.js";
 import type { PlacementOptions, PlacementUseInput, ReferenceDetailsInput } from "./referenceApi.js";
 import type { ReferenceLoadStatus } from "./useProjectReferences.js";
 
 const emptyFields: ImageFields = { title: "", sourceUrl: null, creator: null, observations: "" };
 type Point = { x: number; y: number };
-type Panel = "library" | "inspect" | null;
+type Panel = "library" | "inspect" | "systems" | null;
 export type CollectionProps = {
   projectId: string; refreshKey: number;
   references: ProjectReference[]; notice: string | null; status?: ReferenceLoadStatus; refreshing?: boolean;
@@ -41,6 +45,9 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   const [inspectedId, setInspectedId] = useState<string | null>(null);
   const [visited, setVisited] = useState<string[]>([]);
   const [panel, setPanel] = useState<Panel>(null);
+  const [systemDirection, setSystemDirection] = useState<string | null>(null);
+  const [playground, setPlayground] = useState<CanvasPlayground | null>(null);
+  const [visitedSystems, setVisitedSystems] = useState<string[]>([]);
   const [recovering, setRecovering] = useState(false);
   const [operation, setOperation] = useState(false);
   const [savingNotes, setSavingNotes] = useState(0);
@@ -55,6 +62,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   const canvas = useRef<BoardView | null>(null);
   const root = useRef<HTMLElement>(null);
   const locked = useRef(false);
+  const groupWrite = useRef(false);
   const latest = useRef(board); latest.current = board;
   const selected = references.find((item) => item.placementId === inspectedId) ?? null;
   const viewed = references.find((item) => item.placementId === viewer) ?? null;
@@ -62,6 +70,35 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   const effective = completeBoard(board.layout, references);
   const activeFrames = effective.frames.filter((frame) => !frame.archived);
   const annotations = board.layout.annotations ?? [];
+
+  useEffect(() => {
+    if (!root.current) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const width = Math.max(280, Math.min(840, entry.contentRect.width - 56));
+      setPlayground((current) => current && current.width !== width ? { ...current, width } : current);
+    });
+    observer.observe(root.current);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!playground || !root.current) return;
+    void canvas.current?.setViewport({ x: (root.current.clientWidth - playground.width) / 2 - playground.position.x, y: 88 - playground.position.y, zoom: 1 });
+  }, [playground?.width]);
+
+  function addPlayground(directionId?: string): void {
+    const bounds = root.current?.getBoundingClientRect();
+    if (!bounds || !canvas.current) return;
+    const direction = effective.frames.find((frame) => frame.id === (directionId ?? selection[0]));
+    const study = playground ?? { id: `playground:${projectId}`, projectId, directionId: direction?.id, directionName: direction?.name ?? "Interaction study", position: canvas.current.screenToFlowPosition({ x: bounds.left + 28, y: bounds.top + 88 }), width: Math.max(280, Math.min(840, bounds.width - 56)) };
+    setPlayground(study); setPanel(null);
+    void canvas.current.setViewport({ x: (bounds.width - study.width) / 2 - study.position.x, y: 88 - study.position.y, zoom: 1 });
+    requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(".playground-handle")?.focus({ preventScroll: true }));
+  }
+  function removePlayground(): void {
+    setPlayground(null);
+    root.current?.querySelector<HTMLButtonElement>("[data-playground-add]")?.focus({ preventScroll: true });
+  }
 
   useEffect(() => {
     if (ready && !operation && board.state === "saved" && effective !== board.layout) board.completeWhenIdle(effective);
@@ -79,6 +116,24 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     if (item?.reference.asset) { setViewer(id); setViewerScale(1); }
     else if (item?.reference.kind === "note" || effective.frames.some((frame) => frame.id === id)) setEditingId(id);
     else inspect(id);
+  }
+  function openSystems(id: string): void { setSystemDirection(id); setVisitedSystems((current) => current.includes(id) ? current : [...current, id]); setPanel("systems"); }
+  async function persistSystem(draft: SystemRecord, base: SystemRecord | null, directionRevision: number): Promise<SystemSaveResult> {
+    if (latest.current.unsaved || groupWrite.current) throw new Error("Wait for the board to save before saving this system.");
+    const signature = JSON.stringify({ operation: "system", draft, baseRevision: base?.revision, directionRevision });
+    const key = retryKeys.current.get(signature) ?? crypto.randomUUID(); retryKeys.current.set(signature, key);
+    groupWrite.current = true; setOperation(true);
+    try {
+      const saved = await saveSystem(projectId, draft, base, directionRevision, key);
+      retryKeys.current.delete(signature); board.acceptServer(saved);
+      const system = saved.layout.systems?.find((entry) => entry.directionId === draft.directionId && entry.kind === draft.kind);
+      const frame = saved.layout.frames.find((entry) => entry.id === draft.directionId);
+      if (!system || !frame) throw new Error("The service response did not contain the saved system.");
+      return { system, directionRevision: frame.revision ?? 1 };
+    } catch (error) {
+      if (error instanceof BoardRequestError) { retryKeys.current.delete(signature); if (error.conflict) await board.refresh(); }
+      throw error;
+    } finally { groupWrite.current = false; setOperation(false); }
   }
   function center(): Point {
     const rect = root.current?.getBoundingClientRect();
@@ -145,17 +200,17 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     setSelection([id]); setEditingId(id);
   }
   async function directionAction(frame: BoardFrame, patch?: DirectionPatch): Promise<Board> {
-    if (board.unsaved || operation) throw new Error("Wait for the board to save before changing this group.");
+    if (board.unsaved || groupWrite.current) throw new Error("Wait for the board to save before changing this group.");
     const expectedRevision = frame.revision ?? 1;
     const signature = JSON.stringify({ groupId: frame.id, patch, expectedRevision });
-    const key = retryKeys.current.get(signature) ?? crypto.randomUUID(); retryKeys.current.set(signature, key); setOperation(true);
+    const key = retryKeys.current.get(signature) ?? crypto.randomUUID(); retryKeys.current.set(signature, key); groupWrite.current = true; setOperation(true);
     try {
       const saved = patch ? await patchDirection(projectId, frame.id, { ...patch, expectedRevision }, key) : await duplicateDirection(projectId, frame.id, expectedRevision, key);
       retryKeys.current.delete(signature); board.acceptServer(saved); await onRetryReferences(); return saved;
     } catch (error) {
       if (error instanceof BoardRequestError) { retryKeys.current.delete(signature); if (error.conflict) await board.refresh(); }
       throw error;
-    } finally { setOperation(false); }
+    } finally { groupWrite.current = false; setOperation(false); }
   }
   function groupCommand(id: string, archive: boolean): void {
     const frame = board.currentLayout().frames.find((entry) => entry.id === id);
@@ -166,7 +221,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   }
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {
-      if (isEditing(event.target) || document.querySelector("dialog[open]")) return;
+      if (isEditing(event.target) || (event.target instanceof Element && event.target.closest(".playground-card")) || document.querySelector("dialog[open]")) return;
       const files = Array.from(event.clipboardData?.files ?? []); const text = event.clipboardData?.getData("text/plain") ?? "";
       if (!files.length && !text.trim()) return;
       event.preventDefault(); if (files.length) void addFiles(files); else void addText(text);
@@ -175,7 +230,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   });
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isEditing(event.target) || document.querySelector("dialog[open], :popover-open")) return;
+      if (event.defaultPrevented || isEditing(event.target) || (event.target instanceof Element && event.target.closest(".playground-card")) || document.querySelector("dialog[open], :popover-open")) return;
       if (event.key === "Escape") { setPanel(null); setSelection([]); setEditingId(null); root.current?.focus(); }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); if (!operation) { if (event.shiftKey) board.redo(); else board.undo(); } }
     };
@@ -194,10 +249,11 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) setDropping(false); }} onDrop={drop}>
     <div className="canvas-surface"><BoardCanvas projectId={projectId} layout={effective} references={references} selection={selection} readOnly={operation}
       editingId={editingId} onEdit={setEditingId} onEditDone={(id) => { setEditingId((current) => current === id ? null : current); setFailedNotes((ids) => ids.filter((entry) => entry !== id)); }} onEditNote={editNote} onRenameGroup={renameGroup}
-      onDuplicateGroup={(id) => groupCommand(id, false)} onArchiveGroup={(id) => groupCommand(id, true)} groupCommandsDisabled={board.unsaved || operation}
+      onDuplicateGroup={(id) => groupCommand(id, false)} onArchiveGroup={(id) => groupCommand(id, true)} onOpenSystems={openSystems} groupCommandsDisabled={board.unsaved || operation}
       onSelect={setSelection} onCommit={board.commit} onInspect={inspect} onView={view} onGestureStart={board.beginGesture}
+      playground={playground} onMovePlayground={(position) => setPlayground((current) => current ? { ...current, position } : current)} onClosePlayground={removePlayground} onAcceptBoard={board.acceptServer}
       onReady={(instance) => { canvas.current = instance; }} onZoom={setZoom} /></div>
-    {ready && references.length === 0 && activeFrames.length === 0 ? <div className="canvas-empty"><pre aria-hidden="true">{"[ + ]"}</pre><h1>Drop your references here</h1><p>Drop images, paste links, or add a note. Make room for an idea.</p></div> : null}
+    {ready && !playground && references.length === 0 && activeFrames.length === 0 ? <div className="canvas-empty"><pre aria-hidden="true">{"[ + ]"}</pre><h1>Drop your references here</h1><p>Drop images, paste links, or add a note. Make room for an idea.</p></div> : null}
     {dropping ? <div className="canvas-drop-hint" aria-hidden="true">Drop JPEG, PNG, or WebP images</div> : null}
     <div className="canvas-status" role="status">
       {status === "loading" || board.state === "loading" ? "Loading workspace" : status === "error" ? "References unavailable" : importing ? "Adding reference" : operation ? "Saving group" : savingNotes > 0 ? "Saving note" : failedNotes.length ? "Note not saved" : board.state === "saving" ? "Saving arrangement" : board.state === "saved" ? refreshing ? "Updating" : "Saved" : board.unsaved ? "Arrangement not saved" : board.loaded ? "Refresh failed" : "Could not load workspace"}
@@ -210,6 +266,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       <StudioButton disabled={!ready || operation} busy={importing} onClick={() => void addText("New note", true)}>Note</StudioButton>
       <StudioButton disabled={!ready || operation} onClick={group}>Group</StudioButton>
       <StudioButton aria-pressed={panel === "library"} onClick={() => setPanel(panel === "library" ? null : "library")}>Library</StudioButton>
+      <StudioButton data-playground-add aria-pressed={playground !== null} disabled={!ready} onClick={() => addPlayground()}>Motion</StudioButton>
       <span className="canvas-dock-separator" aria-hidden="true" />
       <StudioButton variant="ghost" disabled={!board.canUndo || operation} onClick={board.undo} aria-label="Undo" title="Undo (Ctrl+Z)">↶</StudioButton>
       <StudioButton variant="ghost" disabled={!board.canRedo || operation} onClick={board.redo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">↷</StudioButton>
@@ -217,17 +274,18 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     <StudioZoomControl zoom={zoom} selected={selection.length > 0} onOut={() => void canvas.current?.zoomOut()} onIn={() => void canvas.current?.zoomIn()}
       onZoom={(value) => void canvas.current?.zoomTo(value)} onFit={() => void canvas.current?.fitView({ padding: 0.2, maxZoom: 1, ...(selection.length ? { nodes: selection.map((id) => ({ id })) } : {}) })} />
     <StudioInspector open={panel !== null} retainContent onClose={closePanel}>
-      <div hidden={panel !== "library"} className="canvas-panel-content"><h2>Library</h2><p className="studio-meta">Reuse collected material. Paste a link directly onto the board to add a new source.</p>
+      {effective.frames.filter((frame) => visitedSystems.includes(frame.id)).map((frame) => <div className="canvas-panel-content" key={frame.id} hidden={panel !== "systems" || systemDirection !== frame.id}><DirectionSystems scope={projectId} direction={frame} systems={board.layout.systems ?? []} annotations={annotations} references={references} disabled={board.unsaved || operation} onPersist={persistSystem} onOpenPlayground={() => addPlayground(frame.id)} /></div>)}
+      <div hidden={panel !== "library"} className="canvas-panel-content"><h2>Library</h2><p className="studio-help">Reuse collected material. Paste a link directly onto the board to add a new source.</p>
         {board.layout.frames.some((frame) => frame.archived) ? <section><h3>Archived groups</h3>{board.layout.frames.filter((frame) => frame.archived).map((frame) => <div className="canvas-direction-row" key={frame.id}><span>{frame.name}</span><StudioButton disabled={operation} onClick={() => void directionAction(frame, { archived: false }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not restore group."))}>Restore</StudioButton></div>)}</section> : null}
         <ReferenceSearch placedReferenceIds={references.map((item) => item.reference.id)} onPlace={async (id) => { const item = await onPlace(id); placeOnBoard(item, center()); return item; }} />
       </div>
       <div hidden={panel !== "inspect"} className="canvas-panel-content">{selected ? <><h2>{selected.reference.title}</h2>
         {selected.reference.asset ? <><ImageRegions reference={selected.reference} annotations={annotations.filter((note) => note.target.type === "placement" && note.target.placementId === selected.placementId)} /><StudioButton onClick={() => view(selected.placementId)}>View image</StudioButton></> : null}
-        {selected.reference.sourceUrl ? <a className="sample-url" href={selected.reference.sourceUrl} target="_blank" rel="noreferrer">{selected.reference.sourceUrl}</a> : null}
+        {selected.reference.sourceUrl ? <a className="studio-url" href={selected.reference.sourceUrl} target="_blank" rel="noreferrer">{selected.reference.sourceUrl}</a> : null}
       </> : null}
         {references.filter((item) => visited.includes(item.placementId)).map((item) => <div key={item.placementId} hidden={item.placementId !== inspectedId}>
-          <details className="sample-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} /></details>
-          <details className="sample-disclosure"><summary>Usage and crop</summary><PlacementUse item={item} onSave={onSavePlacement} /></details>
+          <details className="studio-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} /></details>
+          <details className="studio-disclosure"><summary>Usage and crop</summary><PlacementUse item={item} onSave={onSavePlacement} /></details>
           {annotations.some((note) => note.target.type === "placement" && note.target.placementId === item.placementId) ? <details><summary>Attached notes</summary>{annotations.filter((note) => note.target.type === "placement" && note.target.placementId === item.placementId).map((note) => <p key={note.id}>{note.body || note.borrowedQuality}</p>)}</details> : null}
         </div>)}
       </div>

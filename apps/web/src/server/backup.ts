@@ -16,6 +16,7 @@ import {
   type BackupManifest,
   type Project,
   MAX_BACKUP_MANIFEST_BYTES,
+  BACKUP_FORMAT_VERSION, remapSystem, remapVariant, systemChildren,
 } from "@reference-studio/core";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
@@ -28,6 +29,7 @@ import { inspectImage, type InspectedImage } from "./images.js";
 import { getProject } from "./projects.js";
 import { readBackupZip, writeBackupZip } from "./zipArchive.js";
 import { readBoard, writeBoard } from "./boards.js";
+import { insertMotionVariant, readProjectVariants } from "./variants.js";
 
 const PATH_FIELDS = new Set(["path", "filePath", "filepath", "localPath"]);
 
@@ -194,7 +196,7 @@ export function exportProjectBackup(
   }
   const manifest = readBackupManifest({
     format: "reference-studio-backup",
-    formatVersion: 3,
+    formatVersion: BACKUP_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
     project: {
       originalId: project.id,
@@ -209,6 +211,7 @@ export function exportProjectBackup(
     references: [...references.values()].sort((left, right) => left.originalId.localeCompare(right.originalId)),
     placements,
     board: readBoard(database, projectId).layout,
+    variants: readProjectVariants(database, projectId),
     sections: { systems: [], variants: [], evidence: [], snapshots: [] },
   });
   const files = new Map<string, Uint8Array>();
@@ -422,11 +425,15 @@ function insertRestoredProject(
   if (manifest.board !== undefined) {
     const frameIds = new Map(manifest.board.frames.map((frame) => [frame.id, createId()]));
     const annotationIds = new Map((manifest.board.annotations ?? []).map((annotation) => [annotation.id, createId()]));
+    const systemIds = new Map((manifest.board.systems ?? []).map((system) => [system.id, createId()]));
+    const childIds = new Map((manifest.board.systems ?? []).flatMap(systemChildren).map((entry) => [entry.id, createId()]));
+    const variantIds = new Map((manifest.variants ?? []).map((variant) => [variant.id, createId()]));
     writeBoard(database, {
       projectId: project.id,
       revision: 1,
       layout: {
         frames: manifest.board.frames.map((frame) => ({ ...frame, id: frameIds.get(frame.id)!, revision: frame.revision ?? 1 })),
+        ...(manifest.board.systems === undefined ? {} : { systems: manifest.board.systems.map((system) => remapSystem(system, { systems: systemIds, children: childIds, directions: frameIds, placements: placementIds, annotations: annotationIds })) }),
         items: manifest.board.items.map((item) => ({ ...item, placementId: placementIds.get(item.placementId)!,
           frameId: item.frameId === null ? null : frameIds.get(item.frameId)! })),
         ...(manifest.board.annotations === undefined ? {} : { annotations: manifest.board.annotations.map((annotation) => ({ ...annotation,
@@ -436,6 +443,11 @@ function insertRestoredProject(
         })) }),
       },
     });
+    for (const variant of manifest.variants ?? []) {
+      insertMotionVariant(database, project.id, remapVariant(variant, {
+        variants: variantIds, systems: systemIds, placements: placementIds, annotations: annotationIds, presets: childIds,
+      }));
+    }
   }
   return project;
 }

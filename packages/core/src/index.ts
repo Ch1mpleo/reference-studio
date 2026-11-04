@@ -105,3 +105,12 @@ export { boardRectSchema, boardFrameSchema, boardItemSchema, boardLayoutSchema, 
 export type { BoardRect, BoardFrame, BoardItem, BoardLayout, Board } from "./board.js";
 export { annotationTargetSchema, boardAnnotationSchema, updateDirectionSchema, duplicateDirectionSchema } from "./board.js";
 export type { AnnotationTarget, BoardAnnotation } from "./board.js";
+export { systemContextSchema, motionSettingsSchema, designContentSchema, motionContentSchema, systemRecordSchema, createSystemSchema, updateSystemSchema, systemEntries, systemChildren, systemContexts, remapSystem } from "./systems.js";
+export type { SystemContext, MotionSettings, DesignContent, MotionContent, SystemRecord, SystemKind } from "./systems.js";
+export { motionVariantSchema } from "./systems.js";
+export type { MotionVariant } from "./systems.js";
+export {
+  MAX_BACKUP_VARIANTS, MAX_VARIANTS_PER_SYSTEM, assertVariantLinks, createVariantSchema, duplicateVariantSchema,
+  referencedBoardIds, remapVariant, selectVariantSchema, updateVariantSchema, variantDefectSchema, variantRecommendationSchema, variantRecordSchema,
+} from "./variants.js";
+export type { CreateVariant, DuplicateVariant, SelectVariant, UpdateVariant, VariantDefect, VariantLinkScope, VariantRecommendation, VariantRecord } from "./variants.js";

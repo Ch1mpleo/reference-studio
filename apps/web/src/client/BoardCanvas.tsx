@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   ReactFlow, Background, BackgroundVariant, NodeResizer, applyNodeChanges,
   type Node, type NodeProps, type ReactFlowInstance, type NodeChange, type Edge,
 } from "@xyflow/react";
-import type { BoardAnnotation, BoardLayout, ProjectReference } from "@reference-studio/core";
+import type { Board, BoardAnnotation, BoardLayout, ProjectReference } from "@reference-studio/core";
 import { StudioButton } from "./StudioButton.js";
 import { ImageRegions } from "./ImageRegions.js";
 import { BoardInlineText } from "./BoardInlineText.js";
+import type { CanvasPlayground } from "./MotionPlayground.js";
 import "@xyflow/react/dist/style.css";
 
 type MaterialNode = Node<{
@@ -15,10 +16,17 @@ type MaterialNode = Node<{
   readOnly: boolean;
   editing: boolean; revision: number; count: number; groupCommandsDisabled: boolean;
   edit: () => void; done: () => void; saveText: (text: string, revision: number) => Promise<number | void>;
-  duplicate: () => void; archive: () => void;
+  duplicate: () => void; archive: () => void; systems: () => void;
   inspect: () => void; view: () => void; resized: () => void; resizeStarted: () => void;
 }, "material">;
-export type BoardView = ReactFlowInstance<MaterialNode>;
+type PlaygroundNode = Node<{ study: CanvasPlayground; close: () => void; move: (point: { x: number; y: number }) => void; acceptBoard: (board: Board) => void }, "playground">;
+type BoardNode = MaterialNode | PlaygroundNode;
+export type BoardView = ReactFlowInstance<BoardNode>;
+const PlaygroundCard = lazy(async () => ({ default: (await import("./MotionPlayground.js")).PlaygroundCard }));
+
+function Playground({ data }: NodeProps<PlaygroundNode>) {
+  return <Suspense fallback={<p className="studio-help" role="status">Loading motion study</p>}><PlaygroundCard projectId={data.study.projectId} directionId={data.study.directionId} directionName={data.study.directionName} onClose={data.close} onMove={(dx, dy) => data.move({ x: data.study.position.x + dx, y: data.study.position.y + dy })} onBoard={data.acceptBoard} /></Suspense>;
+}
 
 function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
   const reference = data.item?.reference;
@@ -32,16 +40,16 @@ function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
       <div className="board-item-caption"><span>{data.title}</span></div>
     </>}
     {selected && !data.editing ? <div className="board-item-actions nodrag nopan">
-      {data.frame ? <><StudioButton variant="ghost" disabled={data.readOnly} onClick={data.edit}>Rename</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.duplicate}>Duplicate</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.archive}>Ungroup</StudioButton></> : reference?.kind === "note" ? <StudioButton variant="ghost" onClick={data.edit}>Edit note</StudioButton> : <StudioButton variant="ghost" onClick={data.inspect}>Details</StudioButton>}
+      {data.frame ? <><StudioButton variant="ghost" disabled={data.readOnly} onClick={data.edit}>Rename</StudioButton><StudioButton variant="ghost" onClick={data.systems}>Systems</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.duplicate}>Duplicate</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.archive}>Ungroup</StudioButton></> : reference?.kind === "note" ? <StudioButton variant="ghost" onClick={data.edit}>Edit note</StudioButton> : <StudioButton variant="ghost" onClick={data.inspect}>Details</StudioButton>}
       {reference?.asset ? <StudioButton variant="ghost" onClick={data.view}>View image</StudioButton> : null}
     </div> : null}
   </div>;
 }
-const nodeTypes = { material: Material };
+const nodeTypes = { material: Material, playground: Playground };
 const edges: Edge[] = [];
 
 export function BoardCanvas({ layout, references, selection, readOnly = false, projectId, onSelect, onCommit, onInspect, onView, onReady, onZoom, onGestureStart,
-  editingId, onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, groupCommandsDisabled }: {
+  editingId, onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems, groupCommandsDisabled, playground, onMovePlayground, onClosePlayground, onAcceptBoard }: {
   layout: BoardLayout; references: ProjectReference[]; selection: string[]; projectId: string;
   onSelect: (ids: string[]) => void; onCommit: (layout: BoardLayout) => void;
   onInspect: (id: string) => void; onView: (id: string) => void; onReady: (view: BoardView) => void;
@@ -52,22 +60,27 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
   onEditNote: (id: string, text: string, revision: number) => Promise<number>;
   onRenameGroup: (id: string, text: string, revision: number) => Promise<void>;
   onDuplicateGroup: (id: string) => void; onArchiveGroup: (id: string) => void; groupCommandsDisabled: boolean;
+  onOpenSystems: (id: string) => void;
+  playground: CanvasPlayground | null; onMovePlayground: (point: { x: number; y: number }) => void; onClosePlayground: () => void;
+  onAcceptBoard?: (board: Board) => void;
 }) {
   const [spacePanning, setSpacePanning] = useState(false);
-  const [nodes, setNodes] = useState<MaterialNode[]>([]);
+  const [nodes, setNodes] = useState<BoardNode[]>([]);
+  const playgroundActions = useRef({ playground, onMovePlayground, onClosePlayground, onAcceptBoard });
+  playgroundActions.current = { playground, onMovePlayground, onClosePlayground, onAcceptBoard };
   const nodesRef = useRef(nodes);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   const view = useRef<BoardView | null>(null);
   const latest = useRef({ layout, onCommit, onInspect, onView, onSelect, onGestureStart });
   latest.current = { layout, onCommit, onInspect, onView, onSelect, onGestureStart };
-  const actions = useRef({ onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup });
-  actions.current = { onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup };
+  const actions = useRef({ onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems });
+  actions.current = { onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems };
   const frame = useRef<number | null>(null);
   const gesturing = useRef(false);
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
-      if (event.code !== "Space" || !(event.target instanceof Element) || !event.target.closest(".react-flow") || event.target.closest("input,textarea,button,select,[role='textbox'],[contenteditable]")) return;
+      if (event.code !== "Space" || !(event.target instanceof Element) || !event.target.closest(".react-flow") || event.target.closest("input,textarea,button,select,[role='textbox'],[contenteditable],.playground-card")) return;
       event.preventDefault(); setSpacePanning(true);
     };
     const up = (event: KeyboardEvent) => { if (event.code === "Space") setSpacePanning(false); };
@@ -120,10 +133,11 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
       edit: () => actions.current.onEdit(id), done: () => actions.current.onEditDone(id),
       saveText: (text: string, revision: number) => isFrame ? actions.current.onRenameGroup(id, text, revision) : actions.current.onEditNote(id, text, revision),
       duplicate: () => actions.current.onDuplicateGroup(id), archive: () => actions.current.onArchiveGroup(id),
+      systems: () => actions.current.onOpenSystems(id),
       annotations: (layout.annotations ?? []).filter((note) => note.target.type === "placement" && note.target.placementId === id),
       inspect: () => latest.current.onInspect(id), view: () => latest.current.onView(id), resized: schedule,
       resizeStarted: () => { gesturing.current = true; latest.current.onGestureStart(); } });
-    const next: MaterialNode[] = [
+    const next: BoardNode[] = [
       ...layout.frames.filter((entry) => !entry.archived).map((entry): MaterialNode => ({ id: entry.id, type: "material", position: { x: entry.rect.x, y: entry.rect.y },
         width: entry.rect.width, height: entry.rect.height, style: { width: entry.rect.width, height: entry.rect.height },
         dragHandle: ".board-frame-heading", zIndex: -1, data: data(entry.id, entry.name, true), selected: selectionRef.current.includes(entry.id) })),
@@ -135,9 +149,11 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
           style: { width: entry.rect.width, height: entry.rect.height }, data: data(entry.placementId, item.reference.title, false, item), selected: selectionRef.current.includes(entry.placementId) }];
       }),
     ];
+    // React Flow raises selected materials by 1000; a study stays interactive above them.
+    if (playground) next.push({ id: playground.id, type: "playground", position: playground.position, width: playground.width, style: { width: playground.width }, dragHandle: ".playground-handle", selectable: false, focusable: false, zIndex: 1001, data: { study: playground, close: () => playgroundActions.current.onClosePlayground(), move: (point) => playgroundActions.current.onMovePlayground(point), acceptBoard: (board) => playgroundActions.current.onAcceptBoard?.(board) } });
     nodesRef.current = next;
     setNodes(next);
-  }, [layout, references, readOnly, editingId, groupCommandsDisabled]);
+  }, [layout, references, readOnly, editingId, groupCommandsDisabled, playground]);
 
   useEffect(() => {
     setNodes((current) => {
@@ -149,8 +165,9 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
 
   const scheduleRef = useRef(schedule);
   scheduleRef.current = schedule;
-  const change = useCallback((changes: NodeChange<MaterialNode>[]): void => {
-    if (changes.some((change) => change.type === "position" && change.position)) { gesturing.current = true; latest.current.onGestureStart(); }
+  const change = useCallback((changes: NodeChange<BoardNode>[]): void => {
+    const materialChanges = changes.filter((change) => !("id" in change) || change.id !== playgroundActions.current.playground?.id);
+    if (materialChanges.some((change) => change.type === "position" && change.position)) { gesturing.current = true; latest.current.onGestureStart(); }
     const next = applyNodeChanges(changes, nodesRef.current);
     nodesRef.current = next;
     setNodes(next);
@@ -158,13 +175,16 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
       const ids = next.filter((node) => node.selected).map((node) => node.id);
       if (ids.join("|") !== selectionRef.current.join("|")) latest.current.onSelect(ids);
     }
-    if (changes.some((change) => change.type === "position" && change.dragging !== true)) scheduleRef.current();
+    const studyChange = changes.find((change) => change.type === "position" && change.id === playgroundActions.current.playground?.id && change.position);
+    if (studyChange?.type === "position" && studyChange.position) playgroundActions.current.onMovePlayground(studyChange.position);
+    if (materialChanges.some((change) => change.type === "position" && change.dragging !== true)) scheduleRef.current();
   }, []);
 
-  return <ReactFlow<MaterialNode>
+  return <ReactFlow<BoardNode>
     nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={change}
-    onNodeDragStart={() => { gesturing.current = true; latest.current.onGestureStart(); }}
+    onNodeDragStart={(_, node) => { if (node.type === "playground") return; gesturing.current = true; latest.current.onGestureStart(); }}
     onNodeDragStop={(_, node, moved) => {
+      if (node.type === "playground") { playgroundActions.current.onMovePlayground(node.position); return; }
       if (frame.current !== null) { cancelAnimationFrame(frame.current); frame.current = null; }
       persist(new Set((moved.length ? moved : [node]).map((entry) => entry.id)));
     }}

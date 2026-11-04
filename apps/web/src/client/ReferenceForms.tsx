@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { isHttpUrl, parseMotionTimestamp, type CreateLinkReference, type CreateNoteReference, type MotionMark } from "@reference-studio/core";
 import { StudioButton } from "./StudioButton.js";
+import { StudioField, StudioTextArea } from "./StudioField.js";
 export function LinkForm({
   disabled,
   onSubmit,
@@ -49,44 +50,12 @@ export function LinkForm({
 
   return (
     <form className="reference-form" aria-label="Add a link" onSubmit={(event) => void submit(event)}>
-      <label htmlFor="reference-link">Link</label>
-      <input
-        id="reference-link"
-        name="url"
-        type="url"
-        inputMode="url"
-        required
-        disabled={disabled}
-        value={url}
-        onChange={(event) => setUrl(event.target.value)}
-      />
-      <details className="sample-disclosure">
+      <StudioField id="reference-link" name="url" label="Link" type="url" inputMode="url" required disabled={disabled} value={url} onChange={setUrl} />
+      <details className="studio-disclosure">
         <summary>Title, source, and timing</summary>
-        <label htmlFor="reference-link-title">Title</label>
-        <input
-          id="reference-link-title"
-          value={title}
-          maxLength={200}
-          disabled={disabled}
-          onChange={(event) => setTitle(event.target.value)}
-        />
-        <label htmlFor="reference-link-creator">Creator</label>
-        <input
-          id="reference-link-creator"
-          value={creator}
-          maxLength={200}
-          disabled={disabled}
-          onChange={(event) => setCreator(event.target.value)}
-        />
-        <label htmlFor="reference-link-notes">Notes</label>
-        <textarea
-          id="reference-link-notes"
-          value={observations}
-          maxLength={20000}
-          rows={3}
-          disabled={disabled}
-          onChange={(event) => setObservations(event.target.value)}
-        />
+        <StudioField id="reference-link-title" label="Title" value={title} maxLength={200} disabled={disabled} onChange={setTitle} />
+        <StudioField id="reference-link-creator" label="Creator" value={creator} maxLength={200} disabled={disabled} onChange={setCreator} />
+        <StudioTextArea id="reference-link-notes" label="Notes" value={observations} maxLength={20000} rows={3} disabled={disabled} onChange={setObservations} />
         <MotionFields
           startId="reference-link-start"
           endId="reference-link-end"
@@ -155,43 +124,12 @@ export function NoteForm({
 
   return (
     <form className="reference-form" aria-label="Add a note" onSubmit={(event) => void submit(event)}>
-      <label htmlFor="reference-note">Note</label>
-      <textarea
-        id="reference-note"
-        value={body}
-        required
-        maxLength={20000}
-        rows={4}
-        disabled={disabled}
-        onChange={(event) => setBody(event.target.value)}
-      />
-      <details className="sample-disclosure">
+      <StudioTextArea id="reference-note" label="Note" value={body} required maxLength={20000} rows={4} disabled={disabled} onChange={setBody} />
+      <details className="studio-disclosure">
         <summary>Title, source, and timing</summary>
-        <label htmlFor="reference-note-title">Title</label>
-        <input
-          id="reference-note-title"
-          value={title}
-          maxLength={200}
-          disabled={disabled}
-          onChange={(event) => setTitle(event.target.value)}
-        />
-        <label htmlFor="reference-note-source">Source link</label>
-        <input
-          id="reference-note-source"
-          type="url"
-          inputMode="url"
-          value={sourceUrl}
-          disabled={disabled}
-          onChange={(event) => setSourceUrl(event.target.value)}
-        />
-        <label htmlFor="reference-note-creator">Creator</label>
-        <input
-          id="reference-note-creator"
-          value={creator}
-          maxLength={200}
-          disabled={disabled}
-          onChange={(event) => setCreator(event.target.value)}
-        />
+        <StudioField id="reference-note-title" label="Title" value={title} maxLength={200} disabled={disabled} onChange={setTitle} />
+        <StudioField id="reference-note-source" label="Source link" type="url" inputMode="url" value={sourceUrl} disabled={disabled} onChange={setSourceUrl} />
+        <StudioField id="reference-note-creator" label="Creator" value={creator} maxLength={200} disabled={disabled} onChange={setCreator} />
         <MotionFields
           startId="reference-note-start"
           endId="reference-note-end"
@@ -237,33 +175,9 @@ function MotionFields({
 }) {
   return (
     <>
-      <label htmlFor={startId}>Start</label>
-      <input
-        id={startId}
-        value={start}
-        inputMode="decimal"
-        placeholder="1:05 or seconds"
-        disabled={disabled}
-        onChange={(event) => onStart(event.target.value)}
-      />
-      <label htmlFor={endId}>End</label>
-      <input
-        id={endId}
-        value={end}
-        inputMode="decimal"
-        placeholder="Optional"
-        disabled={disabled}
-        onChange={(event) => onEnd(event.target.value)}
-      />
-      <label htmlFor={behaviorId}>Observed motion</label>
-      <textarea
-        id={behaviorId}
-        value={behavior}
-        maxLength={4000}
-        rows={2}
-        disabled={disabled}
-        onChange={(event) => onBehavior(event.target.value)}
-      />
+      <StudioField id={startId} label="Start" value={start} inputMode="decimal" placeholder="1:05 or seconds" disabled={disabled} onChange={onStart} />
+      <StudioField id={endId} label="End" value={end} inputMode="decimal" placeholder="Optional" disabled={disabled} onChange={onEnd} />
+      <StudioTextArea id={behaviorId} label="Observed motion" value={behavior} maxLength={4000} rows={2} disabled={disabled} onChange={onBehavior} />
     </>
   );
 }

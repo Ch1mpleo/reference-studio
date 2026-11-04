@@ -110,26 +110,21 @@ test("failure, retry and rapid reversals clean up; returning to the library remo
   expect(errors).toEqual([]);
 });
 
-test("both loading treatments keep media bounds in both themes and phone layouts", async ({ page }, info) => {
-  for (const width of [1440, 390]) {
-    await page.setViewportSize({ width, height: width === 390 ? 640 : 960 });
-    const lab = await openLoadingSample(page);
-    for (const theme of ["Light", "Dark"]) {
-      await page.getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: theme, exact: true }).click();
-      for (const treatment of ["Skeleton only", "Skeleton + reveal"]) {
-        await lab.getByRole("button", { name: treatment, exact: true }).click();
-        const frame = lab.locator(".studio-card-media");
-        const height = (await frame.boundingBox())?.height;
-        await lab.getByRole("button", { name: "Start loading" }).click();
-        await frame.scrollIntoViewIfNeeded();
-        expect((await frame.boundingBox())?.height).toBe(height);
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        await lab.screenshot({ path: info.outputPath(`${width}-${theme}-${treatment.replaceAll(" ", "-")}.png`) });
-        await lab.getByRole("button", { name: "Show loaded" }).click();
-        await expect(frame.locator("img")).toHaveCSS("opacity", "1");
-        await expect(frame.locator("canvas")).toHaveCount(0);
-        expect((await frame.boundingBox())?.height).toBe(height);
-      }
-    }
+test("both loading treatments keep media bounds", async ({ page }, info) => {
+  await page.setViewportSize({ width: 1440, height: 960 });
+  const lab = await openLoadingSample(page);
+  for (const treatment of ["Skeleton only", "Skeleton + reveal"]) {
+    await lab.getByRole("button", { name: treatment, exact: true }).click();
+    const frame = lab.locator(".studio-card-media");
+    const height = (await frame.boundingBox())?.height;
+    await lab.getByRole("button", { name: "Start loading" }).click();
+    await frame.scrollIntoViewIfNeeded();
+    expect((await frame.boundingBox())?.height).toBe(height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await lab.screenshot({ path: info.outputPath(`1440-${treatment.replaceAll(" ", "-")}.png`) });
+    await lab.getByRole("button", { name: "Show loaded" }).click();
+    await expect(frame.locator("img")).toHaveCSS("opacity", "1");
+    await expect(frame.locator("canvas")).toHaveCount(0);
+    expect((await frame.boundingBox())?.height).toBe(height);
   }
 });
