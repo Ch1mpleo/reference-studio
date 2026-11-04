@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ServiceError } from "./errors.js";
 import { BACKUP_FORMAT, backupVersionMessage, readBackupManifest, type BackupManifest } from "./backup.js";
+import { variantRecordSchema } from "./variants.js";
 
 const projectId = "00000000-0000-4000-8000-000000000001";
 const referenceId = "00000000-0000-4000-8000-000000000002";
@@ -95,6 +96,28 @@ describe("backup manifest", () => {
         placements: [{ ...manifest().placements[0], rect: { x: 0, y: 0 } }],
       }),
     ).toThrow("This backup format cannot store canvas positions yet.");
+  });
+
+  it("reads format 5 variants beside the board and rejects older or nested copies", () => {
+    const frameId = "00000000-0000-4000-8000-000000000020";
+    const systemId = "00000000-0000-4000-8000-000000000021";
+    const variantId = "00000000-0000-4000-8000-000000000022";
+    const board = {
+      frames: [{ id: frameId, name: "Quiet", rect: { x: 0, y: 0, width: 700, height: 600 } }],
+      items: [],
+      systems: [{ id: systemId, directionId: frameId, revision: 1, schemaVersion: 1, name: "Motion", archived: false, kind: "motion" as const, content: {} }],
+    };
+    const saved = variantRecordSchema.parse({
+      id: variantId, revision: 2, schemaVersion: 1, archived: false, systemId, name: "Quick", selected: true,
+      fixture: { id: "dropdown", version: 1 }, presetOrigin: null, motion: { model: "tween", durationMs: 180, easing: "ease-out" },
+      engine: { name: "Example engine", version: "1" },
+    });
+    expect(readBackupManifest({ ...manifest(), formatVersion: 5, board, variants: [saved] }).variants?.[0]?.name).toBe("Quick");
+    expect(() => readBackupManifest({ ...manifest(), formatVersion: 4, board, variants: [saved] })).toThrow("Variant records require backup format 5.");
+    expect(() => readBackupManifest({ ...manifest(), formatVersion: 5, board: { ...board, variants: [saved] } })).toThrow("Variant records are stored beside the board, not inside it.");
+    expect(() => readBackupManifest({ ...manifest(), formatVersion: 5, board, variants: [saved, { ...saved, id: frameId }] })).toThrow("Variant records need distinct stable IDs.");
+    expect(() => readBackupManifest({ ...manifest(), formatVersion: 5, board, variants: [saved, { ...saved, id: "00000000-0000-4000-8000-000000000023" }] })).toThrow("A motion system has more than one Selected variant.");
+    expect(() => readBackupManifest({ ...manifest(), formatVersion: 5, board, variants: [{ ...saved, sourceLinks: { placementIds: [frameId], annotationIds: [] } }] })).toThrow("A variant links to a placement outside this project.");
   });
 
   it("rejects a crop on a note and a placement whose reference is missing", () => {

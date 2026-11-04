@@ -107,6 +107,10 @@ export { annotationTargetSchema, boardAnnotationSchema, updateDirectionSchema, d
 export type { AnnotationTarget, BoardAnnotation } from "./board.js";
 export { systemContextSchema, motionSettingsSchema, designContentSchema, motionContentSchema, systemRecordSchema, createSystemSchema, updateSystemSchema, systemEntries, systemChildren, systemContexts, remapSystem } from "./systems.js";
 export type { SystemContext, MotionSettings, DesignContent, MotionContent, SystemRecord, SystemKind } from "./systems.js";
-
 export { motionVariantSchema } from "./systems.js";
 export type { MotionVariant } from "./systems.js";
+export {
+  MAX_BACKUP_VARIANTS, MAX_VARIANTS_PER_SYSTEM, assertVariantLinks, createVariantSchema, duplicateVariantSchema,
+  referencedBoardIds, remapVariant, selectVariantSchema, updateVariantSchema, variantRecordSchema,
+} from "./variants.js";
+export type { CreateVariant, DuplicateVariant, SelectVariant, UpdateVariant, VariantLinkScope, VariantRecord } from "./variants.js";
