@@ -213,3 +213,28 @@ test("keeps recommendation fields and shows Selected only after a person marks i
   await expect(marked.saved.getByRole("status").filter({ hasText: /^Selected$/ })).toBeVisible();
   await expect(marked.study.getByText("Approved", { exact: true })).toHaveCount(0);
 });
+
+test("keeps a recorded defect separate from the comparison", async ({ page }) => {
+  test.setTimeout(60_000);
+  const first = await openStudy(page);
+  await first.saved.getByLabel("Variant name", { exact: true }).fill("Quiet menu");
+  await first.saved.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(first.saved.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  await first.study.getByRole("button", { name: "Record blocked input", exact: true }).click();
+  await expect(first.study.getByRole("region", { name: "Variant defects", exact: true })).toContainText("Blocked input");
+  await first.saved.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(first.saved.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".canvas-status")).toHaveText("Saved");
+  const again = await reopen(page);
+  await choose(page, again.saved, "Open saved variant", "Quiet menu");
+  const defects = again.study.getByRole("region", { name: "Variant defects", exact: true });
+  await expect(defects).toContainText("Blocked input");
+  await expect(defects.getByRole("listitem")).toContainText("Blocked input");
+  await again.study.getByRole("button", { name: "Compare A/B", exact: true }).click();
+  const comparison = again.study.getByRole("region", { name: "Variant comparison", exact: true });
+  await expect(comparison).not.toContainText("Blocked input");
+  await expect(comparison).not.toContainText("Lost focus");
+  await expect(comparison).not.toContainText("Broken interruption");
+  await expect(comparison).not.toContainText("Ignored reduced motion");
+});

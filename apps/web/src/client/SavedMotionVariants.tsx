@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Board, MotionSettings, VariantRecord } from "@reference-studio/core";
+import type { Board, MotionSettings, VariantDefect, VariantRecord } from "@reference-studio/core";
 import { FIXTURE_SPRING_ENGINE } from "./fixtureMotionEngine.js";
 import { parseDropdownParameters } from "./interactionFixtures.js";
 import { MotionTuningControls } from "./MotionTuningControls.js";
@@ -8,6 +8,7 @@ import { StudioButton } from "./StudioButton.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioField } from "./StudioField.js";
 import { StudioSelect } from "./StudioSelect.js";
+import { VariantDefectList } from "./VariantDefects.js";
 import { emptyVariantNotes, VariantRecommendationFields, type VariantNotes } from "./VariantRecommendation.js";
 import { useVariantDraftHosts, variantDraftKey } from "./VariantDraftHost.js";
 import { variantLaneSource } from "./VariantComparison.js";
@@ -39,8 +40,8 @@ function notesFrom(record: VariantRecord | null): VariantNotes {
   };
 }
 
-function signature(name: string, draft: MotionDraft, notes: VariantNotes): string {
-  return JSON.stringify({ name: name.trim(), preset: motionPresets[draft.preset].label, motion: draft.parameters.motion, recommendation: notes.recommendation, fit: notes.fit });
+function signature(name: string, draft: MotionDraft, notes: VariantNotes, defects: readonly VariantDefect[]): string {
+  return JSON.stringify({ name: name.trim(), preset: motionPresets[draft.preset].label, motion: draft.parameters.motion, recommendation: notes.recommendation, fit: notes.fit, defects });
 }
 
 function newerRecord(left: VariantRecord | null | undefined, right: VariantRecord | null | undefined): VariantRecord | null {
@@ -78,6 +79,7 @@ type WriteKind = "save" | "save-as" | "rename" | "duplicate" | "select";
 export function VariantEditor({ projectId, directionId, preset, laneLabel, hidden, tuning, onTuning, onDraft, onSource, onBoard, onRetarget, initialRecord, startSaved = false, client = variantClient }: VariantEditorProps) {
   const [draft, setDraft] = useState<MotionDraft>(() => initialRecord ? draftFromVariant(initialRecord) : createMotionDraft(preset));
   const [notes, setNotes] = useState<VariantNotes>(() => notesFrom(initialRecord));
+  const [defects, setDefects] = useState<VariantDefect[]>(() => initialRecord?.defects ?? []);
   const [name, setName] = useState(() => initialRecord?.name ?? motionPresets[preset].label);
   const [variants, setVariants] = useState<VariantRecord[]>(() => initialRecord ? [initialRecord] : []);
   const [base, setBase] = useState<VariantRecord | null>(initialRecord);
@@ -91,6 +93,7 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
   const [action, setAction] = useState<WriteKind | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft;
   const notesRef = useRef(notes); notesRef.current = notes;
+  const defectsRef = useRef(defects); defectsRef.current = defects;
   const nameRef = useRef(name); nameRef.current = name;
   const baseRef = useRef(base); baseRef.current = base;
   const target = useRef<DirectionVariants | null>(null);
@@ -101,10 +104,11 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
   const loadGeneration = useRef(0);
   const onDraftRef = useRef(onDraft); onDraftRef.current = onDraft;
   const onSourceRef = useRef(onSource); onSourceRef.current = onSource;
-  const openingSig = useRef(signature(name, draft, notes));
+  const openingSig = useRef(signature(name, draft, notes, defects));
   const savedNotes = notesFrom(base);
-  const savedSig = base ? signature(base.name, draftFromVariant(base), savedNotes) : null;
-  const dirty = savedSig === null ? signature(name, draft, notes) !== openingSig.current : signature(name, draft, notes) !== savedSig;
+  const savedDefects = base?.defects ?? [];
+  const savedSig = base ? signature(base.name, draftFromVariant(base), savedNotes, savedDefects) : null;
+  const dirty = savedSig === null ? signature(name, draft, notes, defects) !== openingSig.current : signature(name, draft, notes, defects) !== savedSig;
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { onDraftRef.current(draft); }, [draft]);
@@ -113,8 +117,8 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       const currentBase = baseRef.current;
-      const currentSig = signature(nameRef.current, draftRef.current, notesRef.current);
-      const clean = currentBase ? currentSig === signature(currentBase.name, draftFromVariant(currentBase), notesFrom(currentBase)) : currentSig === openingSig.current;
+      const currentSig = signature(nameRef.current, draftRef.current, notesRef.current, defectsRef.current);
+      const clean = currentBase ? currentSig === signature(currentBase.name, draftFromVariant(currentBase), notesFrom(currentBase), currentBase.defects) : currentSig === openingSig.current;
       if (pending.current || !clean) event.preventDefault();
     };
     window.addEventListener("beforeunload", warn);
@@ -139,6 +143,12 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
   function editDraft(next: MotionDraft): void { edits.current += 1; setDraft(next); if (mode === "saved") setMode("idle"); }
   function editName(value: string): void { edits.current += 1; setName(value); if (mode === "saved") setMode("idle"); }
   function editNotes(next: VariantNotes): void { edits.current += 1; setNotes(next); if (mode === "saved") setMode("idle"); }
+  function addDefect(kind: VariantDefect["kind"]): void {
+    edits.current += 1;
+    setDefects((current) => current.length >= 32 ? current : [...current, { id: crypto.randomUUID(), kind, note: "" }]);
+    if (mode === "saved") setMode("idle");
+  }
+  function removeDefect(id: string): void { edits.current += 1; setDefects((current) => current.filter((entry) => entry.id !== id)); if (mode === "saved") setMode("idle"); }
   function adopt(record: VariantRecord): void {
     baseRef.current = record;
     setBase(record);
@@ -149,6 +159,7 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
     setDraft(draftFromVariant(record, draftRef.current.reset + 1));
     setName(record.name);
     setNotes(notesFrom(record));
+    setDefects(record.defects);
     adopt(record);
   }
   function motionPayload() {
@@ -161,6 +172,7 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
       reducedMotion: "instant",
       recommendation: notesRef.current.recommendation,
       fit: notesRef.current.fit,
+      defects: defectsRef.current,
     };
   }
   async function readySystem(): Promise<{ systemId: string; directionRevision: number }> {
@@ -214,7 +226,7 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
         setMode("idle");
         setMessage("Saved the submitted version. Newer edits are still unsaved.");
       } else if (created) onRetarget({ variantId: saved.id, baseRevision: saved.revision, record: saved, saved: true });
-      else { adopt(saved); setName(saved.name); setMode("saved"); setMessage(""); }
+      else { adopt(saved); setName(saved.name); setNotes(notesFrom(saved)); setDefects(saved.defects); setMode("saved"); setMessage(""); }
       await refreshList();
     } catch (error) {
       if (!mounted.current) return;
@@ -310,6 +322,7 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
         <p>The saved variant replaces the motion values here.</p>
       </StudioDialog>
     </section>
+    <VariantDefectList hidden={hidden} defects={defects} disabled={action !== null} onAdd={addDefect} onRemove={removeDefect} />
   </>;
 }
 

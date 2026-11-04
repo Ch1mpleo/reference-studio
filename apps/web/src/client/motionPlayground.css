@@ -63,3 +63,7 @@
 .studio-ui .playground-saved .studio-kicker { margin: 0; }
 .studio-ui .playground-saved-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .studio-ui .variant-recommendation { display: grid; gap: var(--space-3); }
+.studio-ui .variant-defects { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--color-line); }
+.studio-ui .variant-defects ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.studio-ui .variant-defects li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.studio-ui .motion-playground[data-tuning="true"] > .variant-defects { grid-column: 1 / -1; }

@@ -42,6 +42,7 @@ export function registerVariantRoutes(app: FastifyInstance, database: DatabaseSy
           responsiveContext: input.responsiveContext, reducedMotion: input.reducedMotion, sourceLinks: input.sourceLinks,
           rationale: input.rationale, observations: input.observations, ...(input.fit === undefined ? {} : { fit: input.fit }),
           ...(input.recommendation === undefined ? {} : { recommendation: input.recommendation }),
+          ...(input.defects === undefined ? {} : { defects: input.defects }),
         }, "The new variant is invalid.");
         validateRecord(database, projectId, current.layout, system, record, true);
         insertMotionVariant(database, projectId, record);

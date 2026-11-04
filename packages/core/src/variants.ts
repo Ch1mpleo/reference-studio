@@ -41,6 +41,13 @@ export const variantRecommendationSchema = z.object({
   tradeoff: text.default(""),
 }).strict();
 export type VariantRecommendation = z.infer<typeof variantRecommendationSchema>;
+export const variantDefectKindSchema = z.enum(["blocked-input", "lost-focus", "broken-interruption", "ignored-reduced-motion"]);
+export const variantDefectSchema = z.object({
+  id: z.uuid(),
+  kind: variantDefectKindSchema,
+  note: text.default(""),
+}).strict();
+export type VariantDefect = z.infer<typeof variantDefectSchema>;
 
 function refineVariant(value: { motion: MotionSettings; engine: { name: string; version: string }; sourceLinks?: { placementIds: string[]; annotationIds: string[] } }, context: z.RefinementCtx): void {
   if (value.motion.model === "physics-spring" && (value.engine.name !== value.motion.engine.name || value.engine.version !== value.motion.engine.version)) {
@@ -70,6 +77,7 @@ export const variantRecordSchema = z.object({
   observations: text.default(""),
   fit: fitSchema.optional(),
   recommendation: variantRecommendationSchema.default({ task: "", frequency: "", feeling: "", benefit: "", tradeoff: "" }),
+  defects: z.array(variantDefectSchema).max(32).default([]),
   selected: z.boolean(),
 }).strict().superRefine(refineVariant);
 export type VariantRecord = z.infer<typeof variantRecordSchema>;
@@ -88,6 +96,7 @@ export const createVariantSchema = z.object({
   observations: text.default(""),
   fit: fitSchema.optional(),
   recommendation: variantRecommendationSchema.optional(),
+  defects: z.array(variantDefectSchema).max(32).optional(),
 }).strict().superRefine(refineVariant);
 export type CreateVariant = z.infer<typeof createVariantSchema>;
 
@@ -106,6 +115,7 @@ export const updateVariantSchema = z.object({
   observations: text.optional(),
   fit: fitSchema.nullable().optional(),
   recommendation: variantRecommendationSchema.optional(),
+  defects: z.array(variantDefectSchema).max(32).optional(),
   archived: z.boolean().optional(),
 }).strict().refine((input) => Object.keys(input).length > 2, { message: "Change at least one variant field." });
 export type UpdateVariant = z.infer<typeof updateVariantSchema>;

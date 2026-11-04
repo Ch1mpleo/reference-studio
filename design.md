@@ -102,6 +102,7 @@ Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one op
 | Parameter | `StudioParameter.tsx` | Labeled range and number. Invalid text stays visible. Only a finite in-range value updates the preview. |
 | Comparison | `VariantComparison.tsx` | Neutral A/B readout for a saved record or local tuning. No winner, score, or quality mark. |
 | Recommendation | `VariantRecommendation.tsx` | Task, frequency, intended feeling, observed benefit, tradeoff, and where/why it fits. Selected is a separate human action. |
+| Defects | `VariantDefects.tsx` | Actionable defect list, kept out of the comparison. |
 | Select | `StudioSelect.tsx` | Short option list, keyboard, popover kept in the dialog or Studio scope. |
 | Card | `StudioReferenceCard.tsx` | Glass card, reserved media, selected glass edge, named Open details. |
 | Dialog | `StudioDialog.tsx` | Native dialog, focus return. The dialog element itself has no filter or transform. |

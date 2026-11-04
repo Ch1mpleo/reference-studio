@@ -72,6 +72,10 @@ describe("variant records", () => {
     expect(variant().recommendation).toEqual({ task: "", frequency: "", feeling: "", benefit: "", tradeoff: "" });
     expect(variantRecordSchema.safeParse(raw({ recommendation: { ...recommendation, winner: "A" } })).success).toBe(false);
     expect(createVariantSchema.safeParse({ ...raw(), expectedDirectionRevision: 1, recommendation, selected: true }).success).toBe(false);
+    const defect = { id, kind: "blocked-input" as const, note: "The pointer cannot open the menu." };
+    expect(variant({ defects: [defect] }).defects).toEqual([defect]);
+    expect(variant().defects).toEqual([]);
+    expect(variantRecordSchema.safeParse(raw({ defects: [{ id, kind: "winner", note: "" }] })).success).toBe(false);
   });
 
   it("remaps copied identities and keeps links to evidence outside the copy", () => {
