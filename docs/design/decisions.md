@@ -34,6 +34,10 @@ The board is the only ordinary workspace. A note shows its text and edits in pla
 
 A selected group offers Systems through the existing inspector, with Design and Motion draft tabs. It does not add dock buttons or another canvas. System fields describe the target project and do not restyle Studio. Saving a draft is not approval. See [behaviour.md](behaviour.md).
 
-## Retired composition
+## Retired composition and corrected contradictions
 
-An earlier concrete composition described a 1440px shell with a project rail, a view segment, and a connection control in the top bar, plus kind filters as a segment. The accepted product shell does not have a rail, a view switch, or a healthy-connection control. That composition is not a requirement. Kind-filter presentation is specified separately in the root design file when that recipe is current.
+An earlier concrete composition (former design.md section 17) described a 1440px shell with a project rail, a view segment, and a connection control in the top bar. The accepted product shell does not have a rail, a view switch, or a healthy-connection control. That composition is not a requirement.
+
+The old reading route stopped at section 18 and skipped the shared-component route. The root spec is no longer split into those sections, so the route is gone.
+
+Blur is 16px on reference cards and 14px on glass controls and the top bar. The earlier “at most 8px” toolbar blur and the note that large collections are opaque do not apply to reference cards. Board nodes stay opaque. The hold that kept the library on a previous theme until glass was accepted is retired; revision 3 accepted the system for product screens.

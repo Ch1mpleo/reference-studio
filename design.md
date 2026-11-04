@@ -4,6 +4,8 @@ Canonical visual specification for Studio's own interface. Read it before changi
 
 This root file is Studio's interface. An exported project `design.md` belongs to that project and must not replace this file or restyle Studio.
 
+This file is the whole visual spec. There is no separate reading route.
+
 Task order is in [PLAN.md](PLAN.md). Evidence is in [docs/STATUS.md](docs/STATUS.md). Product scope is [docs/PRODUCT.md](docs/PRODUCT.md). Target-project systems are [docs/DESIGN_AND_MOTION.md](docs/DESIGN_AND_MOTION.md). History is [docs/design/decisions.md](docs/design/decisions.md). `#/studio`-only behavior is [docs/design/specimen.md](docs/design/specimen.md). Save, conflict, draft, and board behavior is [docs/design/behaviour.md](docs/design/behaviour.md).
 
 ## Core rules
@@ -21,7 +23,11 @@ Task order is in [PLAN.md](PLAN.md). Evidence is in [docs/STATUS.md](docs/STATUS
 
 ## Materials
 
-Glass controls use `backdrop-filter: blur(14px) saturate(160%)` and the inset control line. Reference cards use the same highlight with `blur(16px) saturate(160%)`. A compact toolbar or popover may use at most 8px of blur. Large collections and board nodes use opaque equivalents. The library keeps its current theme until that glass is accepted on the specimen.
+Reference cards are glass: `--color-surface`, a 1px control line, an inset highlight, and `backdrop-filter: blur(16px) saturate(160%)`.
+
+Glass controls and the top bar use `blur(14px) saturate(160%)`. There is no second 8px blur.
+
+Board nodes and group frames are opaque. They do not use backdrop blur. Product screens use this accepted system in both themes.
 
 Focus is a 2px `--color-focus` outline with a 2px offset, outside the selection edge.
 

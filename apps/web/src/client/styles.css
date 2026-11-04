@@ -1109,7 +1109,7 @@ body:has(.studio-ui[data-studio-theme="light"]) {
   border-bottom: 1px solid var(--color-line);
   border-inline: 1px solid var(--color-line);
   background: color-mix(in srgb, var(--color-bg) 62%, transparent);
-  backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
 }
 
 .sample-wordmark {
