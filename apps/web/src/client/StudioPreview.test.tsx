@@ -118,24 +118,12 @@ describe("Studio preview", () => {
     });
   });
 
-  it("keeps the collection specimen on its own theme and separates shared fields from placement", async () => {
+  it("separates shared fields from placement", async () => {
     const view = await render(createElement(StudioPreview));
-    const sample = view.container.querySelector(".studio-sample");
-    expect(sample?.getAttribute("data-studio-theme")).toBeNull();
     expect(view.container.querySelector("[data-fields='shared']")).not.toBeNull();
     expect(view.container.querySelector("[data-fields='placement']")).not.toBeNull();
     expect(view.container.querySelector("[data-image='missing']")).not.toBeNull();
     expect(view.container.querySelector("img")?.getAttribute("alt")).toContain("Specimen");
-
-    await act(async () => {
-      buttonNamed(view.container, "Dark").click();
-    });
-    expect(sample?.getAttribute("data-studio-theme")).toBe("dark");
-
-    await act(async () => {
-      buttonNamed(view.container, "Light").click();
-    });
-    expect(sample?.getAttribute("data-studio-theme")).toBe("light");
 
     await act(async () => {
       view.root.unmount();

@@ -19,52 +19,25 @@ Task order is in [PLAN.md](PLAN.md). Evidence is in [docs/STATUS.md](docs/STATUS
 7. Prose, names, observations, and help text use sans. Mono is counts, IDs, timestamps, revisions, and units.
 8. No global element selectors. Target previews render outside `.studio-ui`.
 9. Motion uses `studioMotion.ts`, honors reduced motion, and never delays input. Demo latency stays on `#/studio`.
-10. Check the changed screen and `#/studio`: both themes, keyboard, and reduced motion. Desktop is the target. No phone layout is required.
+10. Check the changed screen and `#/studio`: keyboard and reduced motion. The interface is dark. Desktop is the target. No phone layout is required.
 
 ## Materials
 
 Reference cards are glass: `--color-surface`, a 1px control line, an inset highlight, and `backdrop-filter: blur(16px) saturate(160%)`.
 
-Buttons and controls use that glass in both themes: translucent `--color-surface`, the `--color-control-line` edge, an inset highlight, and `backdrop-filter: blur(14px) saturate(160%)`. The top bar uses the same blur. There is no second 8px blur. Primary actions stay solid ink on `--color-on-solid`. Hover and pressed states brighten the glass edge. They do not switch to a white fill.
+Buttons and controls use that glass: translucent `--color-surface`, the `--color-control-line` edge, an inset highlight, and `backdrop-filter: blur(14px) saturate(160%)`. The top bar uses the same blur. There is no second 8px blur. A primary action uses the same glass with the stronger edge. Hover and pressed states brighten the edge.
 
 Board nodes and group frames are opaque. They do not use backdrop blur. A selected node or group frame takes the brighter glass edge and never a blue perimeter.
 
-Dialogs, menus, and popovers are solid overlays. They use opaque `--color-overlay` (light `#ffffff`, dark `#1c1c22`), the inset highlight, and the popover shadow. They do not use backdrop-filter. The dock and the inspector use that same solid overlay so their text stays readable over the board.
+Dialogs, menus, and popovers are the only solid surfaces. They use opaque `--color-overlay` (`#1c1c22`), the inset highlight, and the popover shadow. They do not use backdrop-filter. The dock and the inspector use that same solid overlay so their text stays readable over the board.
 
 Focus is a 2px `--color-focus` outline with a 2px offset, outside the selection edge.
 
 ## Tokens
 
-Assign these on `.studio-ui`. Light is the default. Dark follows the OS unless `data-studio-theme` is set on that scope. Do not let that attribute style a target preview.
+Assign these on `.studio-ui`. Studio is dark. Do not add a light theme or a theme toggle. Do not let these tokens style a target preview.
 
 ```css
-/* Light */
---color-bg: #f6f6f7;
---color-surface: rgb(255 255 255 / 50%);
---color-surface-raised: rgb(255 255 255 / 72%);
---color-surface-hover: rgb(255 255 255 / 82%);
---color-field: rgb(0 0 0 / 4.5%);
---color-ink: #141416;
---color-muted: #5f5f68;
---color-subtle: #686872;
---color-line: rgb(0 0 0 / 8%);
---color-line-strong: rgb(0 0 0 / 22%);
---color-control-line: rgb(0 0 0 / 7%);
---color-glass-hi: rgb(255 255 255 / 95%);
---color-glass-shadow: rgb(30 30 60 / 14%);
---color-overlay: #ffffff;
---color-accent: #2f62f0;
---color-focus: #2f62f0;
---color-selected-bg: rgb(255 255 255 / 72%);
---color-selected-line: rgb(0 0 0 / 22%);
---color-solid: #141416;
---color-on-solid: #ffffff;
---color-success: #0e8a55;
---color-warning: #805600;
---color-danger: #b4233b;
---color-scrim: rgb(20 20 22 / 36%);
-
-/* Dark */
 --color-bg: #08080a;
 --color-surface: rgb(20 20 26 / 44%);
 --color-surface-raised: rgb(255 255 255 / 8.5%);
@@ -113,7 +86,7 @@ Assign these on `.studio-ui`. Light is the default. Dark follows the OS unless `
 --ease-press: cubic-bezier(0.2, 0.7, 0.2, 1);
 ```
 
-Text on a surface uses ink, muted, or subtle. Primary buttons use solid / on-solid and no shadow. Disabled controls are 65% opacity. Normal text stays at least 4.5:1.
+Text on a surface uses ink, muted, or subtle. Disabled controls are 65% opacity. Normal text stays at least 4.5:1.
 
 ## Library filters
 

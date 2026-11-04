@@ -112,19 +112,16 @@ test("selects support keyboard traversal, Escape and Tab without trapping focus"
   await expect(page.getByRole("button", { name: "Collection", exact: true })).toBeFocused();
 });
 
-test("desktop compositions fit both themes, including short dialogs", async ({ page }, info) => {
+test("desktop compositions fit, including short dialogs", async ({ page }, info) => {
   for (const width of [1440, 1100]) {
     await page.setViewportSize({ width, height: 900 });
     await openStudio(page);
-    for (const theme of ["Light", "Dark"]) {
-      await page.getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: theme, exact: true }).click();
-      await page.evaluate(() => window.scrollTo(0, 0));
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      const cards = page.locator(".sample-grid .studio-reference-card");
-      await expect(cards).toHaveCount(5);
-      if (width === 1440) {
-        await page.screenshot({ path: info.outputPath(`${width}-${theme.toLowerCase()}.png`), fullPage: true, animations: "disabled" });
-      }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const cards = page.locator(".sample-grid .studio-reference-card");
+    await expect(cards).toHaveCount(5);
+    if (width === 1440) {
+      await page.screenshot({ path: info.outputPath(`${width}-dark.png`), fullPage: true, animations: "disabled" });
     }
     await page.getByRole("button", { name: "Add reference", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Add reference" });

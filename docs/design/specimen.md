@@ -18,7 +18,7 @@ Loading coverage includes complete collection cards, the project heading and cou
 
 The collection toolbar exposes Demo latency, default 1.2 seconds, with No delay, 600ms, 1.2s, and 2.4s, plus Reload screen sample. Initial entry, search, kind filters, project switches, detail selection, dialog open, and Add reference tabs use this labeled simulation on `#/studio` only.
 
-`useStudioPreviewRequest` keeps prior results while pending, cancels obsolete generations, and clears work on dismissal. Do not flash zero results before the latest intent settles. Search text and filter selection update immediately. Theme changes, service events, and typing in an editor must not restart a load. Detail drafts stay keyed to the original item. No delay resolves immediately. Reload screen sample replays the collection and the selected inspector.
+`useStudioPreviewRequest` keeps prior results while pending, cancels obsolete generations, and clears work on dismissal. Do not flash zero results before the latest intent settles. Search text and filter selection update immediately. Service events and typing in an editor must not restart a load. Detail drafts stay keyed to the original item. No delay resolves immediately. Reload screen sample replays the collection and the selected inspector.
 
 `StudioLoadingRegion` preserves geometry and keeps retained draft nodes mounted but hidden while data is pending. Actions live outside the pending region. Native dialog initial focus skips inert content. Dirty confirmation is immediate and never waits on demo latency.
 

@@ -108,7 +108,6 @@ test("reduced and plain loading cover cards and details without active canvas wo
 test("dark desktop shows the complete loading composition without overflow", async ({ page }, info) => {
   await page.setViewportSize({ width: 1440, height: 960 });
   await page.goto(`${server.origin}/#/studio`);
-  await page.getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: "Dark", exact: true }).click();
   await page.getByRole("button", { name: "Reload screen sample", exact: true }).click();
   await expect(page.locator(".sample-grid")).toHaveAttribute("aria-busy", "true");
   await page.screenshot({ path: info.outputPath("1440-dark-screen-loading.png"), fullPage: true });
