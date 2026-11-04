@@ -339,6 +339,10 @@ test("canvas study moves by pointer and keyboard, preserves interaction through 
   await expect(page.locator('textarea[aria-label="Note text"]')).toBeFocused();
   await expect(page.locator(".canvas-status")).toHaveText("Saved");
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Motion", exact: true })).toHaveAttribute("aria-pressed", "true");
+  const card = page.locator(".playground-card");
+  await expect(card).toHaveCount(1);
+  await card.scrollIntoViewIfNeeded();
   await expect(study).toBeVisible();
   await expect(trigger).toHaveText(/Oldest first/);
   await page.screenshot({ path: info.outputPath("canvas-study.png") });
