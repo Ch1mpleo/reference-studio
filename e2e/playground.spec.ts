@@ -35,7 +35,7 @@ test("saved variants reload exact settings, duplicate independently, and retain 
   await expect(page.locator(".canvas-status")).toHaveText("Saved");
   await page.getByRole("button", { name: "Motion", exact: true }).click();
   study = page.getByRole("region", { name: "Motion playground", exact: true });
-  await study.getByText("Saved variants", { exact: true }).click();
+  await study.getByText("Saved variants", { exact: true }).filter({ visible: true }).click();
   let saved = study.getByRole("region", { name: "Saved motion variants", exact: true });
   await choose(page, saved, "Variant group", "Saved studies");
   await saved.getByLabel("Variant name", { exact: true }).fill("Quiet menu");
@@ -45,7 +45,7 @@ test("saved variants reload exact settings, duplicate independently, and retain 
   await page.reload(); await expect(page.locator(".canvas-status")).toHaveText("Saved");
   await page.getByRole("button", { name: "Motion", exact: true }).click();
   study = page.getByRole("region", { name: "Motion playground", exact: true });
-  await study.getByText("Saved variants", { exact: true }).click();
+  await study.getByText("Saved variants", { exact: true }).filter({ visible: true }).click();
   saved = study.getByRole("region", { name: "Saved motion variants", exact: true });
   await choose(page, saved, "Variant group", "Saved studies");
   await choose(page, saved, "Open saved variant", "Quiet menu");
@@ -61,7 +61,11 @@ test("saved variants reload exact settings, duplicate independently, and retain 
     const frame = board.layout.frames.find((entry: { id: string }) => entry.id === system.directionId);
     await fetch(`/api/projects/${project.id}/directions/${frame.id}/systems/${system.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify({ expectedRevision: system.revision, expectedDirectionRevision: frame.revision, name: 'Remote motion system' }) });
   });
-  await saved.getByLabel("Variant name", { exact: true }).fill("Local retained name");
+  const retainedName = saved.getByLabel("Variant name", { exact: true });
+  await retainedName.click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("Local retained name");
+  await expect(retainedName).toHaveValue("Local retained name");
   await saved.getByRole("button", { name: "Save variation", exact: true }).click();
   await expect(saved.getByRole("status")).toContainText("Conflict");
   await expect(saved.getByLabel("Variant name", { exact: true })).toHaveValue("Local retained name");
@@ -280,8 +284,12 @@ test("dropdown reverses its running transition and settles without queued animat
     await new Promise((resolve) => setTimeout(resolve, 60));
     const opening = y();
     trigger.click();
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const closing = y();
+    const started = performance.now();
+    let closing = y();
+    while (closing >= opening && performance.now() - started < 200) {
+      await new Promise((resolve) => setTimeout(resolve, 16));
+      closing = y();
+    }
     trigger.click();
     return { opening, closing };
   });
