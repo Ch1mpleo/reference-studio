@@ -25,11 +25,11 @@ Task order is in [PLAN.md](PLAN.md). Evidence is in [docs/STATUS.md](docs/STATUS
 
 Reference cards are glass: `--color-surface`, a 1px control line, an inset highlight, and `backdrop-filter: blur(16px) saturate(160%)`.
 
-Glass controls and the top bar use `blur(14px) saturate(160%)`. There is no second 8px blur.
+Buttons and controls use that glass in both themes: translucent `--color-surface`, the `--color-control-line` edge, an inset highlight, and `backdrop-filter: blur(14px) saturate(160%)`. The top bar uses the same blur. There is no second 8px blur. Primary actions stay solid ink on `--color-on-solid`. Hover and pressed states brighten the glass edge. They do not switch to a white fill.
 
-Board nodes and group frames are opaque. They do not use backdrop blur. A selected node or group frame takes the brighter glass edge and never a blue perimeter. Product screens use this accepted system in both themes.
+Board nodes and group frames are opaque. They do not use backdrop blur. A selected node or group frame takes the brighter glass edge and never a blue perimeter.
 
-Dialogs, menus, popovers, option lists, the dock, the inspector, and other overlays are solid. They use opaque `--color-overlay` (light `#ffffff`, dark `#1c1c22`), the inset highlight, and the popover shadow. They do not use backdrop-filter. Card glass is not readable over a populated board, so it stays on reference cards only.
+Dialogs, menus, and popovers are solid overlays. They use opaque `--color-overlay` (light `#ffffff`, dark `#1c1c22`), the inset highlight, and the popover shadow. They do not use backdrop-filter. The dock and the inspector use that same solid overlay so their text stays readable over the board.
 
 Focus is a 2px `--color-focus` outline with a 2px offset, outside the selection edge.
 

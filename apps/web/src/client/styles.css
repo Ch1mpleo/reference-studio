@@ -579,7 +579,7 @@ body:has(.studio-ui[data-studio-theme="light"]) {
   padding: 10px 16px;
   border: 0;
   border-radius: var(--radius-pill);
-  background: var(--color-surface-raised);
+  background: var(--color-surface);
   color: var(--color-ink);
   font: 500 13px/1 var(--font-sans);
   box-shadow: inset 0 0 0 1px var(--color-control-line), inset 0 1px 0 var(--color-glass-hi);
@@ -589,7 +589,7 @@ body:has(.studio-ui[data-studio-theme="light"]) {
 
 @media (hover: hover) and (pointer: fine) {
   .studio-ui .studio-button:hover:not(:disabled) {
-    background: var(--color-surface-hover);
+    background: color-mix(in srgb, var(--color-surface) 78%, var(--color-glass-hi));
     box-shadow: inset 0 0 0 1px var(--color-line-strong), inset 0 1px 0 var(--color-glass-hi);
   }
 }
@@ -632,13 +632,14 @@ body:has(.studio-ui[data-studio-theme="light"]) {
 }
 
 .studio-ui .studio-button.is-ghost:hover:not(:disabled) {
-  background: var(--color-surface-hover);
+  background: color-mix(in srgb, var(--color-surface) 78%, var(--color-glass-hi));
+  box-shadow: inset 0 0 0 1px var(--color-control-line), inset 0 1px 0 var(--color-glass-hi);
 }
 
 .studio-ui .studio-button[aria-pressed="true"] {
-  background: var(--color-surface-raised);
+  background: var(--color-surface);
   color: var(--color-ink);
-  box-shadow: inset 0 1px 0 var(--color-glass-hi), 0 0 0 1px var(--color-control-line);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong), inset 0 1px 0 var(--color-glass-hi);
 }
 
 .studio-ui a {
