@@ -62,3 +62,4 @@
 .studio-ui .motion-playground[data-tuning="true"] .playground-saved { grid-column: 1 / -1; }
 .studio-ui .playground-saved .studio-kicker { margin: 0; }
 .studio-ui .playground-saved-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.studio-ui .variant-recommendation { display: grid; gap: var(--space-3); }

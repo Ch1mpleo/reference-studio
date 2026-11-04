@@ -33,6 +33,14 @@ const fitSchema = z.object({
   why: text.default(""),
   where: text.default(""),
 }).strict();
+export const variantRecommendationSchema = z.object({
+  task: text.default(""),
+  frequency: text.default(""),
+  feeling: text.default(""),
+  benefit: text.default(""),
+  tradeoff: text.default(""),
+}).strict();
+export type VariantRecommendation = z.infer<typeof variantRecommendationSchema>;
 
 function refineVariant(value: { motion: MotionSettings; engine: { name: string; version: string }; sourceLinks?: { placementIds: string[]; annotationIds: string[] } }, context: z.RefinementCtx): void {
   if (value.motion.model === "physics-spring" && (value.engine.name !== value.motion.engine.name || value.engine.version !== value.motion.engine.version)) {
@@ -61,6 +69,7 @@ export const variantRecordSchema = z.object({
   rationale: text.default(""),
   observations: text.default(""),
   fit: fitSchema.optional(),
+  recommendation: variantRecommendationSchema.default({ task: "", frequency: "", feeling: "", benefit: "", tradeoff: "" }),
   selected: z.boolean(),
 }).strict().superRefine(refineVariant);
 export type VariantRecord = z.infer<typeof variantRecordSchema>;
@@ -78,6 +87,7 @@ export const createVariantSchema = z.object({
   rationale: text.default(""),
   observations: text.default(""),
   fit: fitSchema.optional(),
+  recommendation: variantRecommendationSchema.optional(),
 }).strict().superRefine(refineVariant);
 export type CreateVariant = z.infer<typeof createVariantSchema>;
 
@@ -95,6 +105,7 @@ export const updateVariantSchema = z.object({
   rationale: text.optional(),
   observations: text.optional(),
   fit: fitSchema.nullable().optional(),
+  recommendation: variantRecommendationSchema.optional(),
   archived: z.boolean().optional(),
 }).strict().refine((input) => Object.keys(input).length > 2, { message: "Change at least one variant field." });
 export type UpdateVariant = z.infer<typeof updateVariantSchema>;

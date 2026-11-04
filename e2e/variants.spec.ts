@@ -173,3 +173,43 @@ test("compares a saved variant with local tuning in neutral words", async ({ pag
     await page.screenshot({ path: "docs/evidence/m2-variants/comparison-desktop-dark.png" });
   }
 });
+
+test("keeps recommendation fields and shows Selected only after a person marks it", async ({ page }) => {
+  test.setTimeout(60_000);
+  const first = await openStudy(page);
+  await expect(first.study.getByRole("status").filter({ hasText: /^Selected$/ })).toHaveCount(0);
+  await expect(first.study.getByText("Approved", { exact: true })).toHaveCount(0);
+  await first.saved.getByLabel("Variant name", { exact: true }).fill("Quiet menu");
+  await first.saved.getByLabel("Task", { exact: true }).fill("Open the menu");
+  await first.saved.getByLabel("Frequency", { exact: true }).fill("Often");
+  await first.saved.getByLabel("Intended feeling", { exact: true }).fill("Calm");
+  await first.saved.getByLabel("Observed benefit", { exact: true }).fill("The list stays easy to scan");
+  await first.saved.getByLabel("Tradeoff", { exact: true }).fill("It takes longer than an instant open");
+  await first.saved.getByLabel("Where it fits", { exact: true }).fill("Library menus");
+  await first.saved.getByLabel("Why it fits", { exact: true }).fill("Repeated sorting stays readable");
+  await first.saved.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(first.saved.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  await expect(first.study.getByRole("status").filter({ hasText: /^Selected$/ })).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".canvas-status")).toHaveText("Saved");
+  const again = await reopen(page);
+  await choose(page, again.saved, "Open saved variant", "Quiet menu");
+  await expect(again.saved.getByLabel("Task", { exact: true })).toHaveValue("Open the menu");
+  await expect(again.saved.getByLabel("Frequency", { exact: true })).toHaveValue("Often");
+  await expect(again.saved.getByLabel("Intended feeling", { exact: true })).toHaveValue("Calm");
+  await expect(again.saved.getByLabel("Observed benefit", { exact: true })).toHaveValue("The list stays easy to scan");
+  await expect(again.saved.getByLabel("Tradeoff", { exact: true })).toHaveValue("It takes longer than an instant open");
+  await expect(again.saved.getByLabel("Where it fits", { exact: true })).toHaveValue("Library menus");
+  await expect(again.saved.getByLabel("Why it fits", { exact: true })).toHaveValue("Repeated sorting stays readable");
+  await expect(again.study.getByRole("status").filter({ hasText: /^Selected$/ })).toHaveCount(0);
+  await expect(again.study.getByText("Approved", { exact: true })).toHaveCount(0);
+  await again.saved.getByRole("button", { name: "Mark selected", exact: true }).click();
+  await expect(again.saved.getByRole("status").filter({ hasText: /^Selected$/ })).toBeVisible();
+  await expect(again.study.getByText("Approved", { exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".canvas-status")).toHaveText("Saved");
+  const marked = await reopen(page);
+  await choose(page, marked.saved, "Open saved variant", "Quiet menu");
+  await expect(marked.saved.getByRole("status").filter({ hasText: /^Selected$/ })).toBeVisible();
+  await expect(marked.study.getByText("Approved", { exact: true })).toHaveCount(0);
+});

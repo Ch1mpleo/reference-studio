@@ -8,6 +8,7 @@ import { StudioButton } from "./StudioButton.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioField } from "./StudioField.js";
 import { StudioSelect } from "./StudioSelect.js";
+import { emptyVariantNotes, VariantRecommendationFields, type VariantNotes } from "./VariantRecommendation.js";
 import { useVariantDraftHosts, variantDraftKey } from "./VariantDraftHost.js";
 import { variantLaneSource } from "./VariantComparison.js";
 import { VariantRequestError, variantClient, type DirectionVariants, type VariantClient } from "./variantApi.js";
@@ -30,8 +31,16 @@ export function draftFromVariant(record: VariantRecord, reset = 0): MotionDraft 
   return { preset, reset, parameters: parseDropdownParameters({ ...base.parameters, motion: record.motion }) };
 }
 
-function signature(name: string, draft: MotionDraft): string {
-  return JSON.stringify({ name: name.trim(), preset: motionPresets[draft.preset].label, motion: draft.parameters.motion });
+function notesFrom(record: VariantRecord | null): VariantNotes {
+  const empty = emptyVariantNotes();
+  return {
+    recommendation: { ...empty.recommendation, ...record?.recommendation },
+    fit: { why: record?.fit?.why ?? "", where: record?.fit?.where ?? "" },
+  };
+}
+
+function signature(name: string, draft: MotionDraft, notes: VariantNotes): string {
+  return JSON.stringify({ name: name.trim(), preset: motionPresets[draft.preset].label, motion: draft.parameters.motion, recommendation: notes.recommendation, fit: notes.fit });
 }
 
 function newerRecord(left: VariantRecord | null | undefined, right: VariantRecord | null | undefined): VariantRecord | null {
@@ -63,11 +72,12 @@ export type VariantEditorProps = {
   client?: VariantClient;
 };
 
-type WriteKind = "save" | "save-as" | "rename" | "duplicate";
+type WriteKind = "save" | "save-as" | "rename" | "duplicate" | "select";
 
 /** Save controls for one study lane. The host keeps this instance mounted. */
 export function VariantEditor({ projectId, directionId, preset, laneLabel, hidden, tuning, onTuning, onDraft, onSource, onBoard, onRetarget, initialRecord, startSaved = false, client = variantClient }: VariantEditorProps) {
   const [draft, setDraft] = useState<MotionDraft>(() => initialRecord ? draftFromVariant(initialRecord) : createMotionDraft(preset));
+  const [notes, setNotes] = useState<VariantNotes>(() => notesFrom(initialRecord));
   const [name, setName] = useState(() => initialRecord?.name ?? motionPresets[preset].label);
   const [variants, setVariants] = useState<VariantRecord[]>(() => initialRecord ? [initialRecord] : []);
   const [base, setBase] = useState<VariantRecord | null>(initialRecord);
@@ -80,6 +90,7 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
   const [loadError, setLoadError] = useState("");
   const [action, setAction] = useState<WriteKind | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft;
+  const notesRef = useRef(notes); notesRef.current = notes;
   const nameRef = useRef(name); nameRef.current = name;
   const baseRef = useRef(base); baseRef.current = base;
   const target = useRef<DirectionVariants | null>(null);
@@ -90,9 +101,10 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
   const loadGeneration = useRef(0);
   const onDraftRef = useRef(onDraft); onDraftRef.current = onDraft;
   const onSourceRef = useRef(onSource); onSourceRef.current = onSource;
-  const openingSig = useRef(signature(name, draft));
-  const savedSig = base ? signature(base.name, draftFromVariant(base)) : null;
-  const dirty = savedSig === null ? signature(name, draft) !== openingSig.current : signature(name, draft) !== savedSig;
+  const openingSig = useRef(signature(name, draft, notes));
+  const savedNotes = notesFrom(base);
+  const savedSig = base ? signature(base.name, draftFromVariant(base), savedNotes) : null;
+  const dirty = savedSig === null ? signature(name, draft, notes) !== openingSig.current : signature(name, draft, notes) !== savedSig;
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { onDraftRef.current(draft); }, [draft]);
@@ -101,8 +113,8 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       const currentBase = baseRef.current;
-      const currentSig = signature(nameRef.current, draftRef.current);
-      const clean = currentBase ? currentSig === signature(currentBase.name, draftFromVariant(currentBase)) : currentSig === openingSig.current;
+      const currentSig = signature(nameRef.current, draftRef.current, notesRef.current);
+      const clean = currentBase ? currentSig === signature(currentBase.name, draftFromVariant(currentBase), notesFrom(currentBase)) : currentSig === openingSig.current;
       if (pending.current || !clean) event.preventDefault();
     };
     window.addEventListener("beforeunload", warn);
@@ -126,6 +138,7 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
 
   function editDraft(next: MotionDraft): void { edits.current += 1; setDraft(next); if (mode === "saved") setMode("idle"); }
   function editName(value: string): void { edits.current += 1; setName(value); if (mode === "saved") setMode("idle"); }
+  function editNotes(next: VariantNotes): void { edits.current += 1; setNotes(next); if (mode === "saved") setMode("idle"); }
   function adopt(record: VariantRecord): void {
     baseRef.current = record;
     setBase(record);
@@ -135,6 +148,7 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
     edits.current += 1;
     setDraft(draftFromVariant(record, draftRef.current.reset + 1));
     setName(record.name);
+    setNotes(notesFrom(record));
     adopt(record);
   }
   function motionPayload() {
@@ -145,6 +159,8 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
       presetOrigin: { presetId: null, name: motionPresets[current.preset].label },
       fixture: { id: "dropdown", version: 2 },
       reducedMotion: "instant",
+      recommendation: notesRef.current.recommendation,
+      fit: notesRef.current.fit,
     };
   }
   async function readySystem(): Promise<{ systemId: string; directionRevision: number }> {
@@ -216,6 +232,24 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
       }
     } finally { pending.current = false; if (mounted.current) setAction(null); }
   }
+  async function markSelected(selected: boolean): Promise<void> {
+    const savedBase = baseRef.current;
+    if (pending.current || mode === "conflict" || !directionId || !savedBase || dirty) return;
+    pending.current = true; setAction("select"); setMessage("");
+    try {
+      const { systemId, directionRevision } = await readySystem();
+      const input = { expectedRevision: savedBase.revision, expectedDirectionRevision: directionRevision, selected };
+      const saved = await client.select(projectId, directionId, systemId, savedBase.id, input, keyFor(JSON.stringify({ kind: "select", id: savedBase.id, input })));
+      if (!mounted.current) return;
+      attempt.current = null;
+      adopt(saved);
+      await refreshList();
+    } catch (error) {
+      if (!mounted.current) return;
+      setMode("error");
+      setMessage(error instanceof Error ? `${error.message} The saved record was not marked.` : "The saved record was not marked.");
+    } finally { pending.current = false; if (mounted.current) setAction(null); }
+  }
   function commitOpen(id: string): void {
     if (id === "") { onRetarget({ variantId: crypto.randomUUID(), baseRevision: 0, record: null }); return; }
     const record = variants.find((entry) => entry.id === id);
@@ -249,6 +283,7 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
       {loadError ? <div><p className="form-error" role="alert">{loadError}</p><StudioButton onClick={() => { setLoaded(false); setLoadError(""); void client.load(projectId, directionId).then((info) => { target.current = info; setVariants(info.variants.filter((entry) => !entry.archived)); setLoaded(true); }).catch((error: unknown) => { setLoadError(error instanceof Error ? error.message : "Could not read saved variants."); setLoaded(true); }); }}>Retry reading variants</StudioButton></div> : null}
       <StudioSelect field label="Open saved variant" disabled={!directionId || action !== null} value={base?.id ?? ""} options={[{ value: "", label: "New variant" }, ...variants.map((entry) => ({ value: entry.id, label: entry.name }))]} onChange={requestOpen} />
       <StudioField label="Variant name" value={name} maxLength={200} onChange={editName} />
+      <VariantRecommendationFields value={notes} disabled={action !== null} onChange={editNotes} />
       {mode === "conflict" ? <div className="system-recovery">
         <p>Your draft is retained. Review the saved motion before replacing it.</p>
         <StudioButton onClick={() => setReviewing(true)}>Review latest</StudioButton>
@@ -266,7 +301,9 @@ export function VariantEditor({ projectId, directionId, preset, laneLabel, hidde
         <StudioButton busy={action === "duplicate"} disabled={blocked || !base || dirty} onClick={() => void write("duplicate")}>Duplicate</StudioButton>
         <StudioButton disabled={action !== null} onClick={() => editDraft(createMotionDraft(draft.preset, draft.reset + 1))}>Reset to preset</StudioButton>
         {dirty && mode !== "conflict" && base ? <StudioButton disabled={action !== null} onClick={() => { applyRecord(base); setMode("idle"); setMessage(""); }}>Discard local changes</StudioButton> : null}
+        {base ? <StudioButton busy={action === "select"} disabled={blocked || dirty} onClick={() => void markSelected(!base.selected)}>{base.selected ? "Clear selected" : "Mark selected"}</StudioButton> : null}
       </div>
+      {base?.selected ? <p role="status" className="studio-meta">Selected</p> : null}
       <p role="status" className="studio-meta">{mode === "saving" ? "Saving variant" : mode === "conflict" ? "Conflict · draft retained" : mode === "error" ? "Save failed · draft retained" : dirty ? "Unsaved changes" : mode === "saved" ? "Saved" : message && mode === "idle" ? "Unsaved changes" : ""}</p>
       {message ? <p role={mode === "error" || mode === "conflict" ? "alert" : undefined} className={mode === "error" || mode === "conflict" ? "form-error" : "studio-help"}>{message}</p> : null}
       <StudioDialog open={pendingOpen !== null} title="Discard local changes?" description="Opening another variant replaces the tuning in this lane." onClose={() => setPendingOpen(null)} footer={<><StudioButton onClick={() => setPendingOpen(null)}>Keep editing</StudioButton><StudioButton variant="danger" onClick={() => { const id = pendingOpen; setPendingOpen(null); if (id !== null) commitOpen(id); }}>Discard changes</StudioButton></>}>
