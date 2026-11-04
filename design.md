@@ -115,6 +115,10 @@ Assign these on `.studio-ui`. Light is the default. Dark follows the OS unless `
 
 Text on a surface uses ink, muted, or subtle. Primary buttons use solid / on-solid and no shadow. Disabled controls are 65% opacity. Normal text stays at least 4.5:1.
 
+## Library filters
+
+Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one optional field. Active filters are chips, with one Clear button. Choosing a kind, or committing the tag, applies that filter in one click. There is no separate Apply step and no disclosure. The controls fit on one wrapping row at 390px. Keyword search still submits on Enter. This is the target recipe. The current stacked Library form stays until a later task builds it.
+
 ## Shared components
 
 | Primitive | Module | Contract |
