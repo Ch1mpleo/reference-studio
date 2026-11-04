@@ -409,7 +409,7 @@ Delivered independent preset-origin drafts/reset, paired slider/numeric controls
 
 **M2.9 — Saved variants and contextual evaluation. Complete 2026-11-04.**
 
-Delivered service-backed variants, save and conflict recovery, neutral A/B comparison, recommendation fields, a separate defect list, and a human Selected marker. There is no Approve control. Evidence is in STATUS. M2.10 is next.
+Delivered service-backed variants, save and conflict recovery, neutral A/B comparison, recommendation fields, a separate defect list, and a human Selected marker. There is no Approve control. The M2.9 QA gate passed. Evidence is in STATUS. M2.10 is next.
 
 - Name, duplicate, reset, discard local changes, save, and reopen variants. Save variation is separate from approve direction. Extend direction duplication and backup/restore to include variants and their links with fresh IDs; verify the complete then-existing graph as part of M2.9 acceptance.
 - Persist stable variant ID, fixture ID/version, preset origin, edited values/model/units, engine/version, responsive context, reduced-motion behavior, linked source references, rationale, and observations.

@@ -22,7 +22,9 @@ Studio stays dark. Desktop is the target. There is no light theme and no phone l
 
 **Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 44 files, 166 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 56 tests on Chrome 156.0.8078.47. Microsoft Edge is not installed. The desktop dark comparison, with reduced motion so the study was still, is [docs/evidence/m2-variants/comparison-desktop-dark.png](evidence/m2-variants/comparison-desktop-dark.png). The Vite main-chunk warning remains at about 659 kB. The study chunk is about 107 kB. Before the event-stream fix, the populated-board scenario failed 3 of 10 Chrome runs because an aborted `/api/events` left the project list unloaded. After the fix, the same scenario passed 10 of 10 with `--repeat-each=10`.
 
-**Remaining:** Node 24 was not run. Human visual acceptance, native 200% zoom, and Edge were not run. Entry distance and direction stay on the local study draft and are not part of the saved record. A fresh-clone `npm ci` and a fresh-context read of the three M2.9 slices were not part of this run. Target-product validation remains M5. M2.10 is next.
+**QA gate:** A fresh clone and `npm ci` on Node 24.22.1 passed. `npm run check`, `npm run build`, 166/166 unit tests, and 56/56 e2e passed in Chrome on 3 runs. `canvas.spec.ts:114` passed 20/20 after `ac363f4`.
+
+**Remaining:** Edge and native 200% zoom are not verified. Entry distance and direction stay on the local study draft and are not part of the saved record. Target-product validation remains M5. M2.10 is next.
 
 ## M2.9 — Save, reopen, and conflict in the study — 2026-11-04
 
