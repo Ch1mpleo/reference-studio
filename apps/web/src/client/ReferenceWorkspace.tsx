@@ -268,19 +268,14 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       <StudioButton aria-pressed={panel === "library"} onClick={() => setPanel(panel === "library" ? null : "library")}>Library</StudioButton>
       <StudioButton data-playground-add aria-pressed={playground !== null} disabled={!ready} onClick={() => addPlayground()}>Motion</StudioButton>
       <span className="canvas-dock-separator" aria-hidden="true" />
-      <StudioButton variant="ghost" disabled={!board.canUndo || operation} onClick={board.undo} aria-label="Undo" title="Undo (Ctrl+Z)">â†¶</StudioButton>
-      <StudioButton variant="ghost" disabled={!board.canRedo || operation} onClick={board.redo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">â†·</StudioButton>
+      <StudioButton variant="ghost" disabled={!board.canUndo || operation} onClick={board.undo} aria-label="Undo" title="Undo (Ctrl+Z)">↶</StudioButton>
+      <StudioButton variant="ghost" disabled={!board.canRedo || operation} onClick={board.redo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">↷</StudioButton>
     </div>
     <StudioZoomControl zoom={zoom} selected={selection.length > 0} onOut={() => void canvas.current?.zoomOut()} onIn={() => void canvas.current?.zoomIn()}
       onZoom={(value) => void canvas.current?.zoomTo(value)} onFit={() => void canvas.current?.fitView({ padding: 0.2, maxZoom: 1, ...(selection.length ? { nodes: selection.map((id) => ({ id })) } : {}) })} />
     <StudioInspector open={panel !== null} retainContent onClose={closePanel}>
-<<<<<<< HEAD
       {effective.frames.filter((frame) => visitedSystems.includes(frame.id)).map((frame) => <div className="canvas-panel-content" key={frame.id} hidden={panel !== "systems" || systemDirection !== frame.id}><DirectionSystems scope={projectId} direction={frame} systems={board.layout.systems ?? []} annotations={annotations} references={references} disabled={board.unsaved || operation} onPersist={persistSystem} onOpenPlayground={() => addPlayground(frame.id)} /></div>)}
-      <div hidden={panel !== "library"} className="canvas-panel-content"><h2>Library</h2><p className="studio-meta">Reuse collected material. Paste a link directly onto the board to add a new source.</p>
-=======
-      {effective.frames.filter((frame) => visitedSystems.includes(frame.id)).map((frame) => <div className="canvas-panel-content" key={frame.id} hidden={panel !== "systems" || systemDirection !== frame.id}><DirectionSystems scope={projectId} direction={frame} systems={board.layout.systems ?? []} annotations={annotations} references={references} disabled={board.unsaved || operation} onPersist={persistSystem} /></div>)}
       <div hidden={panel !== "library"} className="canvas-panel-content"><h2>Library</h2><p className="studio-help">Reuse collected material. Paste a link directly onto the board to add a new source.</p>
->>>>>>> e6ad89c4b5007dde7785a2b012fe1362d5f473ed
         {board.layout.frames.some((frame) => frame.archived) ? <section><h3>Archived groups</h3>{board.layout.frames.filter((frame) => frame.archived).map((frame) => <div className="canvas-direction-row" key={frame.id}><span>{frame.name}</span><StudioButton disabled={operation} onClick={() => void directionAction(frame, { archived: false }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not restore group."))}>Restore</StudioButton></div>)}</section> : null}
         <ReferenceSearch placedReferenceIds={references.map((item) => item.reference.id)} onPlace={async (id) => { const item = await onPlace(id); placeOnBoard(item, center()); return item; }} />
       </div>

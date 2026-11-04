@@ -36,4 +36,4 @@ This sequence extends the existing milestones. Delivery evidence belongs in STAT
 
 ## Current sequence
 
-M2.7 is next: trusted interactive fixtures, beginning with a real dropdown. M2.8 adds tuning and comparison. M2.9 adds persisted variants. M2.10's full acceptance and M3's live MCP loop stay after those. Completed checks are in [docs/STATUS.md](docs/STATUS.md).
+M2.7 and M2.8 are delivered: the canvas motion study, comparison, and model-aware tuning. M2.9 is next and adds persisted named variants. M2.10's full acceptance and M3's live MCP loop stay after that. Completed checks are in [docs/STATUS.md](docs/STATUS.md).

@@ -98,7 +98,7 @@
 }
 .canvas-panel-content { padding: 16px; overflow-y: auto; min-height: 0; overflow-wrap: anywhere; }
 .canvas-panel-content h2 { font: var(--type-section); margin: 0 0 12px; }
-.canvas-panel-content > .studio-meta { margin-bottom: 16px; }
+.canvas-panel-content > :is(.studio-meta, .studio-help) { margin-bottom: var(--space-4); }
 .canvas-panel-content .reference-form { margin-top: 16px; }
 .canvas-panel-content .reference-details .reference-meta { font: var(--type-caption); color: var(--color-muted); }
 .canvas-direction-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding-block: 8px; border-bottom: 1px solid var(--color-line); font: var(--type-caption); }
