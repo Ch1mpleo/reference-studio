@@ -172,17 +172,25 @@ test("a populated board keeps frame movement and image resizing persistent", asy
   const image = page.locator(".board-material").getByRole("img", { name: "North light", exact: true });
   await image.click();
   await page.getByRole("toolbar", { name: "Canvas zoom" }).getByRole("button", { name: "Fit selection", exact: true }).click();
+  await expect.poll(async () => {
+    const first = await image.boundingBox();
+    await page.waitForTimeout(80);
+    const second = await image.boundingBox();
+    if (!first || !second) return false;
+    return Math.abs(first.x - second.x) < 0.5 && Math.abs(first.y - second.y) < 0.5 && Math.abs(first.width - second.width) < 0.5;
+  }).toBe(true);
   const imageBox = await image.boundingBox();
   if (!imageBox) throw new Error("Missing selected image");
   const handle = image.locator("..").locator(".react-flow__resize-control.handle.bottom.right");
+  await handle.hover();
   const corner = await handle.boundingBox();
   if (!corner) throw new Error("Missing resize handle");
   await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
-  await page.mouse.down(); await page.mouse.move(corner.x + 65, corner.y + 50, { steps: 6 }); await page.mouse.up();
-  await expect.poll(async () => (await image.boundingBox())?.width).toBeGreaterThan(imageBox.width + 30);
+  await page.mouse.down(); await page.mouse.move(corner.x + 140, corner.y + 100, { steps: 8 }); await page.mouse.up();
+  await expect.poll(async () => Number.parseFloat(await page.locator(".react-flow__node.selected").getAttribute("style").then((value) => value?.match(/width:\s*([0-9.]+)px/)?.[1] ?? "0"))).toBeGreaterThan(290);
   await expect(page.locator(".canvas-status")).toContainText("Saved");
+  await expect.poll(async () => boardSchema.parse(await browserJson(page, `/api/projects/${project.id}/board`)).layout.items.some((entry) => entry.rect.width > 290)).toBe(true);
   const resized = boardSchema.parse(await browserJson(page, `/api/projects/${project.id}/board`));
-  expect(resized.layout.items.some((entry) => entry.rect.width > 290)).toBe(true);
   await page.reload();
   await expect(page.locator(".canvas-status")).toContainText("Saved");
   expect(boardSchema.parse(await browserJson(page, `/api/projects/${project.id}/board`)).layout).toEqual(resized.layout);
