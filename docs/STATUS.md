@@ -9,6 +9,14 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 - Loader-specimen replay checkpoint: resolved on 2026-10-29. The failure was test synchronization with an already-running reveal; runtime animation behavior did not need changing.
 - Open work, ordered in PLAN.md: M2.7 trusted interactive fixtures, M2.8 tuning and comparison, M2.9 persisted variants, M2.10 acceptance, and M3's live MCP/client loop. M2.6 is committed on `feat/m2-system-records`; the pre-existing lockfile edit remains uncommitted.
 
+## Design ruleset slim — 2026-11-04
+
+Slimmed the Studio design ruleset and aligned the product chrome with it. `design.md` is tokens, ten core rules, and one shared-component table. Dated history, `#/studio`-only behavior, and save/conflict behavior moved to `docs/design/`. `PLAN.md` owns task order. This file records evidence. Selected board nodes and group frames use the brighter glass edge. Reference cards stay glass; dialogs, menus, popovers, the dock, and the inspector are solid. Product fields go through `StudioField`. Product chrome uses `studio-*` class names. The Library kind segment is specified and not built. `GeometryEditor` was unused and is deleted. `DirectionEditor`, `AnnotationEditor`, and `DirectionViews` stay because the `#/studio` specimen and their tests import them.
+
+**Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 35 files, 141 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 41 tests. Microsoft Edge is not installed in this environment, so the browser suite used Chrome. Before and after screenshots, desktop dark, desktop light, and 390px dark, cover the product, Projects dialog, selected note, Library, and `#/studio`.
+
+**Remaining:** the Library still uses the stacked search form; the kind radio, optional tag, and chips are documentation only. Human visual acceptance, native 200% zoom, and Edge were not run. The Vite main-chunk warning remains.
+
 ## M2.6 — Draft design/motion records and editors — 2026-11-01
 
 Delivered versioned core schemas and service-owned records within the existing board aggregate, with migration 006, independent system/direction revisions, authenticated idempotent create/read/update/archive/restore, and retained history. Design records cover semantic values/units/context, component/layout/image recipes, accessibility, and rationale. Motion records cover roles/presets/recipes and strict Instant/tween/physics-spring settings with engine-specific assumptions, input/focus/interruption behavior, no-motion and reduced-motion choices. Observations, human feedback, proposals, exceptions, and questions remain distinct; still images cannot validate motion, and Save does not approve anything.
