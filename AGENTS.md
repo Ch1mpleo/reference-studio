@@ -9,7 +9,7 @@ Reference Studio is a local visual workspace, portable creative-workflow skill, 
 - The product document records agreed intent; source and package manifests describe current implementation. Planned features are not proof that those features exist.
 - Questions, reviews, and diagnoses are read-only unless the user asks for changes. For an authorized change, implement and verify it without repeated permission requests.
 - Preserve unrelated edits and approved content. Resolve routine implementation choices from existing patterns; ask only when missing product intent materially changes the result.
-- Follow an existing task plan when present. Update `docs/STATUS.md` for validated task completion, meaningful findings, and remaining work; do not create a second task database or claim a milestone from a build alone.
+- Follow [PLAN.md](PLAN.md) for task order. Update `docs/STATUS.md` with evidence for validated work and remaining limits. Do not create a second task database or claim a milestone from a build alone.
 
 ## Studio design implementation
 

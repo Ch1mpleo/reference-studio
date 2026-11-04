@@ -1,5 +1,7 @@
 # Studio implementation plan
 
+This file owns task order. [docs/STATUS.md](docs/STATUS.md) records evidence only and does not assign the next task.
+
 The repository root [design.md](design.md) owns Studio's visual specification: tokens, core rules, and shared components. Record accepted Studio visual decisions there. This file holds the implementation sequence that used to live in [docs/DESIGN_AND_MOTION.md](docs/DESIGN_AND_MOTION.md). That document still owns target-project design and motion scope. The root design file is separate from future exported target-project `design.md` documents.
 
 Start with a small foundation in the existing React client:
@@ -30,4 +32,8 @@ Keep these primitives in `apps/web/src/client` until another first-party surface
 - **M5:** implement the versioned system export, attach interaction evidence, and approve both systems in immutable snapshots.
 - **M6:** verify a fresh agent can build two views from one exported system without inventing missing decisions. Exercise interruption, keyboard, reduced motion, responsive behavior, and changes to approved revisions. Verify that tuned variants survive reload, remain draft until approval, and reach exports with the exact saved model, values, and evidence.
 
-This sequence extends the existing milestones. STATUS.md remains the implementation task tracker.
+This sequence extends the existing milestones. Delivery evidence belongs in STATUS.md.
+
+## Current sequence
+
+M2.7 is next: trusted interactive fixtures, beginning with a real dropdown. M2.8 adds tuning and comparison. M2.9 adds persisted variants. M2.10's full acceptance and M3's live MCP loop stay after those. Completed checks are in [docs/STATUS.md](docs/STATUS.md).
