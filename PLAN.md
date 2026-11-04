@@ -30,7 +30,7 @@ todos:
     content: "M1 gate: exercise collect → find → reuse → backup → restore together on temporary data and record evidence before starting M2"
     status: completed
   - id: m2-studio-sample
-    content: "M2.0a: review a representative ASCII-inspired Studio sample with light/dark tokens, real reference imagery, controls, and state coverage"
+    content: "M2.0a: review a representative ASCII-inspired Studio sample with the dark tokens, real reference imagery, controls, and state coverage"
     status: completed
   - id: m2-studio-shell
     content: "M2.0b: apply shared tokens and primitives; simplify connection status, project controls, reference cards, add flow, and contextual inspector"
@@ -82,7 +82,7 @@ isProject: false
 
 # Reference Studio implementation plan
 
-Updated 2026-11-02 after M2.8 canvas tuning and production-browser acceptance. This is an execution plan for the existing repository at `E:\reference-studio`, not a request to recreate it.
+Updated 2026-11-02 after M2.8 canvas tuning and production-browser acceptance. This is an execution plan for the existing repository at `E:\reference-studio`, not a request to recreate it. Studio is dark. Desktop is the target. Do not add a light theme, a theme toggle, or a phone layout.
 
 ## Current state and execution instructions
 
@@ -285,12 +285,12 @@ Dependencies: M0 follow-up gate. M1.0 precedes persistent endpoints; M1.6 starts
 Preserve the existing implementation and its regression coverage. The new user-selected visual direction is a separate evolution in M2.0, not a retroactive claim that ASCII styling was delivered in M1.
 
 - Review a small sample showing library/project layout and common control states before propagating exact aesthetics. The connection-status page is not an approved brand system.
-- Put semantic color, typography, spacing, shape, focus, and layering tokens in one client source, including supported light/dark behavior.
+- Put semantic color, typography, spacing, shape, focus, and layering tokens in one client source, using the dark Studio tokens. Do not add a light theme.
 - Build accessible controls as screens need them: buttons, inputs, menus/dialogs, status/error messaging, and reference cards. Cover focus, disabled, selected, loading, empty, error, and success states.
 - Define named motion roles, instant repetitive actions, and reduced-motion policy. Add a small development preview for control states and interruptible transitions. Share implementation with later fixtures where useful.
 - Keep this in `apps/web/src/client` initially. Do not add a UI package, design framework, or animation dependency without a concrete consumer.
 
-**M1 tests/acceptance:** create/edit/archive projects, ingest/search/reuse references, distinct placement notes, role changes, failed uploads, idempotent retries, conflict behavior, ZIP failure/recovery, and restart persistence. Check representative UI on desktop/phone, keyboard and light/dark modes. Gate requires a complete collect → find → reuse → backup → restore scenario and the reviewed Studio primitives.
+**M1 tests/acceptance:** create/edit/archive projects, ingest/search/reuse references, distinct placement notes, role changes, failed uploads, idempotent retries, conflict behavior, ZIP failure/recovery, and restart persistence. Check representative UI on desktop, with keyboard and reduced motion. Phone layout is not required. Gate requires a complete collect → find → reuse → backup → restore scenario and the reviewed Studio primitives.
 
 ## Studio visual direction — Modern interface cohesive with ASCII Reveal
 
@@ -324,9 +324,9 @@ The M1 gate, M2.0a-M2.0c, and M2.1-M2.5 are complete for current records; their 
 Owners: `styles.css`, `StudioPreview.tsx`, `studioMotion.ts`, and the existing menu/dialog primitives.
 
 - Build one representative library composition with supplied or temporary attributed imagery, image/link/note cards, a compact dock/project switcher and selected-reference inspector, following the later accepted canvas-first composition. Include actual shared-versus-placement fields and error/conflict states. Do not build a separate showcase application.
-- Implement sections 1–18 of [design.md](E:/reference-studio/design.md) in both themes, using its exact token values, geometry, component states, responsive rules, and visual pairing with ASCII loading. Add all currently applicable recipes to the living specimen; planned canvas/playground recipes join when their consumers ship. Include selected, focused, busy, empty, failed, missing-image, and reduced-motion examples. Keep fake loading restricted to clearly labeled preview controls.
+- Implement sections 1–18 of [design.md](E:/reference-studio/design.md) in the dark theme, using its exact token values, geometry, component states, desktop layout, and visual pairing with ASCII loading. Add all currently applicable recipes to the living specimen; planned canvas/playground recipes join when their consumers ship. Include selected, focused, busy, empty, failed, missing-image, and reduced-motion examples. Keep fake loading restricted to clearly labeled preview controls.
 - Review the sample with the human before propagating exact visual values. Record accepted Studio choices and remaining visual questions in `design.md`; record execution/check evidence in STATUS. A screenshot validates appearance only.
-- Acceptance: a representative desktop and 390px sample is reviewed; readable imagery, type hierarchy, spacing, focus, both themes, and ASCII density are agreed. M1 primitives remain usable. M2.0a feedback and acceptance are recorded in STATUS; preserve that accepted system.
+- Acceptance: a representative desktop sample is reviewed; readable imagery, type hierarchy, spacing, focus, the dark theme, and ASCII density are agreed. M1 primitives remain usable. M2.0a feedback and acceptance are recorded in STATUS; preserve that accepted system. Phone layout is not required.
 
 **M2.0b — Shared styles, primitives, and workspace hierarchy.**
 
@@ -336,18 +336,18 @@ Owners: `App.tsx`, `ProjectScreen.tsx`, `ReferenceCollection.tsx`, `ReferenceSea
 - Preserve the compact connection treatment, direct image drop/paste, focused note/link add flow, image-led collection, and contextual inspector. Reuse existing service hooks and forms; preserve upload/drop/paste, source attribution, role/crop editing, search pagination, project archive/reopen, and backup/restore.
 - Preserve tab-local project selection, stable placement IDs, draft retention, idempotency, explicit saves, and conflict recovery. Selection is UI state, not an agent message or an approval.
 - Cover native controls, keyboard menu navigation, dialog dismissal/focus restoration, field errors and busy states. Avoid nested interactive elements on selectable cards.
-- Acceptance: the complete M1 collect/find/reuse/backup/restore workflow works in the revised shell on temporary data. Library and preview use the same visual/control recipes; no duplicate edit panels or repeated primary actions. Capture desktop/phone, theme, and keyboard evidence.
+- Acceptance: the complete M1 collect/find/reuse/backup/restore workflow works in the revised shell on temporary data. Library and preview use the same visual/control recipes; no duplicate edit panels or repeated primary actions. Capture desktop and keyboard evidence. Phone layout is not required.
 
 **M2.0c — Loading integration and visual cohesion.**
 
 Owners: existing request hooks, `studioMotion.ts`, `StudioPreview.tsx`, and a bounded loader adapter if upstream integration needs one.
 
 - Review the supplied ASCII Reveal repository and its running demo before choosing package usage. The primary design task is the modern interface surrounding the loader, specified in design.md sections 1–18; a new animation engine is not required.
-- Pair one real reference card/summary with its skeleton/reveal state. Use the same surface, type roles, radii, border, padding, and dimensions in both. Match light/dark glyph colors through Studio tokens. The pairing should look intentionally designed together.
+- Pair one real reference card/summary with its skeleton/reveal state. Use the same surface, type roles, radii, border, padding, and dimensions in both. Match dark glyph colors through Studio tokens. The pairing should look intentionally designed together.
 - Use the upstream supported APIs and actual types; confirm resolved version/license and current React/Vite behavior before adoption. Keep integration bounded so effects can fall back cleanly.
 - Add accurate initial-load/refresh/error state only where needed. Never infer pending from an empty array; keep existing content and drafts during background refresh; preserve stale-request protection and meaningful error/retry behavior.
 - Keep editing, saving, selection, and canvas manipulation immediate. Do not scramble controls, run new reveals on each SSE update, or interfere with target fixture comparison.
-- Acceptance: review resting/loading/loaded versions together in light/dark, reduced motion and plain mode. Verify readable real content, accessible names, keyboard use, no lost drafts, no false empty flash, cleanup, and production compatibility.
+- Acceptance: review resting/loading/loaded versions together in the dark theme, reduced motion and plain mode. Verify readable real content, accessible names, keyboard use, no lost drafts, no false empty flash, cleanup, and production compatibility.
 
 **M2.1 — Canvas.**
 
@@ -357,7 +357,7 @@ Owners: existing request hooks, `studioMotion.ts`, `StudioPreview.tsx`, and a bo
 - Keep viewport/selection per board session or local view preference. These are not shared project decisions; one tab panning must not move another tab's view.
 - Render sized thumbnails with preserved ratios; test a realistically populated board, not only empty nodes. Board nodes and annotations never get scramble effects during pan, zoom, drag, resize, selection, or SSE updates. Avoid backdrop blur and independent animation canvases per node.
 
-**M2.2 - Board workspace (user refinement 2026-10-29).** One board for ordinary work; remove the Board/List/Focused/Compare switch. References are image/link material, notes are visible free text edited directly on the object, and groups are simple named frames with inline name editing. Keep Note/Group/Library/Undo/Redo in the dock; select and pan directly. Bare vertical zoom controls live bottom-right with no enclosing panel. Any object clears empty-board guidance. Reject unsupported document intake. Healthy connection diagnostics leave production chrome; failures retain recovery. Optional image/link details and usage disclosures remain available. Preserve stored direction/annotation metadata and backup compatibility; no destructive schema change. Keyboard and phone checks exercise the board itself. Immutable approved snapshots remain M5.
+**M2.2 - Board workspace (user refinement 2026-10-29).** One board for ordinary work; remove the Board/List/Focused/Compare switch. References are image/link material, notes are visible free text edited directly on the object, and groups are simple named frames with inline name editing. Keep Note/Group/Library/Undo/Redo in the dock; select and pan directly. Bare vertical zoom controls live bottom-right with no enclosing panel. Any object clears empty-board guidance. Reject unsupported document intake. Healthy connection diagnostics leave production chrome; failures retain recovery. Optional image/link details and usage disclosures remain available. Preserve stored direction/annotation metadata and backup compatibility; no destructive schema change. Keyboard checks exercise the board itself. Phone layout is not required. Immutable approved snapshots remain M5.
 
 **M2.3 — Annotations.**
 
@@ -421,7 +421,7 @@ Delivered independent preset-origin drafts/reset, paired slider/numeric controls
 
 - Run `npm run check`, focused regressions during iteration, the full `npm test`, `npm run build`, and `npm run test:e2e`. Add behavioral coverage for changed loading lifecycles, retained drafts, menu/dialog focus, selection/inspector behavior, and board operations. Do not test exact prose or decorative class names.
 - Extend production browser coverage beyond the two connection scenarios: M1 collection/reuse/backup/restore, the M2 board/list/inspector path, and real keyboard focus with Tab/Shift+Tab/Escape. Recheck the dialog Escape change that postdates the recorded M1.6 e2e run.
-- Review 390/768/1440px widths, a 480px-tall window, actual 200% browser zoom, light/dark, OS reduced motion, long names/URLs/Vietnamese text, empty/loading/error/conflict, broken thumbnails, and disabled effects. Device pixel ratio emulation alone is not 200% browser zoom. Verify visible focus and text/control contrast; retain evidence and report tools' limitations honestly.
+- Review a 1440px desktop width, a 480px-tall window, actual 200% browser zoom, the dark theme, OS reduced motion, long names/URLs/Vietnamese text, empty/loading/error/conflict, broken thumbnails, and disabled effects. Device pixel ratio emulation alone is not 200% browser zoom. Verify visible focus and text/control contrast; retain evidence and report tools' limitations honestly. Phone layout is not required.
 - Use a documented temporary board with at least 50 mixed placements and two directions; record visible count, asset dimensions, browser, machine, and whether rendering is culled. Compare ASCII enabled/disabled on the same board, including 4x CPU throttling where available. Measure data-ready-to-readable time, long tasks, layout shifts, and input/drag responsiveness; do not claim upstream benchmark numbers as Studio results.
 - Acceptance: no input waits for effects; no reveal during direct manipulation or fixture comparison; no active decorative loop after completion/unmount; no animation-induced layout shift; content remains readable on fallback and reduced motion. If the candidate creates repeatable >50ms effect-attributable long tasks or delays useful content, narrow or remove the effect and record the outcome. Artwork remains original once loaded.
 - Review the populated library, board, inspector, and playground against all applicable recipes in design.md sections 1–18, including token values, state precedence, card/inspector anatomy, keyboard paths, visual coherence between resting/loading/loaded components, and motion policy. The new aesthetic cannot close the milestone without persistence, conflicts, backup restoration, and the existing M2 functional scenario below.
@@ -567,7 +567,7 @@ Dependencies: all prior acceptance gates; no unimplemented tool described as shi
 
 **M6.1 — Full scenario and fresh-agent handoff.** Use attributed human-made references: brief → mixed references → two directions → compare/tune motion → coded target experiment → review/revision → approve → export. A fresh agent implements two representative views/components from the handoff without the original chat; assess visual/system reuse and motion behavior, and record missing decisions rather than silently inventing them. Use materially different content/tasks across the two views to check coherent identity rather than repeated composition. Verify that reference-derived rationale, exceptions, and anti-slop guidance remain usable without access to the original chat; include one contextual review/fix and one intentional stylistic choice retained with its reason. Save evidence under `docs/evidence`.
 
-**M6.2 — UI and motion checks.** Desktop, short window, tablet/mobile review, keyboard/focus, Escape/dialog restoration, 200% zoom, themes, reduced motion, image regions across zoom/resize, and direct board keyboard editing. Test rapid repeated input, reversal mid-animation, instant baseline, slow-playback labeling, reopening saved variants, project-preview style isolation, responsive A/B switching, and continued input during motion. Use realistic image/board loads; do not infer performance from an empty canvas.
+**M6.2 — UI and motion checks.** Desktop, short window, keyboard/focus, Escape/dialog restoration, 200% zoom, the dark theme, reduced motion, image regions across zoom/resize, and direct board keyboard editing. Test rapid repeated input, reversal mid-animation, instant baseline, slow-playback labeling, reopening saved variants, project-preview style isolation, and continued input during motion. Use realistic image/board loads; do not infer performance from an empty canvas. Phone layout is not required.
 
 **M6.3 — Failure checks.** Service shutdown/restart with clients, SSE recovery, duplicate instance, missing/bad tokens, hostile origin, bad images, duplicate upload/retries, browser/agent conflicts, unsaved tuning protection, different tab selections, expired sessions, archived snapshot assets, dead preview links, invalid model settings, corrupt/unsupported ZIP, interrupted import and filesystem recovery. Verify backups include systems, variants, reviews, and approvals.
 

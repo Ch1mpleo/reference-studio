@@ -52,7 +52,7 @@ Saved variants live in `motion_variants`, not in the board aggregate. A variant 
 
 Fixture id/version and engine name/version are checked for shape, and motion values reuse the existing instant/tween/spring schema. The service does not invent a second fixture catalog. There is no `approved` field. Studio stays dark, and this slice adds no phone layout.
 
-**Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 37 files, 149 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 41 tests. Chrome 156.0.8078.47. Microsoft Edge is not installed here. No new browser scenario was added; this slice has no UI. The Vite main-chunk warning remains at about 651 kB.
+**Verification:** Rebased onto `feat/m2-system-records` at `8a26cf5`. Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 40 files, 155 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` is 50 scenarios on Chrome 156.0.8078.47. Microsoft Edge is not installed. Full runs were not clean: fit-selection sometimes stayed at 10%, and one populated-board reload missed the status node. Those scenarios passed in other full runs or in isolation. This rebase did not change the canvas client. The Vite main-chunk warning remains at about 656 kB.
 
 **Remaining:** Save, reopen, conflict UI, neutral comparison, and recommendation editing are not in this slice. Node 24 was not run. Human visual acceptance does not apply to this service change.
 
