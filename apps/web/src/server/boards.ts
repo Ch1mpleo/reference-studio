@@ -9,6 +9,7 @@ import { getProject } from "./projects.js";
 import { commitMutation, hashCanonicalRequest, readIdempotencyKey } from "./idempotency.js";
 import { publishChange } from "./changes.js";
 import type { EventHub } from "./events.js";
+import { copyDirectionVariants } from "./variants.js";
 
 export function readBoard(database: DatabaseSync, projectId: string): Board {
   getProject(database, projectId);
@@ -111,6 +112,12 @@ export function bumpPlacementDirection(database: DatabaseSync, projectId: string
   writeBoard(database, { ...board, revision: board.revision + 1 });
 }
 
+function layoutHasVariants(body: unknown): boolean {
+  if (typeof body !== "object" || body === null || !("layout" in body)) return false;
+  const layout = body.layout;
+  return typeof layout === "object" && layout !== null && "variants" in layout;
+}
+
 function requireJson(request: FastifyRequest): void {
   if (headerValue(request.headers["content-type"])?.split(";")[0]?.trim() !== "application/json") throw new ServiceError("unsupported_media", "Send board changes as application/json.");
 }
@@ -128,6 +135,7 @@ export function registerBoardRoutes(app: FastifyInstance, database: DatabaseSync
     requireJson(request);
     const caller = requireCaller(request);
     const projectId = request.params.projectId;
+    if (layoutHasVariants(request.body)) throw new ServiceError("validation", "Change variants through the variant operations.");
     const input = parseContract(updateBoardSchema, request.body, "The board arrangement is invalid.");
     const result = commitMutation(database, {
       scope: mutationScope(caller, "board.update", projectId),
@@ -210,6 +218,7 @@ export function registerBoardRoutes(app: FastifyInstance, database: DatabaseSync
           ...(systems.length === 0 ? {} : { systems: [...(current.layout.systems ?? []), ...systems.map((system) => remapSystem(system, { systems: systemIds, directions: new Map([[directionId, id]]), placements: placementIds, annotations: annotationIds, children }))] }),
           ...(annotations.length === 0 ? {} : { annotations: [...(current.layout.annotations ?? []), ...annotations.map((entry) => copyAnnotation(entry, new Map([[directionId, id]]), placementIds, annotationIds))] }) };
         const board = saveBoardLayout(database, current, layout, new Set(placementIds.values()));
+        copyDirectionVariants(database, projectId, layout, { systems: systemIds, placements: placementIds, annotations: annotationIds, presets: children });
         return { statusCode: 201, body: board, revision: board.revision, changed: true };
       },
     });

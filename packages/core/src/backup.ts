@@ -16,6 +16,7 @@ import {
 import { PROJECT_STATUSES } from "./projects.js";
 import { boardLayoutSchema } from "./board.js";
 import { systemContexts } from "./systems.js";
+import { assertBackupVariants, MAX_BACKUP_VARIANTS, variantRecordSchema } from "./variants.js";
 
 export const BACKUP_FORMAT = "reference-studio-backup";
 export const BACKUP_FORMAT_VERSION = 5;
@@ -130,6 +131,7 @@ export const backupManifestSchema = z
     references: z.array(backupReferenceSchema).max(MAX_BACKUP_ENTRIES),
     placements: z.array(backupPlacementSchema).max(MAX_BACKUP_ENTRIES),
     board: boardLayoutSchema.optional(),
+    variants: z.array(variantRecordSchema).max(MAX_BACKUP_VARIANTS).optional(),
     sections: z
       .object({
         systems: emptySection,
@@ -167,6 +169,12 @@ export function readBackupManifest(value: unknown): BackupManifest {
         throw new ServiceError("validation", `This backup format cannot store ${name} yet.`);
       }
     }
+  }
+  if (Array.isArray(value.variants) && value.variants.length > 0 && value.formatVersion !== 5) {
+    throw new ServiceError("validation", "Variant records require backup format 5.");
+  }
+  if (isRecord(value.board) && "variants" in value.board) {
+    throw new ServiceError("validation", value.formatVersion === 5 ? "Variant records are stored beside the board, not inside it." : "Variant records require backup format 5.");
   }
   if (Array.isArray(value.placements)) {
     for (const placement of value.placements) {
@@ -258,6 +266,7 @@ function validateBackupGraph(manifest: BackupManifest): void {
       return placement === undefined || references.get(placement.referenceOriginalId)?.kind !== "image";
     })) throw new ServiceError("validation", "Image guidance must identify an image placement.");
   }
+  assertBackupVariants(manifest.variants ?? [], manifest.board, placementIds);
 }
 
 function uniqueIds(ids: string[], label: string): Set<string> {

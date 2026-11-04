@@ -29,6 +29,7 @@ import { defaultMigrationsDir, migrate } from "./migrate.js";
 import { registerBackupRoutes } from "./backup.js";
 import { registerBoardRoutes } from "./boards.js";
 import { registerSystemRoutes } from "./systems.js";
+import { registerVariantRoutes } from "./variants.js";
 import { registerProjectRoutes } from "./projects.js";
 import { registerReferenceRoutes } from "./references.js";
 import { issueSessionCookie } from "./session.js";
@@ -105,6 +106,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   registerBackupRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
   registerBoardRoutes(app, dependencies.database, hub);
   registerSystemRoutes(app, dependencies.database, hub);
+  registerVariantRoutes(app, dependencies.database, hub);
 
   app.get("/api/events", (request, reply) => {
     reply.hijack();
