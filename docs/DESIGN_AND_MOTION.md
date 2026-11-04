@@ -111,39 +111,9 @@ The portable skill guides discussion and interpretation; MCP reads or proposes t
 
 The coding agent implements reusable components and animation helpers in the target repository, following its stack. Sharing design intent across a product's app and website does not imply that every platform can consume the same React component or spring implementation.
 
-## Studio's own implementation plan
+## Studio interface
 
-The repository's root [design.md](../design.md) now owns Studio's detailed visual specification: exact tokens, component recipes, layout, materials, motion, and visual pairing with the ASCII loader. Read it for Studio UI implementation and record accepted Studio visual decisions there. This document continues to own the broader design/motion product scope and target-project systems; the root file is separate from future exported target-project `design.md` documents.
-
-Start with a small foundation in the existing React client:
-
-- A central CSS token source for semantic colors, type, spacing, shape, focus, and layering; support the existing light/dark behavior.
-- Reusable controls as actual product screens need them: buttons, inputs, dialogs, menus, status messages, and reference-card states.
-- Named motion presets and a single application policy for reduced motion. CSS handles simple feedback; evaluate a motion library only when a concrete spatial or interruptible interaction needs it.
-- A small development preview for states and transitions, including a reduced-motion mode and a way to repeat or interrupt each example.
-
-Candidate behavior for the first board:
-
-- Opening a reference can preserve its relationship to the source card; closing should return focus and context.
-- Dragging follows the pointer directly. Any settling transition must not compete with the drag or obscure the saved placement.
-- Selection, text entry, repeated tagging, and saving feedback remain immediate.
-- Panels and dialogs follow consistent entry/exit behavior, with no waiting for a transition before a useful action.
-
-Use the exact baseline values in [design.md](../design.md) to build the next small reviewed interface sample, then record accepted visual feedback there. The user accepted the planning baseline; rendered sample review and implementation checks remain separate evidence.
-
-Keep these implementation primitives inside `apps/web/src/client` initially. Shared domain schemas belong in `packages/core`; target-project systems are records, not imported global Studio styles. Extract a shared UI package only when another actual first-party surface needs the same implementation.
-
-## Delivery sequence
-
-- **Before M1:** agree the two-system scope and review a small Studio interface sample. Fix the foundation reliability findings in STATUS.md.
-- **M1:** build Studio's minimum reusable controls/tokens alongside project/library screens; allow existing link/note references to capture motion examples and timestamps.
-- **M2:** define direction-scoped draft system records and build the dropdown playground with A/B comparison, model-appropriate sliders/numeric inputs, interruption, and reduced-motion preview. Persist named draft variants and verify they reopen correctly. Prototype opening, closing, grouping, and repeated board actions.
-- **M3:** expose system context, selected playground variants, draft proposals, evidence, and revision conflicts through service-backed MCP operations. Keep project and board-session identifiers explicit.
-- **M4:** teach the portable skill to explore design and motion together, recommend no motion where appropriate, and distinguish watched behavior from hypotheses.
-- **M5:** implement the versioned system export, attach interaction evidence, and approve both systems in immutable snapshots.
-- **M6:** verify a fresh agent can build two views from one exported system without inventing missing decisions. Exercise interruption, keyboard, reduced motion, responsive behavior, and changes to approved revisions. Verify that tuned variants survive reload, remain draft until approval, and reach exports with the exact saved model, values, and evidence.
-
-This sequence extends the existing milestones. STATUS.md remains the implementation task tracker.
+Studio's own visual specification is the repository root [design.md](../design.md). The implementation sequence for that interface is [PLAN.md](../PLAN.md). This document keeps the target-project design and motion scope.
 
 ## Supporting references
 
