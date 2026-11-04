@@ -274,18 +274,23 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     <StudioZoomControl zoom={zoom} selected={selection.length > 0} onOut={() => void canvas.current?.zoomOut()} onIn={() => void canvas.current?.zoomIn()}
       onZoom={(value) => void canvas.current?.zoomTo(value)} onFit={() => void canvas.current?.fitView({ padding: 0.2, maxZoom: 1, ...(selection.length ? { nodes: selection.map((id) => ({ id })) } : {}) })} />
     <StudioInspector open={panel !== null} retainContent onClose={closePanel}>
+<<<<<<< HEAD
       {effective.frames.filter((frame) => visitedSystems.includes(frame.id)).map((frame) => <div className="canvas-panel-content" key={frame.id} hidden={panel !== "systems" || systemDirection !== frame.id}><DirectionSystems scope={projectId} direction={frame} systems={board.layout.systems ?? []} annotations={annotations} references={references} disabled={board.unsaved || operation} onPersist={persistSystem} onOpenPlayground={() => addPlayground(frame.id)} /></div>)}
       <div hidden={panel !== "library"} className="canvas-panel-content"><h2>Library</h2><p className="studio-meta">Reuse collected material. Paste a link directly onto the board to add a new source.</p>
+=======
+      {effective.frames.filter((frame) => visitedSystems.includes(frame.id)).map((frame) => <div className="canvas-panel-content" key={frame.id} hidden={panel !== "systems" || systemDirection !== frame.id}><DirectionSystems scope={projectId} direction={frame} systems={board.layout.systems ?? []} annotations={annotations} references={references} disabled={board.unsaved || operation} onPersist={persistSystem} /></div>)}
+      <div hidden={panel !== "library"} className="canvas-panel-content"><h2>Library</h2><p className="studio-help">Reuse collected material. Paste a link directly onto the board to add a new source.</p>
+>>>>>>> e6ad89c4b5007dde7785a2b012fe1362d5f473ed
         {board.layout.frames.some((frame) => frame.archived) ? <section><h3>Archived groups</h3>{board.layout.frames.filter((frame) => frame.archived).map((frame) => <div className="canvas-direction-row" key={frame.id}><span>{frame.name}</span><StudioButton disabled={operation} onClick={() => void directionAction(frame, { archived: false }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not restore group."))}>Restore</StudioButton></div>)}</section> : null}
         <ReferenceSearch placedReferenceIds={references.map((item) => item.reference.id)} onPlace={async (id) => { const item = await onPlace(id); placeOnBoard(item, center()); return item; }} />
       </div>
       <div hidden={panel !== "inspect"} className="canvas-panel-content">{selected ? <><h2>{selected.reference.title}</h2>
         {selected.reference.asset ? <><ImageRegions reference={selected.reference} annotations={annotations.filter((note) => note.target.type === "placement" && note.target.placementId === selected.placementId)} /><StudioButton onClick={() => view(selected.placementId)}>View image</StudioButton></> : null}
-        {selected.reference.sourceUrl ? <a className="sample-url" href={selected.reference.sourceUrl} target="_blank" rel="noreferrer">{selected.reference.sourceUrl}</a> : null}
+        {selected.reference.sourceUrl ? <a className="studio-url" href={selected.reference.sourceUrl} target="_blank" rel="noreferrer">{selected.reference.sourceUrl}</a> : null}
       </> : null}
         {references.filter((item) => visited.includes(item.placementId)).map((item) => <div key={item.placementId} hidden={item.placementId !== inspectedId}>
-          <details className="sample-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} /></details>
-          <details className="sample-disclosure"><summary>Usage and crop</summary><PlacementUse item={item} onSave={onSavePlacement} /></details>
+          <details className="studio-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} /></details>
+          <details className="studio-disclosure"><summary>Usage and crop</summary><PlacementUse item={item} onSave={onSavePlacement} /></details>
           {annotations.some((note) => note.target.type === "placement" && note.target.placementId === item.placementId) ? <details><summary>Attached notes</summary>{annotations.filter((note) => note.target.type === "placement" && note.target.placementId === item.placementId).map((note) => <p key={note.id}>{note.body || note.borrowedQuality}</p>)}</details> : null}
         </div>)}
       </div>

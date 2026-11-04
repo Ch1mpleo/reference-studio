@@ -1,12 +1,13 @@
 # Reference Studio status
 
-Implementation follows the milestone IDs in the product handoff. A milestone is complete only after its acceptance scenario has been exercised.
+Implementation follows the milestone IDs in the product handoff. A milestone is complete only after its acceptance scenario has been exercised. [PLAN.md](../PLAN.md) owns task order. This file records evidence.
 
 ## Current position
 
 - Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance, M2.0a, M2.0b, M2.0c, M2.1, M2.2, M2.3, M2.4 (current records), M2.5, M2.6, M2.7, M2.8, M2.11 (manual rehearsal).
 - Active milestone: M2. The board/annotation foundation, direction-scoped draft design/motion records/editors, and trusted dropdown playground with local model-aware tuning are implemented. Ordinary work stays on the board with inline notes/simple groups and compact controls. M2.6 includes system-graph duplication and backup format 4; variant duplication remains part of M2.9 when those records ship. This does not complete all of M2.
 - Loader-specimen replay checkpoint: resolved on 2026-10-29. The failure was test synchronization with an already-running reveal; runtime animation behavior did not need changing.
+<<<<<<< HEAD
 - Next task: M2.9 named persisted motion variants, exact settings/rationale, revision/conflict recovery, direction duplication, and backup integration. M2.10 acceptance and M3 live MCP remain open. The user requested the next task after the M2.7 correction; M2.8 continues on the canvas. Changes remain uncommitted on `feat/m2-system-records`.
 
 ## M2.8 — Compare and tune on the canvas — 2026-11-02
@@ -34,6 +35,17 @@ The versioned registry and strict parameter validation remain. The dropdown supp
 **Correction checks:** selected groups initially intercepted the study because React Flow elevates selected materials; the local experiment now has an explicit layer within the flow, below ordinary workspace chrome. An initial combined note journey intermittently failed before its edit readiness was established; synchronization now requires the actual textarea to hold focus and the board save to finish before Escape. The focused fixture suite also passed three consecutive repetitions. Screenshots now wait for settled playback and reset body scroll before recording the resting view.
 
 **Historical checkpoint:** the revised visual presentation was inspected by the agent. The user subsequently requested the next task, authorizing the M2.8 continuation recorded above; this does not infer blanket aesthetic approval. M2.8 owns editable presets/model-aware tuning; M2.9 owns persisted named variants/conflicts/duplication/backup. Additional fixtures can follow when representative reuse needs them. Native 200% browser zoom, broader browsers/runtimes, populated-system performance, full M2.10 acceptance, target-product validation, and MCP remain open.
+=======
+- Open work, ordered in PLAN.md: M2.7 trusted interactive fixtures, M2.8 tuning and comparison, M2.9 persisted variants, M2.10 acceptance, and M3's live MCP/client loop. M2.6 is committed on `feat/m2-system-records`; the pre-existing lockfile edit remains uncommitted.
+
+## Design ruleset slim — 2026-11-04
+
+Slimmed the Studio design ruleset and aligned the product chrome with it. `design.md` is tokens, ten core rules, and one shared-component table. Dated history, `#/studio`-only behavior, and save/conflict behavior moved to `docs/design/`. `PLAN.md` owns task order. This file records evidence. Selected board nodes and group frames use the brighter glass edge. Reference cards stay glass; dialogs, menus, popovers, the dock, and the inspector are solid. Product fields go through `StudioField`. Product chrome uses `studio-*` class names. The Library kind segment is specified and not built. `GeometryEditor` was unused and is deleted. `DirectionEditor`, `AnnotationEditor`, and `DirectionViews` stay because the `#/studio` specimen and their tests import them.
+
+**Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 35 files, 141 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 41 tests. Microsoft Edge is not installed in this environment, so the browser suite used Chrome. Before and after screenshots, desktop dark, desktop light, and 390px dark, cover the product, Projects dialog, selected note, Library, and `#/studio`.
+
+**Remaining:** the Library still uses the stacked search form; the kind radio, optional tag, and chips are documentation only. Human visual acceptance, native 200% zoom, and Edge were not run. The Vite main-chunk warning remains.
+>>>>>>> e6ad89c4b5007dde7785a2b012fe1362d5f473ed
 
 ## M2.6 — Draft design/motion records and editors — 2026-11-01
 
@@ -74,7 +86,7 @@ The user chose to finish M2.4 for today's persistent records and leave system/va
 
 **Verification:** Node v26.2.0/npm 10.9.2: `npm run check`, `npm test` (32 files, 129 tests), `npm run build`, the five focused production Edge direction scenarios, and the full `npx playwright test` suite (36 passed against rebuilt production assets) passed. The independent review found no blocking issues; its suggested exact restored decision-to-feedback link assertions were added, then all 129 unit/service tests and type checks passed again. `git diff --check` and external-plan UTF-8, 24 unique task IDs, balanced fences, and scope/dependency consistency checks passed. Data is isolated in temporary directories; no personal workspace changes or dependencies are needed. The existing Vite large-chunk warning remains.
 
-**Scope and next work:** the existing Cursor plan now closes `m2-canvas` for M2.1–M2.5 and explicitly requires future graph duplication/remapping in M2.6 and M2.9 acceptance. Its 24 task IDs are preserved. M2.11 manual external-chat rehearsal remains next; this pass does not complete that rehearsal, systems/playground, MCP, the portable skill, or M2.10. The read-only audit also noted that transformations at the extreme coordinate bound can be rejected atomically: a +48 copy offset or parent-to-absolute conversion can exceed ±100,000 board units. No partial write occurs; extreme-coordinate handling remains a minor acceptance limitation for M2.10. Broader visual/accessibility/performance limitations below remain open.
+**Scope and next work:** the external Cursor plan then closed `m2-canvas` for M2.1–M2.5 and explicitly required future graph duplication/remapping in M2.6 and M2.9 acceptance. Its 24 task IDs were preserved. Task order is PLAN.md. M2.11 manual external-chat rehearsal remains next; this pass does not complete that rehearsal, systems/playground, MCP, the portable skill, or M2.10. The read-only audit also noted that transformations at the extreme coordinate bound can be rejected atomically: a +48 copy offset or parent-to-absolute conversion can exceed ±100,000 board units. No partial write occurs; extreme-coordinate handling remains a minor acceptance limitation for M2.10. Broader visual/accessibility/performance limitations below remain open.
 
 ## Board interaction refinement - 2026-10-29
 
@@ -89,7 +101,7 @@ Accepted feedback simplifies the ordinary canvas rather than adding more dialogs
 
 **Verification:** on Node v26.2.0/npm 10.9.2, `npm run check`, `npm test` (32 files, 127 tests), and `npm run build` passed. The full production Edge suite passed all 35 scenarios. After review fixes, the 14 canvas/direction/workspace scenarios and then 11 simplicity/shared-control scenarios passed again against rebuilt production assets. The new regression coverage includes retained failed text, deliberate conflict reapply, accepted-revision queuing, Escape during accepted/rejected pending saves, keyboard focus restoration, paused renaming during duplication, document rejection, and empty-state clearing. Desktop light, phone dark, and short-window captures were visually reviewed; 720px reflow is not native 200% browser zoom. Tests use isolated temporary data, not the personal workspace. `git diff --check` passed. The existing Vite large-chunk warning remains (main bundle about 621 kB); no dependencies changed.
 
-**Review and planning:** an independent read-only review found the queued-save, cancellation, operation-lock, and focus issues described above; they were addressed with regression checks. Updated PRODUCT, the canonical design specification, and the existing Cursor plan, preserving its 24 task IDs. The plan lives outside this repository. The pre-existing lockfile edit remains outside these commits.
+**Review and planning:** an independent read-only review found the queued-save, cancellation, operation-lock, and focus issues described above; they were addressed with regression checks. Updated PRODUCT, the canonical design specification, and the external Cursor plan, preserving its 24 task IDs. That external copy is historical. Task order is PLAN.md. The pre-existing lockfile edit remains outside these commits.
 
 **Remaining:** human visual acceptance, native browser 200% zoom, broader browser coverage, and the full M2.10 performance/accessibility gate remain open. M2.11 is still next; this refinement does not complete that rehearsal or the remaining system/playground work.
 
@@ -503,7 +515,7 @@ The user requested click-to-reload on components, then added the upstream preset
 ### Canonical Studio design document — 2026-10-23
 
 - Added root [design.md](../design.md) as the canonical Studio design specification, moving the detailed baseline out of the Cursor plan. It retains the exact tokens and component recipes and adds theme/style resolution, component/state/draft contracts, concrete desktop/phone/loading/playground compositions, and review/change guidance.
-- Updated AGENTS.md, the scoped client rule, and DESIGN_AND_MOTION.md to route Studio UI work to that file. The Cursor plan now links to it and continues to own execution order; STATUS continues to own delivered behavior and evidence. This root design specification is separate from future project-specific design.md exports.
+- Updated AGENTS.md, the scoped client rule, and DESIGN_AND_MOTION.md to route Studio UI work to that file. Task order now lives in PLAN.md. This file records evidence. This root design specification is separate from future project-specific design.md exports.
 - Documentation only: no UI implementation, dependencies, or milestone completion changed. Checked document links/anchors, specification extraction, preserved Cursor todo IDs/frontmatter, balanced code fences, and whitespace diffs. Application tests/builds were not rerun. At that documentation pass, the next implementation task was the integrated M1 acceptance scenario followed by M2.0a. The acceptance scenario is now recorded above.
 
 ## Commands

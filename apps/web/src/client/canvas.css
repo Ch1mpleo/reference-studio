@@ -6,13 +6,12 @@
   display: flex;
   flex-direction: column;
 }
-.studio-canvas-app > .sample-topbar { flex: none; width: 100%; max-width: none; padding-inline: 20px; }
-.studio-canvas-app > .sample-topbar .sample-connection { margin-left: auto; }
-.studio-canvas-app > .sample-banner { flex: none; margin: 0; }
-.studio-canvas-app > .sample-banner { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; }
+.studio-canvas-app > .studio-topbar { flex: none; width: 100%; max-width: none; padding-inline: 20px; }
+.studio-canvas-app > .studio-banner { flex: none; margin: 0; }
+.studio-canvas-app > .studio-banner { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; }
 .project-canvas-shell { flex: 1; position: relative; min-height: 0; width: 100%; }
 .project-canvas-main { height: 100%; min-height: 0; }
-.project-canvas-main > .sample-empty { padding: 100px 32px 24px; }
+.project-canvas-main > .studio-empty { padding: 100px 32px 24px; }
 .canvas-start { margin-left: 32px; }
 .canvas-project-control, .canvas-project-menu {
   position: absolute; z-index: var(--layer-toolbar); top: 16px; display: flex; gap: 8px; align-items: center;
@@ -29,38 +28,48 @@
   --xy-background-pattern-color: var(--color-line-strong);
   --xy-node-color: var(--color-ink);
   --xy-node-border: 1px solid var(--color-line);
-  --xy-selection-background-color: color-mix(in srgb, var(--color-focus) 6%, transparent);
-  --xy-selection-border: 1px solid var(--color-focus);
+  --xy-node-boxshadow-selected: none;
+  --xy-selection-background-color: color-mix(in srgb, var(--color-selected-line) 24%, transparent);
+  --xy-selection-border: 1px solid var(--color-selected-line);
   --xy-resize-background-color-default: var(--color-bg);
-  --xy-resize-line-background-color-default: var(--color-focus);
-  --xy-resize-line-border-color-default: var(--color-focus);
+  --xy-resize-line-background-color-default: var(--color-selected-line);
+  --xy-resize-line-border-color-default: var(--color-selected-line);
 }
-.canvas-workspace .react-flow__node-material { border: 0; border-radius: 8px; background: transparent; }
+.canvas-workspace .react-flow__node-material { border: 0; border-radius: var(--radius-control); background: transparent; }
 .canvas-workspace .react-flow__node-material:focus-visible { outline-offset: 6px; }
 .board-material {
   position: relative; width: 100%; height: 100%; border: 1px solid var(--color-line-strong);
-  border-radius: 8px; background: var(--color-bg); color: var(--color-ink);
+  border-radius: var(--radius-control); background: var(--color-bg); color: var(--color-ink);
 }
 .board-material > img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; user-select: none; }
-.react-flow__node.selected > .board-material, .react-flow__node.selected > .board-frame { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.canvas-workspace .react-flow__node.selected { outline: none; box-shadow: none; }
+.react-flow__node.selected > .board-material,
+.react-flow__node.selected > .board-frame {
+  outline: none;
+  border-color: var(--color-selected-line);
+  box-shadow: inset 0 0 0 1px var(--color-selected-line);
+}
+.react-flow__node.selected > .board-material.board-material-note,
+.react-flow__node.selected > .board-frame { background: var(--color-selected-bg); }
 .board-item-caption { position: absolute; top: calc(100% + 6px); left: 0; right: 0; color: var(--color-muted); font: var(--type-caption); pointer-events: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .board-material-text { height: 100%; padding: 16px; box-sizing: border-box; overflow: hidden; }
 .board-material-text h3 { font: var(--type-card); margin: 8px 0; }
 .board-material-text > p:last-child { font: var(--type-caption); white-space: pre-wrap; overflow-wrap: anywhere; }
-.board-frame { position: relative; width: 100%; height: 100%; border: 1px solid var(--color-line-strong); border-radius: 12px; background: color-mix(in srgb, var(--color-ink) 3%, transparent); }
+.board-frame { position: relative; width: 100%; height: 100%; border: 1px solid var(--color-line-strong); border-radius: var(--radius-control); background: color-mix(in srgb, var(--color-ink) 3%, var(--color-bg)); }
 .board-frame-heading { height: 32px; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--color-line); font: var(--type-control); cursor: grab; }
 .board-frame-heading > span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .board-item-actions { position: absolute; bottom: calc(100% + 10px); left: 0; display: flex; gap: 4px; width: max-content; border-radius: var(--radius-pill); padding: 4px; background: var(--color-overlay); box-shadow: inset 0 0 0 1px var(--color-control-line), var(--shadow-popover); }
 .board-frame > .board-item-actions { bottom: auto; top: 40px; left: 8px; }
-.canvas-workspace .react-flow__resize-control.handle { width: 8px; height: 8px; border: 1px solid var(--color-focus); background: var(--color-bg); }
+.canvas-workspace .react-flow__resize-control { z-index: 2; }
+.canvas-workspace .react-flow__resize-control.handle { width: 8px; height: 8px; border: 1px solid var(--color-selected-line); background: var(--color-bg); }
 .canvas-workspace .react-flow__resize-control.handle::after { content: ""; position: absolute; inset: -8px; }
-.canvas-workspace .react-flow__resize-control.line { border-color: var(--color-focus); }
+.canvas-workspace .react-flow__resize-control.line { border-color: var(--color-selected-line); }
 .canvas-dock {
   position: absolute; z-index: var(--layer-toolbar); left: 50%; bottom: 20px; transform: translateX(-50%);
   max-width: calc(100% - 32px); box-sizing: border-box; display: flex; gap: 8px; align-items: center;
   padding: 8px; border-radius: var(--radius-panel); background: var(--color-overlay);
   border: 1px solid var(--color-control-line); box-shadow: inset 0 1px 0 var(--color-glass-hi), var(--shadow-popover);
-  backdrop-filter: blur(8px); white-space: nowrap;
+  white-space: nowrap;
 }
 .canvas-dock-group { display: flex; align-items: center; gap: 4px; }
 .canvas-dock-group + .canvas-dock-group { border-left: 1px solid var(--color-line-strong); padding-left: 8px; }
@@ -124,7 +133,7 @@
   .canvas-dock { bottom: 20px; }
 }
 @media (max-width: 639px) {
-  .studio-canvas-app > .sample-topbar { min-height: 56px; padding-inline: 16px; }
+  .studio-canvas-app > .studio-topbar { min-height: 56px; padding-inline: 16px; }
   .canvas-project-control { left: 12px; top: 12px; max-width: calc(100% - 108px); }
   .canvas-project-control .studio-select-trigger { max-width: 140px; }
   .canvas-project-menu { right: 12px; top: 12px; }

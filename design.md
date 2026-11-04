@@ -1,81 +1,44 @@
 # Reference Studio — design system
 
-This is the canonical implementation specification for Reference Studio's own interface. Read it before building or changing Studio UI, CSS, shared controls, canvas chrome, loading presentation, or interface motion.
+Canonical visual specification for Studio's own interface. Read it before changing Studio UI, CSS, shared controls, canvas chrome, or interface motion. Change a value only for an accessibility failure, an implementation constraint, or accepted feedback, and record the reason here.
 
-The user accepted the execution plan and requested this repository document on 2026-10-23. The visual direction is a cohesive modern interface like the supplied ASCII Reveal site: rounded layered surfaces, fine borders, crisp sans-serif content, pill controls, and restrained monospace details that belong with its loader. A rendered Studio sample still needs visual review; this document does not claim the new system is already implemented.
+This root file is Studio's interface. An exported project `design.md` belongs to that project and must not replace this file or restyle Studio.
 
-## Document ownership
+This file is the whole visual spec. There is no separate reading route.
 
-- This file owns Studio's design intent, exact tokens, component recipes, responsive behavior, and visual acceptance criteria.
-- [Product boundaries](docs/PRODUCT.md) own product intent and scope. [Design and motion scope](docs/DESIGN_AND_MOTION.md) owns target-project systems, fixture comparison, evidence, and approval boundaries.
-- [AGENTS.md](AGENTS.md) and [client rules](.cursor/rules/web-client.mdc) own engineering conduct. [STATUS.md](docs/STATUS.md) records shipped behavior and verification. The existing Cursor plan owns task order and milestone acceptance.
-- This root file is a repository design specification. Future exported project-specific `design.md` documents belong to the selected target project/revision; do not overwrite this file with an export or apply Studio's palette to all projects.
-- Use the baseline values below when implementing. Adjust them for a demonstrated accessibility problem, implementation constraint, or user feedback, and update this file with the reason. Read current source before editing: design targets are not proof that components or capabilities exist.
-- For a design/plan discrepancy, keep design details here and task dependencies in the plan. Reconcile the stale pointer or instruction rather than silently implementing two versions. Material new product intent requires clarification.
+Task order is in [PLAN.md](PLAN.md). Evidence is in [docs/STATUS.md](docs/STATUS.md). Product scope is [docs/PRODUCT.md](docs/PRODUCT.md). Target-project systems are [docs/DESIGN_AND_MOTION.md](docs/DESIGN_AND_MOTION.md). History is [docs/design/decisions.md](docs/design/decisions.md). `#/studio`-only behavior is [docs/design/specimen.md](docs/design/specimen.md). Save, conflict, draft, and board behavior is [docs/design/behaviour.md](docs/design/behaviour.md).
 
-## Reading route
+## Core rules
 
-For any UI task, read sections 1–7 for the visual foundation, then the affected recipes in sections 8–14 and implementation guidance in sections 15–18. A component is complete only when its relevant states and composition have been checked.
+1. Tokens live only on `.studio-ui` in `apps/web/src/client/styles.css`. Feature CSS does not add a second palette or a raw color.
+2. Every control is a Studio primitive. No raw `<input>`, `<textarea>`, or `<button>` outside those primitives.
+3. Feature CSS does layout only: grid, gap, and position. Color, border, radius, shadow, and transition stay on the primitive.
+4. A missing state extends the owning primitive and its `#/studio` specimen in the same change.
+5. Selection is the brighter glass edge (`--color-selected-bg`, `--color-selected-line`). Blue is the focus ring and links only.
+6. One primary action per group. Status uses a semantic color plus text. Preferences are never ranked with success or danger.
+7. Prose, names, observations, and help text use sans. Mono is counts, IDs, timestamps, revisions, and units.
+8. No global element selectors. Target previews render outside `.studio-ui`.
+9. Motion uses `studioMotion.ts`, honors reduced motion, and never delays input. Demo latency stays on `#/studio`.
+10. Check the changed screen and `#/studio`: both themes, phone width, keyboard, and reduced motion.
 
-## Reference and interpretation
+## Materials
 
-- [Live reference](https://quanhoangindex.github.io/ascii-reveal/)
-- [ASCII Reveal repository and API](https://github.com/quanhoangindex/ascii-reveal)
-- [Reference site styles](https://github.com/quanhoangindex/ascii-reveal/blob/main/demo/src/styles.css)
+Reference cards are glass: `--color-surface`, a 1px control line, an inset highlight, and `backdrop-filter: blur(16px) saturate(160%)`.
 
-The reference site and source were inspected during the 2026-10-23 plan review. Use its relationship between modern components and ASCII as the visual model; the user specifically emphasized how the surrounding design and loading effect match. Inspect the current upstream source/types when integrating the effect. Its version/API/performance can change; repository observations are not a guarantee about a future installed release.
+Glass controls and the top bar use `blur(14px) saturate(160%)`. There is no second 8px blur.
 
-## Detailed specification
+Board nodes and group frames are opaque. They do not use backdrop blur. A selected node or group frame takes the brighter glass edge and never a blue perimeter. Product screens use this accepted system in both themes.
 
-**Specification status:** accepted system, revision 3, 2026-10-27. The user reviewed the rendered `#/studio` specimen, including its layout, glass materials, and ASCII loading treatments, and accepted it as the Studio interface. Product screens use this system. Dialog offset and glass live on the inner sheet so the native dialog stays in the top layer. It does not seed or constrain a target project's design-system records.
+Dialogs, menus, popovers, option lists, the dock, the inspector, and other overlays are solid. They use opaque `--color-overlay` (light `#ffffff`, dark `#1c1c22`), the inset highlight, and the popover shadow. They do not use backdrop-filter. Card glass is not readable over a populated board, so it stays on reference cards only.
 
-### 1. Design language and hierarchy
+Focus is a 2px `--color-focus` outline with a 2px offset, outside the selection edge.
 
-The interface should share the demo's polished modern feeling: glass cards, a hairline ruled frame, crisp sans-serif content, pill controls, and a quiet glyph field behind the glass. Images remain the strongest color. The modern components should visually belong with the ASCII loader even in a resting screenshot. ASCII is an accent within this language; do not turn the application into a terminal dashboard.
+## Tokens
 
-Use three visual levels:
-1. **Material:** original reference imagery, the selected experiment, or the active direction is the focal point.
-2. **Tools:** project navigation, toolbar, inspector, and forms use restrained surfaces with readable labels.
-3. **Instrumentation:** counts, revision labels, coordinates, section indices, dividers, and sparse glyphs use small monospace details.
-
-Use a neutral solid pill for the one primary action. Blue is for focus and links. Selection is a brighter glass edge, the same treatment as the demo's pressed segment, not a blue wash. Semantic colors are only for actual status. Aesthetic preferences never use success/error colors as quality rankings. No marketing hero, oversized brand lockup, rainbow brand mark, CRT scanlines, neon bloom, glitching controls, or animated wallpaper.
-
-### 2. Semantic color tokens
-
-Implement the following on the Studio scope in `styles.css`. Default follows OS preference; `data-studio-theme="light|dark"` on a Studio scope overrides it for preview/testing. Do not let that attribute select target preview styles. Surfaces are the ascii-reveal demo's glass, not opaque panels. The library keeps its current theme until that glass is accepted on the specimen.
+Assign these on `.studio-ui`. Light is the default. Dark follows the OS unless `data-studio-theme` is set on that scope. Do not let that attribute style a target preview.
 
 ```css
-/* Dark — ascii-reveal demo */
---color-bg: #08080a;
---color-surface: rgb(20 20 26 / 44%);          /* glass */
---color-surface-raised: rgb(255 255 255 / 8.5%); /* glass-strong */
---color-surface-hover: rgb(255 255 255 / 12%);
---color-field: rgb(0 0 0 / 34%);               /* sunken */
---color-ink: #ededef;
---color-muted: #a3a3ac;
---color-subtle: #878791;                       /* faint */
---color-line: rgb(255 255 255 / 9%);
---color-line-strong: rgb(255 255 255 / 20%);
---color-control-line: rgb(255 255 255 / 11%);  /* glass-line, an inset ring */
---color-glass-hi: rgb(255 255 255 / 20%);
---color-glass-shadow: rgb(0 0 0 / 60%);
---color-backdrop: rgb(255 255 255 / 20%);
---color-accent: #5b8cff;
---color-focus: #5b8cff;
---color-selected-bg: rgb(255 255 255 / 8.5%);
---color-selected-line: rgb(255 255 255 / 20%);
---color-solid: #ededef;
---color-on-solid: #08080a;
---color-success: #3dd68c;
---color-warning: #eac170;
---color-danger: #ff9ca9;
---color-danger-bg: #321a22;
---color-warning-bg: #302719;
---color-success-bg: #162c23;
---color-scrim: rgb(0 0 0 / 64%);
---color-decoration: rgb(237 237 239 / 7%);
-
-/* Light — ascii-reveal demo */
+/* Light */
 --color-bg: #f6f6f7;
 --color-surface: rgb(255 255 255 / 50%);
 --color-surface-raised: rgb(255 255 255 / 72%);
@@ -83,13 +46,13 @@ Implement the following on the Studio scope in `styles.css`. Default follows OS 
 --color-field: rgb(0 0 0 / 4.5%);
 --color-ink: #141416;
 --color-muted: #5f5f68;
---color-subtle: #686872;                       /* readable small metadata */
+--color-subtle: #686872;
 --color-line: rgb(0 0 0 / 8%);
 --color-line-strong: rgb(0 0 0 / 22%);
 --color-control-line: rgb(0 0 0 / 7%);
 --color-glass-hi: rgb(255 255 255 / 95%);
 --color-glass-shadow: rgb(30 30 60 / 14%);
---color-backdrop: rgb(0 0 0 / 20%);
+--color-overlay: #ffffff;
 --color-accent: #2f62f0;
 --color-focus: #2f62f0;
 --color-selected-bg: rgb(255 255 255 / 72%);
@@ -99,28 +62,38 @@ Implement the following on the Studio scope in `styles.css`. Default follows OS 
 --color-success: #0e8a55;
 --color-warning: #805600;
 --color-danger: #b4233b;
---color-danger-bg: #fff0f3;
---color-warning-bg: #fff5dd;
---color-success-bg: #eaf7ef;
 --color-scrim: rgb(20 20 22 / 36%);
---color-decoration: rgb(20 20 22 / 5%);
+
+/* Dark */
+--color-bg: #08080a;
+--color-surface: rgb(20 20 26 / 44%);
+--color-surface-raised: rgb(255 255 255 / 8.5%);
+--color-surface-hover: rgb(255 255 255 / 12%);
+--color-field: rgb(0 0 0 / 34%);
+--color-ink: #ededef;
+--color-muted: #a3a3ac;
+--color-subtle: #878791;
+--color-line: rgb(255 255 255 / 9%);
+--color-line-strong: rgb(255 255 255 / 20%);
+--color-control-line: rgb(255 255 255 / 11%);
+--color-glass-hi: rgb(255 255 255 / 20%);
+--color-glass-shadow: rgb(0 0 0 / 60%);
+--color-overlay: #1c1c22;
+--color-accent: #5b8cff;
+--color-focus: #5b8cff;
+--color-selected-bg: rgb(255 255 255 / 8.5%);
+--color-selected-line: rgb(255 255 255 / 20%);
+--color-solid: #ededef;
+--color-on-solid: #08080a;
+--color-success: #3dd68c;
+--color-warning: #eac170;
+--color-danger: #ff9ca9;
+--color-scrim: rgb(0 0 0 / 64%);
 ```
 
-Rules:
-- Text on surface/background uses ink, muted, or subtle. Muted remains readable, not decorative gray.
-- Glass controls use no solid stroke. Their edge is `box-shadow: inset 0 0 0 1px var(--color-control-line), inset 0 1px 0 var(--color-glass-hi)` plus `backdrop-filter: blur(14px) saturate(160%)`. Decorative separators use line. Focus uses the accent ring and stays separate from selection.
-- Primary buttons use solid/on-solid, `box-shadow: none`, and hover `color-mix(in srgb, var(--color-solid) 88%, var(--color-bg))`.
-- Secondary actions are glass pills. Ghost actions are transparent with no resting ring. Destructive actions use danger text and an explicit verb.
-- Disabled controls use opacity 0.65 with the same glass or solid fill. Disabled is never a dashed wireframe and never a selected style.
-- Overlay surface is `--color-overlay: color-mix(in srgb, var(--color-bg) 92%, var(--color-surface-raised))`. Use it for dialogs, modal inspectors, menus, and option lists. Thin translucent card material is insufficient for form text above a populated collection. Keep the inset highlight and blur; increase surface opacity rather than dimming the form text.
-- Selected cards and pressed segments use the brighter glass fill and line-strong edge. Do not put a blue wash or blue ring on a card or a pressed button.
-- Verify actual rendered combinations at >=4.5:1 for normal text, >=3:1 for large text and essential control/focus graphics. Record failures and token fixes; alpha decorative colors are exempt only when they convey no information.
-
-### 3. Type, iconography, and numeric information
-
 ```css
---font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
---font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+--font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+--font-mono: "Geist Mono", ui-monospace, monospace;
 --type-page: 600 24px/32px var(--font-sans);
 --type-section: 600 18px/26px var(--font-sans);
 --type-card: 600 17px/24px var(--font-sans);
@@ -129,6 +102,7 @@ Rules:
 --type-caption: 400 13px/20px var(--font-sans);
 --type-meta: 400 12px/18px var(--font-mono);
 --type-numeric: 500 13px/20px var(--font-mono);
+<<<<<<< HEAD
 ```
 
 - Page title tracking -0.02em; section/card -0.01em; body/control 0; uppercase section indices +0.06em. Use uppercase only for short instrument labels, not sentences or every field.
@@ -381,35 +355,43 @@ The collection toolbar exposes **Demo latency**, default 1.2 seconds, with No de
 --motion-menu: 120ms;
 --motion-panel: 160ms;
 --motion-dialog: 160ms;
+=======
+--space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+--space-5: 20px; --space-6: 24px; --space-8: 32px;
+--radius-control: 12px; --radius-card: 20px; --radius-panel: 20px;
+--radius-dialog: 20px; --radius-pill: 999px;
+--control-default: 36px; --control-touch: 44px;
+--motion-feedback: 180ms; --motion-press: 50ms; --motion-release: 120ms;
+--motion-menu: 120ms; --motion-panel: 160ms; --motion-dialog: 160ms;
+>>>>>>> e6ad89c4b5007dde7785a2b012fe1362d5f473ed
 --ease-interface: cubic-bezier(0.2, 0, 0, 1);
---ease-surface: ease;
 --ease-press: cubic-bezier(0.2, 0.7, 0.2, 1);
 ```
 
-- Feedback animates surface/edge/shadow only. The press/release roles apply only to action buttons. Text input, focus, selection intent, and save state remain synchronous. No `transition:all`, card lift, image zoom, or hover animation on disabled controls.
-- Menu enters with opacity + at most 4px offset; panel at most 8px; dialog opacity + 4px, no scale zoom. Entry never delays focus/action availability.
-- Keep mounted content during exit only if focus and semantics remain correct; once logically closed it is inert and inaccessible. Expandable panels use intrinsic grid rows (0fr/1fr) rather than guessed max-heights. On reversal continue from current visual state; no accumulated queues or delayed click handling.
-- OS reduce: all these durations 0ms, transforms absent, skeleton static. Runtime preference changes immediately finish active decoration/transitions.
-- Studio motion tokens and CSS stay synchronized with studioMotion.ts. Share one reduced-motion policy across library, preview, adapter, and panels; target recipes keep their own validated reduced behavior inside fixtures.
+Text on a surface uses ink, muted, or subtle. Primary buttons use solid / on-solid and no shadow. Disabled controls are 65% opacity. Normal text stays at least 4.5:1.
 
-### 15. Implementation ownership and definition of done
+## Library filters
 
-- `styles.css`: semantic/theme tokens, primitive recipes, feature layout. Migrate current `--bg/--ink/--serif` aliases deliberately; remove serif consumers and literal radii only after replacing them. No second competing stylesheet theme.
-- Existing `StudioPreview`: living specimen of every recipe/state above, with realistic temporary imagery, long names, Vietnamese text, plain/reduced modes, keyboard-accessible controls. Preview controls must be labeled samples.
-- Reuse implemented `StudioButton`, `StudioField`, `StudioSelect`, `StudioReferenceCard`, `StudioInspector`, `StudioMenu`, `StudioDialog`, `StudioLoadingRegion`, `StudioLoadingMedia`, `StudioSkeleton`, and `StudioReveal`; see sections 7 and 19 for their contracts. Create additional status or ingestion modules only as screens consume them. Do not add a design framework or copy their presentation into each feature.
-- Hooks own request state and retained editor intent; service operations keep validation, persistence, revisions, idempotency, and events. The visual work cannot reimplement those in component-local storage.
-- Specimen coverage per component: rest, hover, keyboard focus, active/selected, disabled, busy, invalid, error/conflict, long content, phone, both themes, reduced motion. Mark nonapplicable states explicitly rather than fake them.
-- Review three compositions: populated collection + inspector; populated two-direction board; dropdown A/B playground. The sample first demonstrates the collection; later screens reuse the same tokens and control rules.
-- Acceptance evidence: screenshots establish resting appearance; keyboard traces establish focus/activation; request scenarios establish truthful states; recordings/timings establish animation and interruption. Capture actual before/after content readiness and cleanup behavior.
-- Specific visual checks: no warm paper/serif remnants in Studio chrome; no giant connection card; no inline full editor on every reference; no unexplained selected colors; no ASCII over images or active text; no misleading approval/winner badge; all primary actions and field errors readable in both themes.
-- Finish with the M2.10 functional/accessibility/performance gate. If a specification decision fails real usage, record the concrete issue and revise this baseline instead of silently leaving inconsistent exceptions.
+Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one optional field. Active filters are chips, with one Clear button. Choosing a kind, or committing the tag, applies that filter in one click. There is no separate Apply step and no disclosure. The controls fit on one wrapping row at 390px. Keyword search still submits on Enter. This is the target recipe. The current stacked Library form stays until a later task builds it.
 
-### 16. Implementation contracts and style resolution
+## Shared components
 
-**Theme resolution:** set light defaults on the Studio scope, apply OS dark values only without an explicit theme, then explicit light/dark overrides. Apply `color-scheme` consistently to native controls. The two color lists in section 2 are assignment sets for these scopes, not two consecutive blocks to paste into the same selector. Keep portal-based popovers in the Studio theme scope; native dialogs must inherit it too. Target previews use their own isolated root and cannot inherit Studio's component rules accidentally.
+| Primitive | Module | Contract |
+| --- | --- | --- |
+| Button | `StudioButton.tsx` | `primary`, `secondary`, `ghost`, `danger`. Busy keeps the label and blocks a second submit. |
+| Field | `StudioField.tsx` | Visible label, helper, error, and `aria-describedby`. `StudioTextArea` uses the same anatomy. |
+| Select | `StudioSelect.tsx` | Short option list, keyboard, popover kept in the dialog or Studio scope. |
+| Card | `StudioReferenceCard.tsx` | Glass card, reserved media, selected glass edge, named Open details. |
+| Dialog | `StudioDialog.tsx` | Native dialog, focus return. The dialog element itself has no filter or transform. |
+| Inspector | `StudioInspector.tsx` | Opens only from an explicit action. Close stays reachable. |
+| Menu | `StudioMenu.tsx` | Commands, not values. Focus returns to the trigger. |
+| Zoom | `StudioZoomControl.tsx` | Bare vertical zoom. No enclosing card. |
+| Inline text | `BoardInlineText.tsx` | Note and group-name editing on the board. |
+| Loading | `StudioLoadingRegion.tsx`, `StudioSkeleton.tsx`, `StudioReveal.tsx` | Real pending state. The specimen timer stays on `#/studio`. |
 
-**Style order:** tokens and theme → base/native elements → shared primitives → feature layouts → responsive overrides → reduced-motion overrides. Scope feature styles by a Studio class/data attribute. Do not apply global `button`, heading, or font overrides inside target fixtures. Use token values directly in the shared layer; a feature may choose a named variant, not invent a subtly different button or gray.
+The board fills the viewport under a compact header. There is no permanent project rail and no view switch. A healthy connection has no persistent control. Library and Inspector share one side panel from 960px up. Below that, details are a modal sheet. Phone width keeps labeled dock actions.
 
+<<<<<<< HEAD
 **Component inputs:** a button accepts a visual variant, size, disabled/busy state, native attributes, and children; it owns presentation and duplicate-activation behavior, not API writes. A field links its label, helper, and error to a stable input ID and passes native validation/accessibility attributes. A status receives a meaningful state and text; it cannot infer success from a timeout. Menus/dialogs receive open/close intent and restore focus; records and mutations remain with feature owners.
 
 **State precedence:** visible blocking error/conflict takes precedence over an old Saved notice. Dirty is scoped to a record and draft generation. Saving describes the submitted generation; if the user edits again, retain that newer dirty state when the response returns. Disabled, busy, selected, and invalid are independent inputs: selected styling does not erase invalid feedback, and a busy indicator never erases a field label.
@@ -466,3 +448,6 @@ Adopt `.studio-ui` once at the screen shell, use named variants, and keep featur
 Canvas recovery status must stay clear of an open desktop panel, including long errors and their Retry action. Reserve space beside the panel rather than increasing the status layer over it. Below 640px the native inspector sheet spans the viewport, including its browser scrollbar gutter; its Close action remains reachable. These composition corrections preserve the accepted materials and control recipes.
 
 When a new state or control is necessary, extend the owning primitive and its specimen in the same task. Verify the actual composition, applicable interaction states, long/Vietnamese text, missing/loading media, both themes, keyboard, phone/short-window reflow, and reduced motion. Run `e2e/studio.spec.ts` for changed shared interactions alongside relevant feature checks. Update this document only for a justified recipe change; update STATUS with observed evidence and limitations. Future agents should follow this implementation without asking the user to redesign each UI part.
+=======
+`.studio-sample` is specimen decoration and stays on `#/studio`. Product chrome uses `studio-*` class names. The preview page keeps `sample-*`.
+>>>>>>> e6ad89c4b5007dde7785a2b012fe1362d5f473ed

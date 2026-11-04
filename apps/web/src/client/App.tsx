@@ -74,15 +74,15 @@ function AppContent() {
 
   return (
     <div className="studio-ui studio-canvas-app" data-reduced-motion={reducedMotion ? "true" : "false"} style={studioMotionStyle(reducedMotion)}>
-      <header className="sample-topbar">
-        <p className="sample-wordmark">Reference Studio</p>
+      <header className="studio-topbar">
+        <p className="studio-wordmark">Reference Studio</p>
         {import.meta.env.DEV ? <a href="#/studio">Interface preview</a> : null}
       </header>
       {connection.state === "reconnecting" ? (
-        <div className="sample-banner" role="status">Reconnecting. Current data may be stale.<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
+        <div className="studio-banner" role="status">Reconnecting. Current data may be stale.<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
       ) : null}
       {connection.state === "unavailable" ? (
-        <div className="sample-banner" role="status">{status.detail}<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
+        <div className="studio-banner" role="status">{status.detail}<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
       ) : null}
       {libraryVisible ? (
         <ProjectScreen
@@ -99,8 +99,8 @@ function AppContent() {
           }
         />
       ) : (
-        <main className="sample-frame">
-          <p className="sample-loading-status" role="status">{status.title}</p>
+        <main className="studio-frame">
+          <p className="studio-loading-status" role="status">{status.title}</p>
         </main>
       )}
       <div className="studio-layer" />
