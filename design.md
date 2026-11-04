@@ -132,4 +132,4 @@ Text on a surface uses ink, muted, or subtle. Primary buttons use solid / on-sol
 
 The board fills the viewport under a compact header. There is no permanent project rail and no view switch. A healthy connection has no persistent control. Library and Inspector share one side panel from 960px up. Below that, details are a modal sheet. Phone width keeps labeled dock actions.
 
-`.studio-sample` is specimen decoration and stays on `#/studio`.
+`.studio-sample` is specimen decoration and stays on `#/studio`. Product chrome uses `studio-*` class names. The preview page keeps `sample-*`.

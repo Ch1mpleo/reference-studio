@@ -51,7 +51,7 @@ export function LinkForm({
   return (
     <form className="reference-form" aria-label="Add a link" onSubmit={(event) => void submit(event)}>
       <StudioField id="reference-link" name="url" label="Link" type="url" inputMode="url" required disabled={disabled} value={url} onChange={setUrl} />
-      <details className="sample-disclosure">
+      <details className="studio-disclosure">
         <summary>Title, source, and timing</summary>
         <StudioField id="reference-link-title" label="Title" value={title} maxLength={200} disabled={disabled} onChange={setTitle} />
         <StudioField id="reference-link-creator" label="Creator" value={creator} maxLength={200} disabled={disabled} onChange={setCreator} />
@@ -125,7 +125,7 @@ export function NoteForm({
   return (
     <form className="reference-form" aria-label="Add a note" onSubmit={(event) => void submit(event)}>
       <StudioTextArea id="reference-note" label="Note" value={body} required maxLength={20000} rows={4} disabled={disabled} onChange={setBody} />
-      <details className="sample-disclosure">
+      <details className="studio-disclosure">
         <summary>Title, source, and timing</summary>
         <StudioField id="reference-note-title" label="Title" value={title} maxLength={200} disabled={disabled} onChange={setTitle} />
         <StudioField id="reference-note-source" label="Source link" type="url" inputMode="url" value={sourceUrl} disabled={disabled} onChange={setSourceUrl} />

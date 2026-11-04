@@ -115,7 +115,7 @@ export function ProjectScreen({
         </form>
         <div className="restore-project studio-field">
           <label htmlFor="restore-backup">Restore backup</label>
-          <div className="sample-file">
+          <div className="studio-file">
             <input
               id="restore-backup"
               name="backup"
@@ -145,7 +145,7 @@ export function ProjectScreen({
         {!projectsLoading && active.length === 0 ? <p className="quiet">No active projects.</p> : null}
         <ProjectChoices projects={active} selectedId={selected?.id ?? null} onSelect={(id) => { select(id); setManaging(false); }} />
         {archived.length > 0 ? (
-          <details className="archived sample-disclosure">
+          <details className="archived studio-disclosure">
             <summary>Archived</summary>
             <ProjectChoices projects={archived} selectedId={selected?.id ?? null} onSelect={(id) => { select(id); setManaging(false); }} />
           </details>
@@ -154,7 +154,7 @@ export function ProjectScreen({
       <main className="project-canvas-main">
         {projects.length === 0 && !projectsLoading ? <><EmptyLibrary /><StudioButton variant="primary" className="canvas-start" onClick={() => setManaging(true)}>Create project</StudioButton></> : null}
         {projects.length > 0 && selected === null ? (
-          <div className="sample-empty">
+          <div className="studio-empty">
             <h2>Choose a project</h2>
             <p>Opening one here does not change the project selected in another tab.</p>
           </div>
@@ -202,8 +202,8 @@ function ProjectChoices({
 
 function EmptyLibrary() {
   return (
-    <div className="sample-empty">
-      <pre className="sample-motif" aria-hidden="true">{"[     ]\n[ ... ]"}</pre>
+    <div className="studio-empty">
+      <pre className="studio-motif" aria-hidden="true">{"[     ]\n[ ... ]"}</pre>
       <h1>Start with a reference</h1>
       <p>Name the project, then add an image, a link, or a note. You do not need a brief yet.</p>
       <p>Source and creator can stay unknown.</p>
@@ -316,7 +316,7 @@ function ProjectEditor({
           ]}
         />
       </div>
-      {project.status === "archived" ? <p className="sample-banner" role="status">Archived project. Reopen it to continue, or keep reading its references.</p> : null}
+      {project.status === "archived" ? <p className="studio-banner" role="status">Archived project. Reopen it to continue, or keep reading its references.</p> : null}
       {backupMessage !== null ? <p className="save-state" data-save-state={backupState}>{backupMessage}</p> : null}
       <StudioDialog
         open={detailsOpen}
@@ -340,7 +340,7 @@ function ProjectEditor({
           </p>
           <StudioField id="project-name" label="Name" value={draft.name} maxLength={200} required disabled={saveState === "saving"} onChange={(name) => edit({ name })} />
           <StudioTextArea id="project-brief" label="Brief" value={draft.brief} maxLength={20000} rows={6} disabled={saveState === "saving"} onChange={(brief) => edit({ brief })} />
-          <details className="sample-disclosure">
+          <details className="studio-disclosure">
             <summary>Audience, purpose, and constraints</summary>
             <StudioTextArea id="project-audience" label="Audience" value={draft.audience} maxLength={4000} rows={3} disabled={saveState === "saving"} onChange={(audience) => edit({ audience })} />
             <StudioTextArea id="project-purpose" label="Purpose" value={draft.purpose} maxLength={4000} rows={3} disabled={saveState === "saving"} onChange={(purpose) => edit({ purpose })} />

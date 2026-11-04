@@ -104,8 +104,8 @@ export function ReferenceSearch({
                   summary={<div className="reference-search-summary">
                     {reference.creator !== null ? <p className="studio-help">{reference.creator}</p> : null}
                     {reference.sourceUrl !== null ? (
-                      <a className="sample-url" href={reference.sourceUrl} rel="noreferrer noopener" target="_blank">
-                        <span className="sample-link-text">{reference.sourceUrl}</span>
+                      <a className="studio-url" href={reference.sourceUrl} rel="noreferrer noopener" target="_blank">
+                        <span className="studio-link-text">{reference.sourceUrl}</span>
                       </a>
                     ) : null}
                     {reference.creator === null && reference.sourceUrl === null ? (

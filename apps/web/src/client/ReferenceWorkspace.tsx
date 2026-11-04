@@ -248,11 +248,11 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       </div>
       <div hidden={panel !== "inspect"} className="canvas-panel-content">{selected ? <><h2>{selected.reference.title}</h2>
         {selected.reference.asset ? <><ImageRegions reference={selected.reference} annotations={annotations.filter((note) => note.target.type === "placement" && note.target.placementId === selected.placementId)} /><StudioButton onClick={() => view(selected.placementId)}>View image</StudioButton></> : null}
-        {selected.reference.sourceUrl ? <a className="sample-url" href={selected.reference.sourceUrl} target="_blank" rel="noreferrer">{selected.reference.sourceUrl}</a> : null}
+        {selected.reference.sourceUrl ? <a className="studio-url" href={selected.reference.sourceUrl} target="_blank" rel="noreferrer">{selected.reference.sourceUrl}</a> : null}
       </> : null}
         {references.filter((item) => visited.includes(item.placementId)).map((item) => <div key={item.placementId} hidden={item.placementId !== inspectedId}>
-          <details className="sample-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} /></details>
-          <details className="sample-disclosure"><summary>Usage and crop</summary><PlacementUse item={item} onSave={onSavePlacement} /></details>
+          <details className="studio-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} /></details>
+          <details className="studio-disclosure"><summary>Usage and crop</summary><PlacementUse item={item} onSave={onSavePlacement} /></details>
           {annotations.some((note) => note.target.type === "placement" && note.target.placementId === item.placementId) ? <details><summary>Attached notes</summary>{annotations.filter((note) => note.target.type === "placement" && note.target.placementId === item.placementId).map((note) => <p key={note.id}>{note.body || note.borrowedQuality}</p>)}</details> : null}
         </div>)}
       </div>

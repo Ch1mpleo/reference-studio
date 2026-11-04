@@ -6,13 +6,12 @@
   display: flex;
   flex-direction: column;
 }
-.studio-canvas-app > .sample-topbar { flex: none; width: 100%; max-width: none; padding-inline: 20px; }
-.studio-canvas-app > .sample-topbar .sample-connection { margin-left: auto; }
-.studio-canvas-app > .sample-banner { flex: none; margin: 0; }
-.studio-canvas-app > .sample-banner { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; }
+.studio-canvas-app > .studio-topbar { flex: none; width: 100%; max-width: none; padding-inline: 20px; }
+.studio-canvas-app > .studio-banner { flex: none; margin: 0; }
+.studio-canvas-app > .studio-banner { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; }
 .project-canvas-shell { flex: 1; position: relative; min-height: 0; width: 100%; }
 .project-canvas-main { height: 100%; min-height: 0; }
-.project-canvas-main > .sample-empty { padding: 100px 32px 24px; }
+.project-canvas-main > .studio-empty { padding: 100px 32px 24px; }
 .canvas-start { margin-left: 32px; }
 .canvas-project-control, .canvas-project-menu {
   position: absolute; z-index: var(--layer-toolbar); top: 16px; display: flex; gap: 8px; align-items: center;
@@ -133,7 +132,7 @@
   .canvas-dock { bottom: 20px; }
 }
 @media (max-width: 639px) {
-  .studio-canvas-app > .sample-topbar { min-height: 56px; padding-inline: 16px; }
+  .studio-canvas-app > .studio-topbar { min-height: 56px; padding-inline: 16px; }
   .canvas-project-control { left: 12px; top: 12px; max-width: calc(100% - 108px); }
   .canvas-project-control .studio-select-trigger { max-width: 140px; }
   .canvas-project-menu { right: 12px; top: 12px; }
