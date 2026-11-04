@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { imageCropSchema, type ImageCrop, type ProjectReference } from "@reference-studio/core";
 import { ReferenceRequestError, type PlacementUseInput } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
+import { StudioField, StudioTextArea } from "./StudioField.js";
 import { StudioSelect } from "./StudioSelect.js";
 
 type CropDraft = {
@@ -103,25 +104,15 @@ export function PlacementUse({
           }}
         />
         </div>
-        <div className="studio-field">
-        <label htmlFor={notesId}>Usage notes</label>
-        <textarea
-          id={notesId}
-          value={draft.usageNotes}
-          maxLength={20000}
-          rows={3}
-          disabled={saveState === "saving"}
-          onChange={(event) => edit({ usageNotes: event.target.value })}
-        />
-        </div>
+        <StudioTextArea id={notesId} label="Usage notes" value={draft.usageNotes} maxLength={20000} rows={3} disabled={saveState === "saving"} onChange={(usageNotes) => edit({ usageNotes })} />
         {image ? (
           <>
             <p className="form-note">Crop is a fraction of the original image, from the top left. Leave every field empty to keep the whole image.</p>
             <div className="crop-grid">
-              <CropField id={`crop-x-${item.placementId}`} label="Crop x" value={draft.crop.x} disabled={saveState === "saving"} onChange={(x) => edit({ crop: { ...draft.crop, x } })} />
-              <CropField id={`crop-y-${item.placementId}`} label="Crop y" value={draft.crop.y} disabled={saveState === "saving"} onChange={(y) => edit({ crop: { ...draft.crop, y } })} />
-              <CropField id={`crop-width-${item.placementId}`} label="Crop width" value={draft.crop.width} disabled={saveState === "saving"} onChange={(width) => edit({ crop: { ...draft.crop, width } })} />
-              <CropField id={`crop-height-${item.placementId}`} label="Crop height" value={draft.crop.height} disabled={saveState === "saving"} onChange={(height) => edit({ crop: { ...draft.crop, height } })} />
+              <StudioField id={`crop-x-${item.placementId}`} label="Crop x" value={draft.crop.x} inputMode="decimal" disabled={saveState === "saving"} onChange={(x) => edit({ crop: { ...draft.crop, x } })} />
+              <StudioField id={`crop-y-${item.placementId}`} label="Crop y" value={draft.crop.y} inputMode="decimal" disabled={saveState === "saving"} onChange={(y) => edit({ crop: { ...draft.crop, y } })} />
+              <StudioField id={`crop-width-${item.placementId}`} label="Crop width" value={draft.crop.width} inputMode="decimal" disabled={saveState === "saving"} onChange={(width) => edit({ crop: { ...draft.crop, width } })} />
+              <StudioField id={`crop-height-${item.placementId}`} label="Crop height" value={draft.crop.height} inputMode="decimal" disabled={saveState === "saving"} onChange={(height) => edit({ crop: { ...draft.crop, height } })} />
             </div>
           </>
         ) : null}
@@ -138,33 +129,6 @@ export function PlacementUse({
         {message !== null ? <p className={saveState === "error" ? "form-error" : "form-note"}>{message}</p> : null}
       </form>
     </section>
-  );
-}
-
-function CropField({
-  id,
-  label,
-  value,
-  disabled,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div>
-      <label htmlFor={id}>{label}</label>
-      <input
-        id={id}
-        value={value}
-        inputMode="decimal"
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </div>
   );
 }
 

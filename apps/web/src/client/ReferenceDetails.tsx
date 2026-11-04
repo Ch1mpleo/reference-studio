@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { isHttpUrl, type LibraryReference } from "@reference-studio/core";
 import { ReferenceRequestError, type ReferenceDetailsInput } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
+import { StudioField, StudioTextArea } from "./StudioField.js";
 import { StudioSelect } from "./StudioSelect.js";
 
 type Draft = {
@@ -97,49 +98,10 @@ export function ReferenceDetails({
         Title, source, creator, tags, observations, and availability belong to this reference. They stay the same in every project.
       </p>
       <form onSubmit={(event) => void save(event)}>
-        <div className="studio-field">
-        <label htmlFor={titleId}>Title</label>
-        <input
-          id={titleId}
-          value={draft.title}
-          maxLength={200}
-          disabled={saveState === "saving"}
-          onChange={(event) => edit({ title: event.target.value })}
-        />
-        </div>
-        <div className="studio-field">
-        <label htmlFor={sourceId}>Source</label>
-        <input
-          id={sourceId}
-          value={draft.sourceUrl}
-          inputMode="url"
-          placeholder="Leave unknown"
-          maxLength={2000}
-          disabled={saveState === "saving"}
-          onChange={(event) => edit({ sourceUrl: event.target.value })}
-        />
-        </div>
-        <div className="studio-field">
-        <label htmlFor={creatorId}>Creator</label>
-        <input
-          id={creatorId}
-          value={draft.creator}
-          placeholder="Leave unknown"
-          maxLength={200}
-          disabled={saveState === "saving"}
-          onChange={(event) => edit({ creator: event.target.value })}
-        />
-        </div>
-        <div className="studio-field">
-        <label htmlFor={tagsId}>Tags</label>
-        <input
-          id={tagsId}
-          value={draft.tags}
-          placeholder="north, type"
-          disabled={saveState === "saving"}
-          onChange={(event) => edit({ tags: event.target.value })}
-        />
-        </div>
+        <StudioField id={titleId} label="Title" value={draft.title} maxLength={200} disabled={saveState === "saving"} onChange={(title) => edit({ title })} />
+        <StudioField id={sourceId} label="Source" value={draft.sourceUrl} inputMode="url" placeholder="Leave unknown" maxLength={2000} disabled={saveState === "saving"} onChange={(sourceUrl) => edit({ sourceUrl })} />
+        <StudioField id={creatorId} label="Creator" value={draft.creator} placeholder="Leave unknown" maxLength={200} disabled={saveState === "saving"} onChange={(creator) => edit({ creator })} />
+        <StudioField id={tagsId} label="Tags" value={draft.tags} placeholder="north, type" disabled={saveState === "saving"} onChange={(tags) => edit({ tags })} />
         <div className="studio-field">
         <label htmlFor={availabilityId}>Availability</label>
         <StudioSelect
@@ -157,17 +119,7 @@ export function ReferenceDetails({
         />
         <p className="form-note">Unknown stays unknown. Available means the material is on hand.</p>
         </div>
-        <div className="studio-field">
-        <label htmlFor={observationsId}>Observations</label>
-        <textarea
-          id={observationsId}
-          value={draft.observations}
-          maxLength={20000}
-          rows={3}
-          disabled={saveState === "saving"}
-          onChange={(event) => edit({ observations: event.target.value })}
-        />
-        </div>
+        <StudioTextArea id={observationsId} label="Observations" value={draft.observations} maxLength={20000} rows={3} disabled={saveState === "saving"} onChange={(observations) => edit({ observations })} />
         <div className="form-actions">
           <StudioButton type="submit" variant="primary" busy={saveState === "saving"} disabled={saveState === "saving" || (!dirty && overrideRevision === null)}>
             {overrideRevision === null ? "Save details" : "Save draft"}

@@ -3,6 +3,7 @@ import type { Project, UpdateProjectRequest } from "@reference-studio/core";
 import { ProjectRequestError } from "./projectApi.js";
 import { ReferenceCollection } from "./ReferenceCollection.js";
 import { StudioButton } from "./StudioButton.js";
+import { StudioField, StudioTextArea } from "./StudioField.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioMenu } from "./StudioMenu.js";
 import { StudioSelect } from "./StudioSelect.js";
@@ -106,18 +107,7 @@ export function ProjectScreen({
       </div>
       <StudioDialog open={managing} title="Projects" description="Create a project, open another, or restore a backup." onClose={() => setManaging(false)}>
         <form className="create-project library-rail-form" onSubmit={(event) => void submitProject(event)}>
-          <div className="studio-field">
-            <label htmlFor="new-project-name">New project</label>
-            <input
-              id="new-project-name"
-              name="name"
-              value={name}
-              maxLength={200}
-              required
-              disabled={creating}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
+          <StudioField id="new-project-name" name="name" label="New project" value={name} maxLength={200} required disabled={creating} onChange={setName} />
           <StudioButton type="submit" variant="primary" busy={creating} disabled={creating || name.trim() === ""}>
             {creating ? "Creating" : "Create"}
           </StudioButton>
@@ -348,28 +338,13 @@ function ProjectEditor({
             {saveState === "saved" ? "Saved" : null}
             {saveState === "error" ? "Save failed" : null}
           </p>
-          <div className="studio-field">
-            <label htmlFor="project-name">Name</label>
-            <input id="project-name" value={draft.name} maxLength={200} required disabled={saveState === "saving"} onChange={(event) => edit({ name: event.target.value })} />
-          </div>
-          <div className="studio-field">
-            <label htmlFor="project-brief">Brief</label>
-            <textarea id="project-brief" value={draft.brief} maxLength={20000} rows={6} disabled={saveState === "saving"} onChange={(event) => edit({ brief: event.target.value })} />
-          </div>
+          <StudioField id="project-name" label="Name" value={draft.name} maxLength={200} required disabled={saveState === "saving"} onChange={(name) => edit({ name })} />
+          <StudioTextArea id="project-brief" label="Brief" value={draft.brief} maxLength={20000} rows={6} disabled={saveState === "saving"} onChange={(brief) => edit({ brief })} />
           <details className="sample-disclosure">
             <summary>Audience, purpose, and constraints</summary>
-            <div className="studio-field">
-              <label htmlFor="project-audience">Audience</label>
-              <textarea id="project-audience" value={draft.audience} maxLength={4000} rows={3} disabled={saveState === "saving"} onChange={(event) => edit({ audience: event.target.value })} />
-            </div>
-            <div className="studio-field">
-              <label htmlFor="project-purpose">Purpose</label>
-              <textarea id="project-purpose" value={draft.purpose} maxLength={4000} rows={3} disabled={saveState === "saving"} onChange={(event) => edit({ purpose: event.target.value })} />
-            </div>
-            <div className="studio-field">
-              <label htmlFor="project-constraints">Constraints</label>
-              <textarea id="project-constraints" value={draft.constraints} maxLength={8000} rows={3} disabled={saveState === "saving"} onChange={(event) => edit({ constraints: event.target.value })} />
-            </div>
+            <StudioTextArea id="project-audience" label="Audience" value={draft.audience} maxLength={4000} rows={3} disabled={saveState === "saving"} onChange={(audience) => edit({ audience })} />
+            <StudioTextArea id="project-purpose" label="Purpose" value={draft.purpose} maxLength={4000} rows={3} disabled={saveState === "saving"} onChange={(purpose) => edit({ purpose })} />
+            <StudioTextArea id="project-constraints" label="Constraints" value={draft.constraints} maxLength={8000} rows={3} disabled={saveState === "saving"} onChange={(constraints) => edit({ constraints })} />
           </details>
           {message !== null ? <p className={saveState === "error" ? "form-error" : "form-note"}>{message}</p> : null}
         </form>

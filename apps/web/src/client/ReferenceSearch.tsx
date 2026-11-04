@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { LibraryReference, ProjectReference } from "@reference-studio/core";
 import { ReferenceRequestError, searchReferences } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
+import { StudioField } from "./StudioField.js";
 import { StudioSelect } from "./StudioSelect.js";
 import { StudioReferenceCard } from "./StudioReferenceCard.js";
 
@@ -61,22 +62,8 @@ export function ReferenceSearch({
   return (
     <form className="reference-form" onSubmit={(event) => void search(event)}>
       <h4>Find a reference</h4>
-      <label htmlFor="reference-search">Keyword</label>
-      <input
-        id="reference-search"
-        value={q}
-        maxLength={200}
-        disabled={status === "searching"}
-        onChange={(event) => setQ(event.target.value)}
-      />
-      <label htmlFor="reference-search-tag">Tag</label>
-      <input
-        id="reference-search-tag"
-        value={tag}
-        maxLength={40}
-        disabled={status === "searching"}
-        onChange={(event) => setTag(event.target.value)}
-      />
+      <StudioField id="reference-search" label="Keyword" value={q} maxLength={200} disabled={status === "searching"} onChange={setQ} />
+      <StudioField id="reference-search-tag" label="Tag" value={tag} maxLength={40} disabled={status === "searching"} onChange={setTag} />
       <label htmlFor="reference-search-kind">Kind</label>
       <StudioSelect
         id="reference-search-kind"

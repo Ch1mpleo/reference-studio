@@ -36,11 +36,11 @@
   --xy-resize-line-background-color-default: transparent;
   --xy-resize-line-border-color-default: transparent;
 }
-.canvas-workspace .react-flow__node-material { border: 0; border-radius: 8px; background: transparent; }
+.canvas-workspace .react-flow__node-material { border: 0; border-radius: var(--radius-control); background: transparent; }
 .canvas-workspace .react-flow__node-material:focus-visible { outline-offset: 6px; }
 .board-material {
   position: relative; width: 100%; height: 100%; border: 1px solid var(--color-line-strong);
-  border-radius: 8px; background: var(--color-bg); color: var(--color-ink);
+  border-radius: var(--radius-control); background: var(--color-bg); color: var(--color-ink);
 }
 .board-material > img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; user-select: none; }
 .canvas-workspace .react-flow__node.selected { outline: none; box-shadow: none; }
@@ -56,7 +56,7 @@
 .board-material-text { height: 100%; padding: 16px; box-sizing: border-box; overflow: hidden; }
 .board-material-text h3 { font: var(--type-card); margin: 8px 0; }
 .board-material-text > p:last-child { font: var(--type-caption); white-space: pre-wrap; overflow-wrap: anywhere; }
-.board-frame { position: relative; width: 100%; height: 100%; border: 1px solid var(--color-line-strong); border-radius: 12px; background: color-mix(in srgb, var(--color-ink) 3%, transparent); }
+.board-frame { position: relative; width: 100%; height: 100%; border: 1px solid var(--color-line-strong); border-radius: var(--radius-control); background: color-mix(in srgb, var(--color-ink) 3%, var(--color-bg)); }
 .board-frame-heading { height: 32px; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--color-line); font: var(--type-control); cursor: grab; }
 .board-frame-heading > span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .board-item-actions { position: absolute; bottom: calc(100% + 10px); left: 0; display: flex; gap: 4px; width: max-content; border-radius: var(--radius-pill); padding: 4px; background: var(--color-overlay); box-shadow: inset 0 0 0 1px var(--color-control-line), var(--shadow-popover); }
