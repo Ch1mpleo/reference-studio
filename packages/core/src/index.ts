@@ -107,3 +107,6 @@ export { annotationTargetSchema, boardAnnotationSchema, updateDirectionSchema, d
 export type { AnnotationTarget, BoardAnnotation } from "./board.js";
 export { systemContextSchema, motionSettingsSchema, designContentSchema, motionContentSchema, systemRecordSchema, createSystemSchema, updateSystemSchema, systemEntries, systemChildren, systemContexts, remapSystem } from "./systems.js";
 export type { SystemContext, MotionSettings, DesignContent, MotionContent, SystemRecord, SystemKind } from "./systems.js";
+
+export { motionVariantSchema } from "./systems.js";
+export type { MotionVariant } from "./systems.js";

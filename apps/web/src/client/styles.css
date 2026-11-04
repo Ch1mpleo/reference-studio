@@ -611,6 +611,11 @@ input[type="file"] {
 }
 
 .studio-dialog[open] { display: flex; opacity: 1; }
+
+/* Shared paired slider/number field; used by the canvas study and its specimen. */
+.studio-ui .studio-parameter-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 12px; }
+.studio-ui .studio-parameter input[type="range"] { min-height: 36px; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; accent-color: var(--color-solid); }
+.studio-ui .studio-parameter input[type="number"] { width: 100%; font: var(--type-numeric); }
 .studio-dialog[open] .studio-dialog-sheet { transform: none; }
 
 @starting-style {

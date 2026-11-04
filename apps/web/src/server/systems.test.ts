@@ -35,6 +35,39 @@ async function setup() {
 function first(board: Board) { return systemRecordSchema.parse(board.layout.systems?.[0]); }
 
 describe("direction systems", () => {
+  it("saves exact motion variants, rejects stale writes and remaps them in duplicates and backup restore", async () => {
+    const ctx = await setup();
+    const variant = { id: createId(), name: "Quiet dropdown", fixtureId: "dropdown", fixtureVersion: 2, presetOrigin: "spring", settings: { model: "physics-spring", mass: 1.2, stiffness: 240, damping: 14, initialVelocity: 0, units: "engine-defined", engine: { name: "motion", version: "14.9.0" } }, distancePx: 16, direction: "above", responsiveContext: "Narrow sidebar", reducedMotion: "instant", context: { rationale: "Keep repeated tasks responsive", provenance: { author: "human" } } };
+    const key = createId(), input = { kind: "motion", name: "Motion", expectedDirectionRevision: 1, content: { variants: [variant] } };
+    const created = await ctx.request(ctx.url, input, "POST", key);
+    expect(created.statusCode).toBe(201);
+    expect((await ctx.request(ctx.url, input, "POST", key)).json()).toEqual(created.json());
+    let board = boardSchema.parse(created.json()); const system = first(board);
+    if (system.kind !== "motion") throw new Error("Expected motion");
+    expect(system.content.variants![0]!.settings).toEqual(variant.settings);
+    const patch = { expectedRevision: system.revision, expectedDirectionRevision: board.layout.frames[0]!.revision, content: { ...system.content, variants: [{ ...variant, name: "Renamed" }] } };
+    expect((await ctx.request(`${ctx.url}/${system.id}`, patch, "PATCH")).statusCode).toBe(200);
+    expect((await ctx.request(`${ctx.url}/${system.id}`, patch, "PATCH")).statusCode).toBe(409);
+    board = await ctx.read();
+    const duplicated = await ctx.request(`${ctx.base}/directions/${ctx.directionId}/duplicate`, { expectedRevision: board.layout.frames[0]!.revision });
+    expect(duplicated.statusCode).toBe(201);
+    const graph = boardSchema.parse(duplicated.json());
+    const copy = graph.layout.systems!.find((entry) => entry.directionId !== ctx.directionId)!;
+    if (copy.kind !== "motion") throw new Error("Expected motion");
+    expect(copy.content.variants![0]!.id).not.toBe(variant.id);
+    expect(copy.content.variants![0]!.context.rationale).toBe(variant.context.rationale);
+    const archive = exportProjectBackup(ctx.database, ctx.dataDir, ctx.project.id);
+    const manifest = JSON.parse(readBackupZip(archive.bytes).get("backup.json")!.toString());
+    expect(manifest.formatVersion).toBe(5);
+    const restored = await ctx.upload("/api/projects/restore", archive.bytes, "variants.zip");
+    expect(restored.statusCode).toBe(201);
+    const project = projectSchema.parse(restored.json());
+    const restoredBoard = boardSchema.parse((await ctx.request(`/api/projects/${project.id}/board`, undefined, "GET")).json());
+    const restoredSystems = restoredBoard.layout.systems!;
+    const ids = restoredSystems.flatMap((entry) => entry.kind === "motion" ? (entry.content.variants ?? []).map((item) => item.id) : []);
+    expect(new Set(ids).size).toBe(2); expect(ids).not.toContain(variant.id);
+    for (const entry of restoredSystems) if (entry.kind === "motion") expect(entry.content.variants![0]!.settings).toEqual(variant.settings);
+  });
   it("remaps image guidance and its source region across duplication and backup restore", async () => {
     const ctx = await setup();
     const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
@@ -162,7 +195,7 @@ describe("direction systems", () => {
     expect(copied.content.tokens[0]!.context.feedbackAnnotationIds).toEqual([feedbackId]);
     expect(copied.content.tokens[0]!.context.decisionAnnotationIds[0]).not.toBe(decisionId);
     const backup = exportProjectBackup(ctx.database, ctx.dataDir, ctx.project.id);
-    expect(JSON.parse(readBackupZip(backup.bytes).get("backup.json")!.toString()).formatVersion).toBe(4);
+    expect(JSON.parse(readBackupZip(backup.bytes).get("backup.json")!.toString()).formatVersion).toBe(5);
     const boundary = "systemsBackup";
     const restored = await ctx.app.inject({ method: "POST", url: "/api/projects/restore", headers: { ...ctx.headers, "idempotency-key": createId(), "content-type": `multipart/form-data; boundary=${boundary}` }, payload: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="systems.zip"\r\nContent-Type: application/zip\r\n\r\n`), backup.bytes, Buffer.from(`\r\n--${boundary}--\r\n`)]) });
     expect(restored.statusCode).toBe(201);

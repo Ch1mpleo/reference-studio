@@ -114,7 +114,7 @@ describe("project boards", () => {
     expect(copied.find((entry) => entry.decision)?.decision?.annotationId).toBe(copied.find((entry) => entry.target.type === "placement")?.id);
     expect(ctx.events.filter((event) => event.type === "changed" && event.entity === "board")).toHaveLength(2);
     const backup = exportProjectBackup(ctx.database, ctx.dataDir, ctx.created.id);
-    expect(JSON.parse(readBackupZip(backup.bytes).get("backup.json")!.toString()).formatVersion).toBe(4);
+    expect(JSON.parse(readBackupZip(backup.bytes).get("backup.json")!.toString()).formatVersion).toBe(5);
     const boundary = "annotationsBackup";
     const restored = await ctx.app.inject({ method: "POST", url: "/api/projects/restore", headers: { ...ctx.headers, "idempotency-key": createId(), "content-type": `multipart/form-data; boundary=${boundary}` }, payload: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="board.zip"\r\nContent-Type: application/zip\r\n\r\n`), backup.bytes, Buffer.from(`\r\n--${boundary}--\r\n`)]) });
     expect(restored.statusCode).toBe(201);
@@ -335,7 +335,7 @@ describe("project boards", () => {
     const archive = readBackupZip(exported.bytes);
     const manifestBytes = archive.get("backup.json")!;
     const manifest = JSON.parse(manifestBytes.toString());
-    expect(manifest.formatVersion).toBe(4);
+    expect(manifest.formatVersion).toBe(5);
     expect(manifest.board).toMatchObject(ctx.layout);
     const restore = async (bytes: Buffer) => {
       const boundary = "boardBackup";

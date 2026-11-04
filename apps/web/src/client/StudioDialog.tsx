@@ -52,7 +52,7 @@ export function StudioDialog({ open, title, onClose, children, description, foot
       aria-labelledby={titleId}
       aria-describedby={description ? `${titleId}-description` : undefined}
       onKeyDown={(event) => {
-        if (event.key !== "Escape") {
+        if (event.key !== "Escape" || event.defaultPrevented) {
           return;
         }
         event.preventDefault();

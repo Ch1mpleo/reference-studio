@@ -42,10 +42,22 @@ const motionRecipeSchema = z.object({
   properties: z.array(z.object({ id: z.uuid(), name, from: z.string().max(4_000), to: z.string().max(4_000), unit: z.string().max(40) }).strict()).max(32).default([]),
   settings: motionSettingsSchema, presetId: z.uuid().nullable().default(null), interruption: text.default(""), reversal: text.default(""), repeat: text.default(""), inputTiming: text.default(""), focusTiming: text.default(""), contextOfUse: text.default(""), reducedMotion: text.default(""), noMotion: text.default(""), context,
 }).strict();
-export const motionContentSchema = z.object({
-  intent: text.default(""), roles: z.array(z.object({ id: z.uuid(), name, purpose: text, context }).strict()).max(64).default([]), presets: z.array(presetSchema).max(64).default([]), recipes: z.array(motionRecipeSchema).max(64).default([]), noAnimation: text.default(""), reducedMotion: text.default(""), context,
+export const motionVariantSchema = z.object({
+  id: z.uuid(), name, fixtureId: z.literal("dropdown"), fixtureVersion: z.literal(2),
+  presetOrigin: z.enum(["instant", "quick", "gentle", "spring"]), settings: motionSettingsSchema,
+  distancePx: z.number().finite().min(0).max(48), direction: z.enum(["above", "below", "left", "right"]),
+  responsiveContext: text, reducedMotion: z.literal("instant"), context,
 }).strict().superRefine((value, ctx) => {
-  uniqueChildren([value.roles, value.presets, value.recipes, value.recipes.flatMap((recipe) => recipe.properties)], ctx);
+  const settings = value.settings;
+  if (settings.model === "tween" && settings.durationMs > 5000) ctx.addIssue({ code: "custom", message: "Fixture duration exceeds 5000 ms." });
+  if (settings.model === "physics-spring" && (settings.engine.name !== "motion" || settings.engine.version !== "14.9.0" || settings.mass < 0.1 || settings.mass > 5 || settings.stiffness < 10 || settings.stiffness > 1000 || settings.damping < 1 || settings.damping > 100 || Math.abs(settings.initialVelocity) > 20)) ctx.addIssue({ code: "custom", message: "Unsupported fixture spring engine or bounds." });
+  if (value.context.basis !== "proposal" && value.context.observationMethod === "image-inspection") ctx.addIssue({ code: "custom", message: "A still image does not validate motion." });
+});
+export type MotionVariant = z.infer<typeof motionVariantSchema>;
+export const motionContentSchema = z.object({
+  variants: z.array(motionVariantSchema).max(64).optional(), intent: text.default(""), roles: z.array(z.object({ id: z.uuid(), name, purpose: text, context }).strict()).max(64).default([]), presets: z.array(presetSchema).max(64).default([]), recipes: z.array(motionRecipeSchema).max(64).default([]), noAnimation: text.default(""), reducedMotion: text.default(""), context,
+}).strict().superRefine((value, ctx) => {
+  uniqueChildren([value.roles, value.presets, value.recipes, value.recipes.flatMap((recipe) => recipe.properties), value.variants ?? []], ctx);
   if (value.recipes.some((recipe) => recipe.presetId !== null && !value.presets.some((preset) => preset.id === recipe.presetId))) ctx.addIssue({ code: "custom", message: "A recipe links to a missing preset." });
   if ([value.context, ...value.roles.map((role) => role.context), ...value.presets.map((preset) => preset.context), ...value.recipes.map((recipe) => recipe.context)].some((entry) => entry.basis !== "proposal" && entry.observationMethod === "image-inspection")) ctx.addIssue({ code: "custom", message: "Static images inform motion proposals; they cannot validate timing or interaction behavior." });
 });
@@ -64,7 +76,7 @@ export const createSystemSchema = z.discriminatedUnion("kind", [
 export const updateSystemSchema = z.object({ expectedRevision: z.number().int().positive(), expectedDirectionRevision: z.number().int().positive(), name: name.optional(), content: z.unknown().optional(), archived: z.boolean().optional() }).strict().refine((input) => Object.keys(input).length > 2, { message: "Change at least one system field." });
 
 export function systemEntries(system: SystemRecord): Array<{ id: string; context: SystemContext }> {
-  return system.kind === "design" ? [...system.content.tokens, ...system.content.components, ...system.content.layouts, ...system.content.imagery] : [...system.content.roles, ...system.content.presets, ...system.content.recipes];
+  return system.kind === "design" ? [...system.content.tokens, ...system.content.components, ...system.content.layouts, ...system.content.imagery] : [...system.content.roles, ...system.content.presets, ...system.content.recipes, ...(system.content.variants ?? [])];
 }
 export function systemContexts(system: SystemRecord): SystemContext[] { return [system.content.context, ...systemEntries(system).map((entry) => entry.context)]; }
 export function systemChildren(system: SystemRecord): Array<{ id: string }> { return [...systemEntries(system), ...(system.kind === "motion" ? system.content.recipes.flatMap((recipe) => recipe.properties) : [])]; }

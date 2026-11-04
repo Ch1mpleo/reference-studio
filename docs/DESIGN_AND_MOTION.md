@@ -90,7 +90,7 @@ Alongside static references, accept links to human-made interaction examples or 
 
 Keep source observations separate from proposals. If a reference shows a transition but its implementation is unknown, label any guessed duration or spring values as hypotheses. If the agent cannot inspect playback, record that limitation and use the human's description as attributed input.
 
-Use Studio's built-in playground for direct comparison and tuning. External agents build product-specific runnable experiments in the target repository. Store the preview URL, revision, steps to reproduce the interaction, available recording links, and review observations in Studio. Screenshots establish appearance but cannot establish timing or interruptibility.
+Use Studio's built-in canvas playground for direct comparison and tuning. Core experiments stay as movable board objects with contextual controls; a modal dialog is not the normal place to test an interaction. External agents build product-specific runnable experiments in the target repository. Store the preview URL, revision, steps to reproduce the interaction, available recording links, and review observations in Studio. Screenshots establish appearance but cannot establish timing or interruptibility.
 
 Review normal use, rapid repeated input, reversal midway through movement, keyboard input, supported small screens, and reduced motion. Include errors or loading when they affect the interaction. Compare an instant variant when the benefit of movement is unclear.
 
