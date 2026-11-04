@@ -29,6 +29,8 @@ Glass controls and the top bar use `blur(14px) saturate(160%)`. There is no seco
 
 Board nodes and group frames are opaque. They do not use backdrop blur. A selected node or group frame takes the brighter glass edge and never a blue perimeter. Product screens use this accepted system in both themes.
 
+Dialogs, menus, popovers, option lists, the dock, the inspector, and other overlays are solid. They use opaque `--color-overlay` (light `#ffffff`, dark `#1c1c22`), the inset highlight, and the popover shadow. They do not use backdrop-filter. Card glass is not readable over a populated board, so it stays on reference cards only.
+
 Focus is a 2px `--color-focus` outline with a 2px offset, outside the selection edge.
 
 ## Tokens
@@ -50,7 +52,7 @@ Assign these on `.studio-ui`. Light is the default. Dark follows the OS unless `
 --color-control-line: rgb(0 0 0 / 7%);
 --color-glass-hi: rgb(255 255 255 / 95%);
 --color-glass-shadow: rgb(30 30 60 / 14%);
---color-overlay: color-mix(in srgb, var(--color-bg) 92%, var(--color-surface-raised));
+--color-overlay: #ffffff;
 --color-accent: #2f62f0;
 --color-focus: #2f62f0;
 --color-selected-bg: rgb(255 255 255 / 72%);
@@ -76,7 +78,7 @@ Assign these on `.studio-ui`. Light is the default. Dark follows the OS unless `
 --color-control-line: rgb(255 255 255 / 11%);
 --color-glass-hi: rgb(255 255 255 / 20%);
 --color-glass-shadow: rgb(0 0 0 / 60%);
---color-overlay: color-mix(in srgb, var(--color-bg) 92%, var(--color-surface-raised));
+--color-overlay: #1c1c22;
 --color-accent: #5b8cff;
 --color-focus: #5b8cff;
 --color-selected-bg: rgb(255 255 255 / 8.5%);

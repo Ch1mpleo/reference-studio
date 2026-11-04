@@ -667,7 +667,7 @@ input[type="file"] {
   --color-selected-line: rgb(0 0 0 / 22%);
   --color-solid: #141416;
   --color-on-solid: #ffffff;
-  --color-overlay: color-mix(in srgb, var(--color-bg) 92%, var(--color-surface-raised));
+  --color-overlay: #ffffff;
   --color-solid-hover: color-mix(in srgb, var(--color-solid) 88%, var(--color-bg));
   --color-solid-pressed: #303038;
   --color-success: #0e8a55;
@@ -763,6 +763,7 @@ input[type="file"] {
   --color-success-bg: #162c23;
   --color-scrim: rgb(0 0 0 / 64%);
   --color-decoration: rgb(237 237 239 / 7%);
+  --color-overlay: #1c1c22;
   --highlight: inset 0 1px 0 var(--color-glass-hi);
   --shadow-popover: 0 24px 48px -28px var(--color-glass-shadow);
 }
@@ -800,6 +801,7 @@ input[type="file"] {
     --color-success-bg: #162c23;
     --color-scrim: rgb(0 0 0 / 64%);
     --color-decoration: rgb(237 237 239 / 7%);
+    --color-overlay: #1c1c22;
     --highlight: inset 0 1px 0 var(--color-glass-hi);
     --shadow-popover: 0 24px 48px -28px var(--color-glass-shadow);
   }
@@ -902,7 +904,6 @@ body:has(.studio-ui[data-studio-theme="light"]) {
   border-radius: var(--radius-dialog);
   background: var(--color-overlay);
   box-shadow: inset 0 1px 0 var(--color-glass-hi), var(--shadow-popover);
-  backdrop-filter: blur(18px) saturate(160%);
 }
 
 .studio-layer {
@@ -918,8 +919,8 @@ body:has(.studio-ui[data-studio-theme="light"]) {
 
 .studio-ui .studio-panel.is-open .studio-panel-content {
   border-color: var(--color-control-line);
+  background: var(--color-overlay);
   box-shadow: inset 0 1px 0 var(--color-glass-hi);
-  backdrop-filter: blur(16px) saturate(160%);
 }
 
 .studio-reference-card > * {
@@ -1771,7 +1772,6 @@ body:has(.studio-ui[data-studio-theme="light"]) {
   border-radius: 20px;
   background: var(--color-overlay);
   box-shadow: inset 0 1px 0 var(--color-glass-hi), var(--shadow-popover);
-  backdrop-filter: blur(18px) saturate(160%);
 }
 
 .studio-inspector-header,
@@ -1853,7 +1853,6 @@ body:has(.studio-ui[data-studio-theme="light"]) {
   background: var(--color-overlay);
   color: var(--color-ink);
   box-shadow: inset 0 1px 0 var(--color-glass-hi), var(--shadow-popover);
-  backdrop-filter: blur(18px) saturate(160%);
 }
 
 .studio-ui .studio-select-list button {
@@ -2142,7 +2141,6 @@ html:has(.studio-ui)::-webkit-scrollbar-thumb {
   border-radius: 16px;
   background: var(--color-overlay);
   box-shadow: inset 0 1px 0 var(--color-glass-hi), var(--shadow-popover);
-  backdrop-filter: blur(18px) saturate(160%);
   animation: sample-menu-in var(--motion-menu) var(--ease-interface);
 }
 
@@ -2279,9 +2277,8 @@ html:has(.studio-ui)::-webkit-scrollbar-thumb {
     border: 0;
     border-left: 1px solid var(--color-line);
     border-radius: 0;
-    background: color-mix(in srgb, var(--color-bg) 55%, transparent);
+    background: var(--color-overlay);
     box-shadow: none;
-    backdrop-filter: blur(18px) saturate(160%);
   }
 
   .sample-frame {
