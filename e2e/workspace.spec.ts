@@ -101,11 +101,21 @@ for (const phone of [false]) {
     const other = await createProject(page, `Harbor ${suffix}`);
     await toolbar(page).getByRole("button", { name: "Library", exact: true }).click();
     const library = panel(page, phone);
+    const librarySearch = () => page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/references" && response.request().method() === "GET";
+    });
     await library.getByLabel("Keyword", { exact: true }).fill(`North portrait ${suffix}`);
-    await library.getByLabel("Tag", { exact: true }).fill("quiet");
-    await library.getByRole("button", { name: "Kind", exact: true }).click();
-    await page.getByRole("option", { name: "Image", exact: true }).click();
-    await library.getByRole("button", { name: "Search", exact: true }).click();
+    const keywordSearch = librarySearch();
+    await library.getByLabel("Keyword", { exact: true }).press("Enter");
+    await keywordSearch;
+    await library.getByRole("textbox", { name: "Tag Optional", exact: true }).fill("quiet");
+    const tagSearch = librarySearch();
+    await library.getByRole("textbox", { name: "Tag Optional", exact: true }).press("Enter");
+    await tagSearch;
+    const kindSearch = librarySearch();
+    await library.getByRole("radio", { name: "Image", exact: true }).click();
+    await kindSearch;
     const card = library.locator(".reference-list .studio-reference-card");
     await expect(card).toHaveCount(1);
     await expect(card.locator("img")).toHaveCSS("object-fit", "contain");

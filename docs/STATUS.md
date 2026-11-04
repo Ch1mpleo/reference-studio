@@ -8,6 +8,15 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 - Active milestone: M2. The board/annotation foundation, direction-scoped draft design/motion records/editors, and trusted dropdown playground with local model-aware tuning are implemented. Ordinary work stays on the board with inline notes/simple groups and compact controls. M2.6 includes system-graph duplication and backup format 4; variant duplication remains part of M2.9 when those records ship. This does not complete all of M2.
 - Loader-specimen replay checkpoint: resolved on 2026-10-29. The failure was test synchronization with an already-running reveal; runtime animation behavior did not need changing.
 - Next task: M2.9 named persisted motion variants, exact settings/rationale, revision/conflict recovery, direction duplication, and backup integration. The merged branch already includes a canvas saved-variant section; that does not close this gate. M2.10 acceptance and M3 live MCP remain open.
+- Library search uses the kind radio, optional tag, and filter chips from design.md. Evidence is in the entry below.
+
+## Library segment filter — 2026-11-04
+
+Replaced the stacked Library search form with the kind segment on the dark desktop Studio. Kind is a radio group of Any, Image, Link, and Note and applies on selection, including arrow keys. Tag is an optional `StudioField` and commits on Enter, which is the text commit already used for keyword search, because the recipe has no Apply step. Active kind and tag values are removable chips. Clear removes those two filters and leaves the submitted keyword. Keyword still submits on Enter. Previous results stay while a request is in flight, a later response wins, and pagination resets when the query changes. The `/api/references` query is unchanged. `StudioSegment` owns the radio, the glass selection edge, and the `#/studio` specimen. Library CSS only wraps the row. There is no light theme and no phone layout in this control.
+
+**Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 39 files, 150 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 51 tests. Microsoft Edge is not installed in this environment, so the browser suite used Chrome. The new scenario selects Image from the keyboard, commits the tag `quiet`, removes that chip, and uses Clear, at 1440×900 dark with reduced motion. The dark Library capture is [docs/evidence/library-filters/desktop-dark.png](evidence/library-filters/desktop-dark.png).
+
+**Remaining:** human visual acceptance, native 200% zoom, and Edge were not run. The Vite main-chunk warning remains.
 
 ## M2.8 — Compare and tune on the canvas — 2026-11-02
 

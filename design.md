@@ -90,13 +90,14 @@ Text on a surface uses ink, muted, or subtle. Disabled controls are 65% opacity.
 
 ## Library filters
 
-Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one optional field. Active filters are chips, with one Clear button. Choosing a kind, or committing the tag, applies that filter in one click. There is no separate Apply step and no disclosure. The controls fit on one wrapping row. Keyword search still submits on Enter. This is the target recipe. The current stacked Library form stays until a later task builds it.
+Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one optional field. Active filters are chips, with one Clear button. Choosing a kind, or committing the tag, applies that filter in one click. There is no separate Apply step and no disclosure. The controls fit on one wrapping row. Keyword search still submits on Enter. The Library uses this recipe. The radio is the shared segment primitive so the Library does not invent a second control style. Its selected option uses the glass edge.
 
 ## Shared components
 
 | Primitive | Module | Contract |
 | --- | --- | --- |
 | Button | `StudioButton.tsx` | `primary`, `secondary`, `ghost`, `danger`. Busy keeps the label and blocks a second submit. |
+| Segment | `StudioSegment.tsx` | Radio group. Arrow keys move the selection. The selected option uses the glass edge. |
 | Field | `StudioField.tsx` | Visible label, helper, error, and `aria-describedby`. `StudioTextArea` uses the same anatomy. |
 | Parameter | `StudioParameter.tsx` | Labeled range and number. Invalid text stays visible. Only a finite in-range value updates the preview. |
 | Select | `StudioSelect.tsx` | Short option list, keyboard, popover kept in the dialog or Studio scope. |

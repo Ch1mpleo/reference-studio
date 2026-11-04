@@ -2,6 +2,7 @@ import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { StudioButton } from "./StudioButton.js";
 import { StudioField } from "./StudioField.js";
 import { StudioReferenceCard } from "./StudioReferenceCard.js";
+import { StudioSegment } from "./StudioSegment.js";
 import { StudioSelect } from "./StudioSelect.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioInspector } from "./StudioInspector.js";
@@ -183,6 +184,7 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
   const [savedId, setSavedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
+  const [filterKind, setFilterKind] = useState("");
   const [emptyCollection, setEmptyCollection] = useState(false);
   const [loadingState, setLoadingState] = useState<StudioLoadingState>("loaded");
   const [loadingMode, setLoadingMode] = useState<StudioLoadingMode>("reveal");
@@ -549,6 +551,13 @@ export function StudioPreview({ connection }: { connection?: SampleConnection })
         <div className="sample-specimen-grid">
           <section className="sample-control-section" aria-label="Appearance samples">
             <h3>Appearance</h3>
+            <p className="studio-help">Library kind</p>
+            <StudioSegment label="Library kind" value={filterKind} options={[
+              { value: "", label: "Any" },
+              { value: "image", label: "Image" },
+              { value: "link", label: "Link" },
+              { value: "note", label: "Note" },
+            ]} onChange={setFilterKind} />
             <label className="preview-switch">
               <input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} />
               Preview reduced motion
