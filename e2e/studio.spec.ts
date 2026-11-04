@@ -112,9 +112,9 @@ test("selects support keyboard traversal, Escape and Tab without trapping focus"
   await expect(page.getByRole("button", { name: "Collection", exact: true })).toBeFocused();
 });
 
-test("desktop and phone compositions fit both themes, including short dialogs", async ({ page }, info) => {
-  for (const width of [1440, 1100, 800, 390]) {
-    await page.setViewportSize({ width, height: width === 390 ? 480 : 900 });
+test("desktop compositions fit both themes, including short dialogs", async ({ page }, info) => {
+  for (const width of [1440, 1100]) {
+    await page.setViewportSize({ width, height: 900 });
     await openStudio(page);
     for (const theme of ["Light", "Dark"]) {
       await page.getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: theme, exact: true }).click();
@@ -122,7 +122,7 @@ test("desktop and phone compositions fit both themes, including short dialogs", 
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       const cards = page.locator(".sample-grid .studio-reference-card");
       await expect(cards).toHaveCount(5);
-      if (width === 1440 || width === 390) {
+      if (width === 1440) {
         await page.screenshot({ path: info.outputPath(`${width}-${theme.toLowerCase()}.png`), fullPage: true, animations: "disabled" });
       }
     }
@@ -133,39 +133,11 @@ test("desktop and phone compositions fit both themes, including short dialogs", 
     await expect(dialog.getByRole("button", { name: "Add note", exact: true })).toBeInViewport();
     await expect(dialog.getByRole("button", { name: "Close", exact: true })).toBeInViewport();
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-    if (width === 390) await dialog.screenshot({ path: info.outputPath("phone-dialog.png"), animations: "disabled" });
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
   }
 });
 
-
-test("compact inspector is modal, keeps the selection and restores the opener", async ({ page }) => {
-  for (const width of [800, 390]) {
-    await page.setViewportSize({ width, height: 700 });
-    await openStudio(page);
-    const opener = page.getByRole("button", { name: "Open details for Harbor morning", exact: true });
-    await opener.click();
-    const sheet = page.getByRole("dialog", { name: "Reference details" });
-    await expect(sheet).toBeVisible();
-    await expect(page.locator("html")).toHaveCSS("overflow", "hidden");
-    await expect(sheet.getByRole("button", { name: "Back", exact: true })).toBeFocused();
-    await sheet.getByRole("button", { name: "Role", exact: true }).click();
-    await expect(sheet.getByRole("listbox", { name: "Role", exact: true })).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(sheet).toBeVisible();
-    await expect(sheet.getByRole("listbox")).toHaveCount(0);
-    await sheet.getByRole("button", { name: "Role", exact: true }).click();
-    await page.keyboard.press("End");
-    await page.keyboard.press("Enter");
-    await expect(sheet.getByRole("button", { name: "Role", exact: true })).toContainText("Approved asset");
-    await sheet.getByRole("button", { name: "Back", exact: true }).click();
-    await expect(sheet).toBeHidden();
-    await expect(page.locator("html")).not.toHaveCSS("overflow", "hidden");
-    await expect(opener).toBeFocused();
-    await expect(opener.locator("xpath=ancestor::article")).toHaveClass(/is-selected/);
-  }
-});
 
 test("panel interruption stays operable at a zoom-equivalent reflow width", async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 480 });

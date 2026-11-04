@@ -59,15 +59,14 @@ test("detail selections load independently, preserve drafts and ignore an earlie
   await expect(inspector.locator("label[data-ar-t], input[data-ar-m], textarea[data-ar-t]")).toHaveCount(0);
 });
 
-test("dialog and phone details retain safe focus through loading; zero delay stays immediate", async ({ page }, info) => {
-  await page.setViewportSize({ width: 390, height: 640 });
+test("dialog and details retain safe focus through loading; zero delay stays immediate", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${server.origin}/#/studio`);
   const add = page.getByRole("button", { name: "Add reference", exact: true });
   await add.click();
   const dialog = page.getByRole("dialog", { name: "Add reference" });
   await expect(dialog.locator("form")).toHaveAttribute("aria-busy", "true");
   await expect(dialog.getByRole("button", { name: "Close", exact: true })).toBeFocused();
-  await dialog.screenshot({ path: info.outputPath("phone-dialog-loading.png") });
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator("dialog:not([open]) .ar-overlay, dialog:not([open]) canvas")).toHaveCount(0);
   await add.click();
@@ -82,11 +81,10 @@ test("dialog and phone details retain safe focus through loading; zero delay sta
   await page.getByRole("dialog", { name: "Discard changes" }).getByRole("button", { name: "Discard changes", exact: true }).click();
   await expect(add).toBeFocused();
   await page.getByRole("button", { name: "Open details for Harbor morning", exact: true }).click();
-  const details = page.getByRole("dialog", { name: "Reference details" });
+  const details = page.getByRole("complementary", { name: "Inspector" });
   await expect(details.locator(".studio-inspector-body")).toHaveAttribute("aria-busy", "true");
-  await expect(details.getByRole("button", { name: "Back", exact: true })).toBeFocused();
   await expect(details.locator(".studio-inspector-body")).not.toHaveAttribute("aria-busy", "true");
-  await details.getByRole("button", { name: "Back", exact: true }).click();
+  await details.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Demo latency", exact: true }).click();
   await page.getByRole("option", { name: "No delay", exact: true }).click();
   await page.getByRole("textbox", { name: "Search references" }).fill("Harbor morning");
@@ -107,21 +105,19 @@ test("reduced and plain loading cover cards and details without active canvas wo
   await expect(page.locator(".sample-grid")).not.toHaveAttribute("aria-busy", "true");
 });
 
-test("dark desktop and phone show the complete loading composition without overflow", async ({ page }, info) => {
-  for (const width of [1440, 390]) {
-    await page.setViewportSize({ width, height: width === 390 ? 640 : 960 });
-    await page.goto(`${server.origin}/#/studio`);
-    await page.getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: "Dark", exact: true }).click();
-    await page.getByRole("button", { name: "Reload screen sample", exact: true }).click();
-    await expect(page.locator(".sample-grid")).toHaveAttribute("aria-busy", "true");
-    await page.screenshot({ path: info.outputPath(`${width}-dark-screen-loading.png`), fullPage: true });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.getByRole("button", { name: "Open details for Harbor morning", exact: true }).click();
-    const inspector = width === 390 ? page.getByRole("dialog", { name: "Reference details" }) : page.getByRole("complementary", { name: "Inspector" });
-    await expect(inspector.locator(".studio-inspector-body")).toHaveAttribute("aria-busy", "true");
-    await inspector.screenshot({ path: info.outputPath(`${width}-dark-detail-loading.png`) });
-    await expect(inspector.locator(".studio-inspector-body")).not.toHaveAttribute("aria-busy", "true");
-    await expect(inspector.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("Harbor morning");
-    await inspector.getByRole("button", { name: width === 390 ? "Back" : "Close", exact: true }).click();
-  }
+test("dark desktop shows the complete loading composition without overflow", async ({ page }, info) => {
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.goto(`${server.origin}/#/studio`);
+  await page.getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: "Dark", exact: true }).click();
+  await page.getByRole("button", { name: "Reload screen sample", exact: true }).click();
+  await expect(page.locator(".sample-grid")).toHaveAttribute("aria-busy", "true");
+  await page.screenshot({ path: info.outputPath("1440-dark-screen-loading.png"), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Open details for Harbor morning", exact: true }).click();
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  await expect(inspector.locator(".studio-inspector-body")).toHaveAttribute("aria-busy", "true");
+  await inspector.screenshot({ path: info.outputPath("1440-dark-detail-loading.png") });
+  await expect(inspector.locator(".studio-inspector-body")).not.toHaveAttribute("aria-busy", "true");
+  await expect(inspector.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("Harbor morning");
+  await inspector.getByRole("button", { name: "Close", exact: true }).click();
 });

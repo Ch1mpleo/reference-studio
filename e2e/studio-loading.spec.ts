@@ -110,9 +110,9 @@ test("failure, retry and rapid reversals clean up; returning to the library remo
   expect(errors).toEqual([]);
 });
 
-test("both loading treatments keep media bounds in both themes and phone layouts", async ({ page }, info) => {
-  for (const width of [1440, 390]) {
-    await page.setViewportSize({ width, height: width === 390 ? 640 : 960 });
+test("both loading treatments keep media bounds in both themes", async ({ page }, info) => {
+  for (const width of [1440]) {
+    await page.setViewportSize({ width, height: 960 });
     const lab = await openLoadingSample(page);
     for (const theme of ["Light", "Dark"]) {
       await page.getByRole("group", { name: "Theme", exact: true }).getByRole("button", { name: theme, exact: true }).click();

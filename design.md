@@ -19,7 +19,7 @@ Task order is in [PLAN.md](PLAN.md). Evidence is in [docs/STATUS.md](docs/STATUS
 7. Prose, names, observations, and help text use sans. Mono is counts, IDs, timestamps, revisions, and units.
 8. No global element selectors. Target previews render outside `.studio-ui`.
 9. Motion uses `studioMotion.ts`, honors reduced motion, and never delays input. Demo latency stays on `#/studio`.
-10. Check the changed screen and `#/studio`: both themes, phone width, keyboard, and reduced motion.
+10. Check the changed screen and `#/studio`: both themes, keyboard, and reduced motion. Desktop is the target. No phone layout is required.
 
 ## Materials
 
@@ -117,7 +117,7 @@ Text on a surface uses ink, muted, or subtle. Primary buttons use solid / on-sol
 
 ## Library filters
 
-Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one optional field. Active filters are chips, with one Clear button. Choosing a kind, or committing the tag, applies that filter in one click. There is no separate Apply step and no disclosure. The controls fit on one wrapping row at 390px. Keyword search still submits on Enter. This is the target recipe. The current stacked Library form stays until a later task builds it.
+Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one optional field. Active filters are chips, with one Clear button. Choosing a kind, or committing the tag, applies that filter in one click. There is no separate Apply step and no disclosure. The controls fit on one wrapping row. Keyword search still submits on Enter. This is the target recipe. The current stacked Library form stays until a later task builds it.
 
 ## Shared components
 
@@ -135,6 +135,6 @@ Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one op
 | Inline text | `BoardInlineText.tsx` | Note and group-name editing on the board. |
 | Loading | `StudioLoadingRegion.tsx`, `StudioSkeleton.tsx`, `StudioReveal.tsx` | Real pending state. The specimen timer stays on `#/studio`. |
 
-The board fills the viewport under a compact header. There is no permanent project rail and no view switch. A healthy connection has no persistent control. Library and Inspector share one side panel from 960px up. Below that, details are a modal sheet. Phone width keeps labeled dock actions.
+The board fills the viewport under a compact header. There is no permanent project rail and no view switch. A healthy connection has no persistent control. Library and Inspector share one side panel. Desktop windows are the layout this interface is built for.
 
 `.studio-sample` is specimen decoration and stays on `#/studio`. Product chrome uses `studio-*` class names. The preview page keeps `sample-*`.

@@ -65,10 +65,10 @@ async function dropImage(page: Page) {
   await expect(page.locator(".canvas-status")).toContainText("Saved");
 }
 
-for (const phone of [false, true]) {
+for (const phone of [false]) {
   test(`collect, find, reuse, backup and restore in the ${phone ? "phone dark" : "desktop light"} workspace`, async ({ page }, info) => {
     test.setTimeout(60_000);
-    await page.setViewportSize({ width: phone ? 390 : 1440, height: phone ? 844 : 900 });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme: phone ? "dark" : "light", reducedMotion: phone ? "reduce" : "no-preference" });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -110,7 +110,6 @@ for (const phone of [false, true]) {
     await expect(card).toHaveCount(1);
     await expect(card.locator("img")).toHaveCSS("object-fit", "contain");
     await expect(card).toContainText("Studio acceptance fixture");
-    if (phone) expect((await library.boundingBox())?.width).toBe(390);
     await page.screenshot({ path: info.outputPath("library-shared-card.png") });
     await card.getByRole("button", { name: "Add to this project", exact: true }).click();
     await expect(card.getByRole("button", { name: "In this project", exact: true })).toBeDisabled();

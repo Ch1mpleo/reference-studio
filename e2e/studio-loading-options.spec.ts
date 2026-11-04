@@ -43,7 +43,7 @@ test("skeleton variants and speed reach the real shimmer; skeleton-only never st
   expect(errors).toEqual([]);
 });
 
-test("all reveal presets and origins run; slider/reset and phone layout retain valid settings", async ({ page }, info) => {
+test("all reveal presets and origins run, and slider reset keeps valid settings", async ({ page }) => {
   test.setTimeout(45_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -75,9 +75,6 @@ test("all reveal presets and origins run; slider/reset and phone layout retain v
   await expect(lab.getByRole("slider", { name: /Playback speed/ })).toHaveValue("1");
   await expect(lab.getByRole("button", { name: "Reveal preset", exact: true })).toContainText("Dither");
   await expect(lab.getByRole("button", { name: "Wave origin", exact: true })).toContainText("Center");
-  await page.setViewportSize({ width: 390, height: 700 });
-  await lab.screenshot({ path: info.outputPath("phone-loading-options.png") });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
 

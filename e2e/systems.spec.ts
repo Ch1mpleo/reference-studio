@@ -91,29 +91,20 @@ test("external system edits retain local drafts until explicit recovery", async 
   expect((await read(page, project.id)).layout.systems![0]!.content.intent).toBe("My unsaved mix");
 });
 
-test("phone and short-window editors retain drafts across tabs and archive/restore", async ({ page }, info) => {
-  await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
-  const { panel, design } = await setup(page, "Phone systems");
-  await design.getByLabel("System intent", { exact: true }).fill("Retained phone draft");
+test("system editor retains a draft across tabs and archive/restore", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const { panel, design } = await setup(page, "Desktop systems");
+  await design.getByLabel("System intent", { exact: true }).fill("Retained system draft");
   await panel.getByRole("button", { name: "Motion", exact: true }).click();
   await panel.getByRole("button", { name: "Design", exact: true }).click();
-  await expect(design.getByLabel("System intent", { exact: true })).toHaveValue("Retained phone draft");
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await expect(design.getByLabel("System intent", { exact: true })).toHaveValue("Retained phone draft");
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(design.getByLabel("System intent", { exact: true })).toHaveValue("Retained phone draft");
+  await expect(design.getByLabel("System intent", { exact: true })).toHaveValue("Retained system draft");
   await design.getByRole("button", { name: "Save system", exact: true }).click();
   await expect(design.getByRole("status")).toHaveText("Saved");
   await design.getByRole("button", { name: "Archive system", exact: true }).click();
   await expect(design.getByRole("button", { name: "Restore system", exact: true })).toBeVisible();
   await design.getByRole("button", { name: "Restore system", exact: true }).click();
   await expect(design.getByRole("status")).toHaveText("Saved");
-  await expect(design.getByLabel("System intent", { exact: true })).toHaveValue("Retained phone draft");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: info.outputPath("system-editor-phone.png") });
-  await page.setViewportSize({ width: 720, height: 480 });
-  await expect(design.getByRole("button", { name: "Save system", exact: true })).toBeVisible();
-  await page.screenshot({ path: info.outputPath("system-editor-short.png") });
+  await expect(design.getByLabel("System intent", { exact: true })).toHaveValue("Retained system draft");
 });
 
 test("failed system drafts survive switching projects", async ({ page }) => {

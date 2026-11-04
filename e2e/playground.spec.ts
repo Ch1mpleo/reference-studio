@@ -189,29 +189,6 @@ test("editing an active tween does not restart it and slow inspection preserves 
   await expect(duration).toHaveValue("180");
 });
 
-test("phone variant tuning survives switches and canvas resizing without opening a dialog", async ({ page }, info) => {
-  await page.emulateMedia({ colorScheme: "dark" }); await page.setViewportSize({ width: 390, height: 844 });
-  const study = await openSpecimen(page);
-  await study.getByRole("button", { name: "Compare A/B", exact: true }).click();
-  await study.getByRole("button", { name: "Tune A", exact: true }).click();
-  const a = study.getByRole("region", { name: "Tune variant A", exact: true });
-  await a.getByLabel("Duration (ms)", { exact: true }).fill("420");
-  await study.getByRole("button", { name: "Variant B", exact: true }).click();
-  const b = study.getByRole("region", { name: "Tune variant B", exact: true });
-  await choose(page, b, "Starting preset", "Gentle ease-in-out");
-  await b.getByLabel("Distance (px)", { exact: true }).fill("20");
-  await study.getByRole("button", { name: "Variant A", exact: true }).click();
-  await expect(a.getByLabel("Duration (ms)", { exact: true })).toHaveValue("420");
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await study.getByRole("button", { name: "Tune B", exact: true }).click();
-  await expect(b.getByLabel("Distance (px)", { exact: true })).toHaveValue("20");
-  await page.setViewportSize({ width: 390, height: 844 });
-  expect(await study.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await expect(page.locator("dialog[open]")).toHaveCount(0);
-  await b.getByLabel("Distance (px)", { exact: true }).scrollIntoViewIfNeeded();
-  await page.screenshot({ path: info.outputPath("tuning-phone-dark.png") });
-});
-
 test("trusted dropdown handles keyboard, actions, Escape, outside click and Tab without closing its playground", async ({ page }) => {
   const study = await openSpecimen(page);
   const variant = study.getByRole("region", { name: "Variant A", exact: true });
@@ -300,35 +277,15 @@ test("dropdown reverses its running transition and settles without queued animat
   await expect(menu).toHaveAttribute("data-motion-active", "false");
 });
 
-test("phone A/B preserves choices, short layouts fit, and target styles remain isolated from Studio", async ({ page }, info) => {
-  await page.emulateMedia({ colorScheme: "dark" }); await page.setViewportSize({ width: 390, height: 844 });
+test("target fixture styles stay inside the study", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   const study = await openSpecimen(page);
   await study.getByRole("button", { name: "Compare A/B", exact: true }).click();
-  const a = study.getByRole("region", { name: "Variant A", exact: true });
-  await a.getByRole("button", { name: "Sort references", exact: true }).click();
-  await a.getByRole("menuitemradio", { name: "Oldest first", exact: true }).click();
-  await study.getByRole("button", { name: "Variant B", exact: true }).click();
   const b = study.getByRole("region", { name: "Variant B", exact: true });
-  await expect(a).toBeHidden(); await expect(b).toBeVisible();
-  await b.getByRole("button", { name: "Sort references", exact: true }).click();
-  await b.getByRole("menuitemradio", { name: "Title A–Z", exact: true }).click();
-  await study.getByRole("button", { name: "Variant A", exact: true }).click();
-  await expect(a.getByRole("button", { name: "Sort references", exact: true })).toHaveText(/Oldest first/);
-  await study.getByRole("button", { name: "Variant B", exact: true }).click();
-  await expect(b.getByRole("button", { name: "Sort references", exact: true })).toHaveText(/Title A–Z/);
   const oldColor = await study.getByRole("button", { name: "Remove motion playground", exact: true }).evaluate((node) => getComputedStyle(node).color);
   expect(await b.locator(".fixture-root").evaluate((node) => getComputedStyle(node).color)).toBe(await study.evaluate((node) => getComputedStyle(node).color));
   await b.locator(".fixture-root").evaluate((node) => (node as HTMLElement).style.setProperty("--fixture-ink", "rgb(255, 0, 0)"));
   expect(await study.getByRole("button", { name: "Remove motion playground", exact: true }).evaluate((node) => getComputedStyle(node).color)).toBe(oldColor);
-  await b.locator(".fixture-root").evaluate((node) => (node as HTMLElement).style.removeProperty("--fixture-ink"));
-  await expect(study).toBeInViewport();
-  expect(await study.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await study.locator(".playground-content").evaluate((node) => { node.scrollTop = 0; });
-  await page.screenshot({ path: info.outputPath("playground-phone-dark.png") });
-  await page.setViewportSize({ width: 768, height: 480 });
-  await expect(study.getByRole("button", { name: "Remove motion playground", exact: true })).toBeInViewport();
-  expect(await study.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await page.screenshot({ path: info.outputPath("playground-short.png") });
 });
 
 test("a direction study stays on the board across resize and preserves the system draft", async ({ page }) => {
@@ -350,10 +307,6 @@ test("a direction study stays on the board across resize and preserves the syste
   await expect(page.locator("dialog[open]")).toHaveCount(0);
   await study.getByRole("button", { name: "Sort references", exact: true }).click();
   await study.getByRole("menuitemradio", { name: "Oldest first", exact: true }).click();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(study).toBeVisible();
-  await expect(study.getByRole("button", { name: "Sort references", exact: true })).toHaveText(/Oldest first/);
-  await page.setViewportSize({ width: 1440, height: 900 });
   await expect(study.getByRole("button", { name: "Sort references", exact: true })).toHaveText(/Oldest first/);
   await study.getByRole("button", { name: "Remove motion playground", exact: true }).click();
   await expect(page.getByRole("button", { name: "Motion", exact: true })).toBeFocused();
