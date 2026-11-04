@@ -65,7 +65,7 @@ export function MotionPlayground({ projectId, directionId }: { projectId?: strin
           <IsolatedFixture parameters={drafts[index].parameters} open={opened[index]!} onOpen={(value) => setOpened((current) => current.map((entry, i) => i === index ? value : entry))} sort={sorts[index]!} onSort={(value) => setSorts((current) => current.map((entry, i) => i === index ? value : entry))} reducedMotion={reduced} replay={replays[index]!} playbackRate={playbackRate} />
         </section>)}
       </div>
-    <details className="sample-disclosure playground-tuning" open={tuning} onToggle={(event) => { if (event.target === event.currentTarget) setTuning(event.currentTarget.open); }}><summary>Tune motion <span className="studio-meta">Variant {active === 0 ? "A" : "B"}</span></summary>
+    <details className="studio-disclosure playground-tuning" open={tuning} onToggle={(event) => { if (event.target === event.currentTarget) setTuning(event.currentTarget.open); }}><summary>Tune motion <span className="studio-meta">Variant {active === 0 ? "A" : "B"}</span></summary>
       {([0, 1] as const).map((index) => <section key={index} hidden={active !== index} aria-label={`Tune variant ${index === 0 ? "A" : "B"}`}><MotionTuningControls draft={drafts[index]} onChange={(draft) => setDrafts((current) => index === 0 ? [draft, current[1]] : [current[0], draft])} /></section>)}
     </details>
     {projectId ? <div className="playground-saved">{([0, 1] as const).map((index) => <div key={index} hidden={active !== index}><SavedMotionVariants projectId={projectId} directionId={directionId} draft={drafts[index]} onLoad={(draft) => setDrafts((current) => index === 0 ? [draft, current[1]] : [current[0], draft])} /></div>)}</div> : null}
