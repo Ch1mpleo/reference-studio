@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type DragEvent } from "react";
 import { MAX_IMAGE_BYTES, imageTooLargeMessage, isHttpUrl, titleFromNote,
   type Board, type BoardFrame, type CreateLinkReference, type CreateNoteReference, type ImageFields,
   type LibraryReference, type ProjectReference, type SystemRecord } from "@reference-studio/core";
-import { BoardCanvas, type BoardView } from "./BoardCanvas.js";
+import type { BoardView } from "./BoardCanvas.js";
+
+const BoardCanvas = lazy(async () => ({ default: (await import("./BoardCanvas.js")).BoardCanvas }));
 import { completeBoard, groupSelection } from "./boardGeometry.js";
 import { useProjectBoard } from "./useProjectBoard.js";
 import { ReferenceDetails } from "./ReferenceDetails.js";
@@ -247,12 +249,12 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   return <section ref={root} className="canvas-workspace" aria-label="Project canvas" tabIndex={-1} data-dropping={dropping} data-panel-open={panel !== null}
     onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setDropping(true); } }}
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) setDropping(false); }} onDrop={drop}>
-    <div className="canvas-surface"><BoardCanvas projectId={projectId} layout={effective} references={references} selection={selection} readOnly={operation}
+    <div className="canvas-surface"><Suspense fallback={null}><BoardCanvas projectId={projectId} layout={effective} references={references} selection={selection} readOnly={operation}
       editingId={editingId} onEdit={setEditingId} onEditDone={(id) => { setEditingId((current) => current === id ? null : current); setFailedNotes((ids) => ids.filter((entry) => entry !== id)); }} onEditNote={editNote} onRenameGroup={renameGroup}
       onDuplicateGroup={(id) => groupCommand(id, false)} onArchiveGroup={(id) => groupCommand(id, true)} onOpenSystems={openSystems} groupCommandsDisabled={board.unsaved || operation}
       onSelect={setSelection} onCommit={board.commit} onInspect={inspect} onView={view} onGestureStart={board.beginGesture}
       playground={playground} onMovePlayground={(position) => setPlayground((current) => current ? { ...current, position } : current)} onClosePlayground={removePlayground} onAcceptBoard={board.acceptServer}
-      onReady={(instance) => { canvas.current = instance; }} onZoom={setZoom} /></div>
+      onReady={(instance) => { canvas.current = instance; }} onZoom={setZoom} /></Suspense></div>
     {ready && !playground && references.length === 0 && activeFrames.length === 0 ? <div className="canvas-empty"><pre aria-hidden="true">{"[ + ]"}</pre><h1>Drop your references here</h1><p>Drop images, paste links, or add a note. Make room for an idea.</p></div> : null}
     {dropping ? <div className="canvas-drop-hint" aria-hidden="true">Drop JPEG, PNG, or WebP images</div> : null}
     <div className="canvas-status" role="status">
