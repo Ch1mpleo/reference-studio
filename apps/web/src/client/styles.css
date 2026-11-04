@@ -588,7 +588,8 @@ body:has(.studio-ui) {
   box-shadow: inset 0 0 0 1px var(--color-danger);
 }
 
-.sample-views {
+.sample-views,
+.studio-segment {
   display: flex;
   flex-wrap: wrap;
   padding: 3px;
@@ -599,8 +600,13 @@ body:has(.studio-ui) {
   backdrop-filter: blur(14px) saturate(160%);
 }
 
-.sample-views button {
-  min-height: 0;
+.studio-segment {
+  width: max-content;
+  max-width: 100%;
+}
+
+.sample-views button,
+.studio-segment .studio-button {
   padding: 7px 12px;
   border: 0;
   background: transparent;
@@ -609,12 +615,38 @@ body:has(.studio-ui) {
   backdrop-filter: none;
 }
 
+.sample-views button {
+  min-height: 0;
+}
+
 .sample-views button[aria-pressed="true"] {
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--color-surface-raised);
   color: var(--color-ink);
   box-shadow: inset 0 1px 0 var(--color-glass-hi), 0 0 0 1px var(--color-control-line);
+}
+
+.studio-segment .studio-button[aria-checked="true"] {
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-selected-bg);
+  color: var(--color-ink);
+  box-shadow: inset 0 1px 0 var(--color-glass-hi), 0 0 0 1px var(--color-selected-line);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio-segment .studio-button:hover:not(:disabled) {
+    background: transparent;
+    color: var(--color-ink);
+    box-shadow: none;
+  }
+
+  .studio-segment .studio-button[aria-checked="true"]:hover:not(:disabled) {
+    background: var(--color-selected-bg);
+    color: var(--color-ink);
+    box-shadow: inset 0 1px 0 var(--color-glass-hi), 0 0 0 1px var(--color-selected-line);
+  }
 }
 
 .sample-connection {
@@ -1894,6 +1926,33 @@ html:has(.studio-ui)::-webkit-scrollbar-thumb {
 .studio-ui .reference-form {
   gap: 8px;
   margin-top: 0;
+  min-width: 0;
+}
+
+.studio-ui .library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.studio-ui .library-filters > .studio-field {
+  flex: 1 1 12rem;
+  min-width: min(100%, 12rem);
+  max-width: 100%;
+}
+
+.studio-ui .library-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.studio-ui .library-filter-chips .studio-button {
+  max-width: 100%;
 }
 
 .studio-ui .reference-form label,

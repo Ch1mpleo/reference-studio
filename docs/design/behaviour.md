@@ -52,7 +52,7 @@ Images and links keep optional Reference details and Usage and crop disclosures.
 
 Validation runs on submit, then on the dirty fields that failed. Do not show a red error on an untouched empty field. Dirty fields keep their values when the network or a conflict fails.
 
-Library keyword search submits on Enter and keeps the previous results while the request is in flight. Pagination resets when the submitted query changes. The target Kind radio, optional Tag field, and filter chips are specified in the root design file and are not built yet. Do not invent a second field style for them.
+Library keyword search submits on Enter and keeps the previous results while the request is in flight. Pagination resets when the submitted query changes. Kind is the radio group in the root design file: choosing an option applies it. The tag commits on Enter and applies; that request uses the submitted keyword, not an uncommitted keyword draft. A chip removes that one filter. Clear removes the kind and the tag and leaves the submitted keyword. There is no Apply control. Do not invent a second field style for them.
 
 ## Dialogs and menus
 

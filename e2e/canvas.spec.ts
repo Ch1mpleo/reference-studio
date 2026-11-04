@@ -84,11 +84,8 @@ test("drop, arrange, group, undo, inspect, and reload without opening an upload 
   await inspector.getByRole("button", { name: "Close inspector" }).click();
   await expect(inspector).toBeHidden();
   await dock.getByRole("button", { name: "Library", exact: true }).click();
-  await inspector.getByRole("button", { name: "Kind", exact: true }).click();
-  await expect(page.getByRole("listbox", { name: "Kind" })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("listbox", { name: "Kind" })).toBeHidden();
-  await expect(inspector).toBeVisible();
+  await expect(inspector.getByRole("radiogroup", { name: "Kind" })).toBeVisible();
+  await inspector.getByRole("radio", { name: "Any", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(inspector).toBeHidden();
   await first.dblclick();
