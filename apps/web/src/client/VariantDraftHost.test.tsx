@@ -31,6 +31,7 @@ function client(update: (input: UpdateVariant) => Promise<VariantRecord>): Varia
     create: async () => { throw new Error("unexpected create"); },
     update: async (_project, _direction, _system, _variant, input) => update(input),
     duplicate: async () => { throw new Error("unexpected duplicate"); },
+    select: async () => { throw new Error("unexpected select"); },
   };
 }
 

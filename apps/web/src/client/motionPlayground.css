@@ -11,6 +11,9 @@
 .studio-ui .playground-content { padding: var(--space-5) var(--space-6); max-height: max(140px, calc(100dvh - 320px)); overflow: auto; overscroll-behavior: contain; }
 .studio-ui .motion-playground { display: grid; gap: var(--space-5); }
 .studio-ui .playground-toolbar, .studio-ui .playground-comparison-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.studio-ui .playground-comparison { display: grid; gap: var(--space-2); }
+.studio-ui .playground-comparison p { margin: 0; }
+.studio-ui .motion-playground[data-tuning="true"] > .playground-comparison { grid-column: 1 / -1; }
 .studio-ui .playground-toolbar { justify-content: space-between; gap: var(--space-4); }
 .studio-ui .playground-toolbar h3 { font: var(--type-card); margin: 0 0 var(--space-1); }
 .studio-ui .playground-toolbar p { margin: 0; }
@@ -59,3 +62,8 @@
 .studio-ui .motion-playground[data-tuning="true"] .playground-saved { grid-column: 1 / -1; }
 .studio-ui .playground-saved .studio-kicker { margin: 0; }
 .studio-ui .playground-saved-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.studio-ui .variant-recommendation { display: grid; gap: var(--space-3); }
+.studio-ui .variant-defects { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--color-line); }
+.studio-ui .variant-defects ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.studio-ui .variant-defects li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.studio-ui .motion-playground[data-tuning="true"] > .variant-defects { grid-column: 1 / -1; }

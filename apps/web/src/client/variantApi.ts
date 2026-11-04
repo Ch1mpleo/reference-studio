@@ -1,6 +1,6 @@
 import {
-  createVariantSchema, duplicateVariantSchema, serviceErrorBodySchema, systemRecordSchema, updateVariantSchema, variantRecordSchema,
-  type Board, type CreateVariant, type DuplicateVariant, type UpdateVariant, type VariantRecord,
+  createVariantSchema, duplicateVariantSchema, selectVariantSchema, serviceErrorBodySchema, systemRecordSchema, updateVariantSchema, variantRecordSchema,
+  type Board, type CreateVariant, type DuplicateVariant, type SelectVariant, type UpdateVariant, type VariantRecord,
 } from "@reference-studio/core";
 import { getBoard } from "./boardApi.js";
 import { saveSystem } from "./systemApi.js";
@@ -119,5 +119,10 @@ export function duplicateVariant(projectId: string, directionId: string, systemI
   return send(`/api/projects/${projectId}/directions/${directionId}/systems/${systemId}/variants/${variantId}/duplicate`, "POST", payload, key);
 }
 
-export const variantClient = { load: readDirectionVariants, ensureSystem: ensureMotionSystem, create: createVariant, update: updateVariant, duplicate: duplicateVariant };
+export function selectVariant(projectId: string, directionId: string, systemId: string, variantId: string, input: SelectVariant, key: string): Promise<VariantRecord> {
+  const payload = parseInput(selectVariantSchema, input, "The variant selection is invalid.");
+  return send(`/api/projects/${projectId}/directions/${directionId}/systems/${systemId}/variants/${variantId}/select`, "POST", payload, key);
+}
+
+export const variantClient = { load: readDirectionVariants, ensureSystem: ensureMotionSystem, create: createVariant, update: updateVariant, duplicate: duplicateVariant, select: selectVariant };
 export type VariantClient = typeof variantClient;

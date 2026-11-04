@@ -63,6 +63,21 @@ describe("variant records", () => {
     })).toThrow("A variant links to a missing annotation.");
   });
 
+  it("keeps recommendation fields and does not accept an inferred Selected flag on create", () => {
+    const recommendation = { task: "Open the menu", frequency: "Often", feeling: "Calm", benefit: "Scanning stays easy", tradeoff: "Longer than instant" };
+    const saved = variant({ recommendation, fit: { why: "Readable", where: "Library" } });
+    expect(saved.recommendation).toEqual(recommendation);
+    expect(saved.fit).toEqual({ why: "Readable", where: "Library" });
+    expect(saved.selected).toBe(false);
+    expect(variant().recommendation).toEqual({ task: "", frequency: "", feeling: "", benefit: "", tradeoff: "" });
+    expect(variantRecordSchema.safeParse(raw({ recommendation: { ...recommendation, winner: "A" } })).success).toBe(false);
+    expect(createVariantSchema.safeParse({ ...raw(), expectedDirectionRevision: 1, recommendation, selected: true }).success).toBe(false);
+    const defect = { id, kind: "blocked-input" as const, note: "The pointer cannot open the menu." };
+    expect(variant({ defects: [defect] }).defects).toEqual([defect]);
+    expect(variant().defects).toEqual([]);
+    expect(variantRecordSchema.safeParse(raw({ defects: [{ id, kind: "winner", note: "" }] })).success).toBe(false);
+  });
+
   it("remaps copied identities and keeps links to evidence outside the copy", () => {
     const copied = remapVariant(variant({ selected: true, fit: { why: "Filtering", where: "Library" } }), {
       variants: new Map([[id, placementId]]),

@@ -4,11 +4,25 @@ Implementation follows the milestone IDs in the product handoff. A milestone is 
 
 ## Current position
 
-- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance, M2.0a, M2.0b, M2.0c, M2.1, M2.2, M2.3, M2.4 (current records), M2.5, M2.6, M2.7, M2.8, M2.11 (manual rehearsal). M2.9's variant service and the study save, reopen, and conflict controls are recorded below. Neutral comparison and recommendation editing are still open.
-- Active milestone: M2. The board, direction-scoped design/motion records, and the canvas motion study with local tuning are implemented. Ordinary work stays on the board. M2.9 variants live in their own table, not in the board aggregate. Studio is dark. Desktop is the target. This does not complete all of M2.
+- Completed tasks: M0.1, M0.2, M0.3, M0.4, M0.R1, M0.R2, M0.R3, M0.R4, M1.0, M1.1, M1.2, M1.3, M1.4, M1.5, M1.6, M1 acceptance, M2.0a, M2.0b, M2.0c, M2.1, M2.2, M2.3, M2.4 (current records), M2.5, M2.6, M2.7, M2.8, M2.9, M2.11 (manual rehearsal). M2.9 includes the variant service, save and conflict recovery, neutral comparison, recommendation fields, and a separate defect list.
+- Active milestone: M2. The board, direction-scoped design/motion records, and the canvas motion study are implemented. Ordinary work stays on the board. Variants live in their own table, not in the board aggregate. Studio is dark. Desktop is the target. This does not complete all of M2.
 - Loader-specimen replay checkpoint: resolved on 2026-10-29. The failure was test synchronization with an already-running reveal; runtime animation behavior did not need changing.
-- Next task: M2.9 neutral comparison and recommendation editing. M2.10 acceptance and M3 live MCP remain open.
+- Next task: M2.10 acceptance. M3 live MCP remains open.
 - Library search uses the kind radio, optional tag, and filter chips from design.md. Evidence is in the entry below.
+
+## M2.9 — Neutral comparison, recommendations, and defects — 2026-11-04
+
+The study compares lane A and lane B in neutral words. Each lane says what the motion does, and whether that lane is a saved record, local changes on that record, or local tuning. The readout does not name a winner, a score, or a quality mark.
+
+Recommendation fields are task, frequency, intended feeling, observed benefit, tradeoff, and where and why the recipe fits. They are stored on the variant and return after reload. Selected appears only after Mark selected. There is no Approve control, and Save does not mark a variant Selected.
+
+Defects are their own list: blocked input, lost focus, broken interruption, and ignored reduced motion. A recorded defect is still listed after reload, and that list is not part of the comparison.
+
+Studio stays dark. Desktop is the target. There is no light theme and no phone layout.
+
+**Verification:** Node v22.23.4 / npm 10.9.9. `npm run check` passed. `npm test` passed: 44 files, 166 tests. `npm run build` passed. `npm run test:e2e` with `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome` passed: 56 tests on Chrome 156.0.8078.47. Microsoft Edge is not installed. The desktop dark comparison, with reduced motion so the study was still, is [docs/evidence/m2-variants/comparison-desktop-dark.png](evidence/m2-variants/comparison-desktop-dark.png). The Vite main-chunk warning remains at about 659 kB. The study chunk is about 107 kB. Before the event-stream fix, the populated-board scenario failed 3 of 10 Chrome runs because an aborted `/api/events` left the project list unloaded. After the fix, the same scenario passed 10 of 10 with `--repeat-each=10`.
+
+**Remaining:** Node 24 was not run. Human visual acceptance, native 200% zoom, and Edge were not run. Entry distance and direction stay on the local study draft and are not part of the saved record. A fresh-clone `npm ci` and a fresh-context read of the three M2.9 slices were not part of this run. Target-product validation remains M5. M2.10 is next.
 
 ## M2.9 — Save, reopen, and conflict in the study — 2026-11-04
 

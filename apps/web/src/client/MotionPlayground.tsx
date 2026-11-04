@@ -10,6 +10,7 @@ import { createMotionDraft, describeFixtureMotion, type MotionDraft } from "./mo
 import { StudioSelect } from "./StudioSelect.js";
 import type { Board } from "@reference-studio/core";
 import { HostedVariantStudy } from "./SavedMotionVariants.js";
+import { describeVariantBehavior, VariantComparison } from "./VariantComparison.js";
 import "./motionPlayground.css";
 
 const fixture = resolveInteractionFixture("dropdown", 2);
@@ -43,6 +44,7 @@ export function MotionPlayground({ projectId, directionId, onBoard }: { projectI
   const [replays, setReplays] = useState([0, 0]);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [tuning, setTuning] = useState(false);
+  const [sources, setSources] = useState<[string, string]>(["Local tuning.", "Local tuning."]);
   const reduced = useStudioReducedMotion(previewReduced);
   useLayoutEffect(() => pauseStudioEffects(), []);
   function replay(index: 0 | 1): void {
@@ -55,6 +57,10 @@ export function MotionPlayground({ projectId, directionId, onBoard }: { projectI
       <div><h3>Dropdown</h3><p className="studio-help">Open, sort, interrupt. Try it in place.</p></div>
       <StudioButton aria-pressed={compare} onClick={() => { setCompare(!compare); setOpened([false, false]); setActive(0); }}>{compare ? "Single preview" : "Compare A/B"}</StudioButton>
     </div>
+    {compare ? <VariantComparison lanes={[
+      { label: "A", behavior: describeVariantBehavior(drafts[0]), source: sources[0] },
+      { label: "B", behavior: describeVariantBehavior(drafts[1]), source: sources[1] },
+    ]} /> : null}
     {compare ? <div className="playground-comparison-controls">
       <div className="playground-mobile-switch" role="group" aria-label="Visible variant">{([0, 1] as const).map((index) => <StudioButton key={index} aria-pressed={active === index} onClick={() => { setActive(index); setOpened([false, false]); }}>Variant {index === 0 ? "A" : "B"}</StudioButton>)}</div>
       <StudioButton onClick={() => { setOpened([true, true]); setReplays((current) => current.map((value) => value + 1)); }}>Play both</StudioButton>
@@ -68,7 +74,7 @@ export function MotionPlayground({ projectId, directionId, onBoard }: { projectI
       </div>
     {projectId ? (["a", "b"] as const).map((lane) => {
       const index = lane === "a" ? 0 : 1;
-      return <HostedVariantStudy key={lane} projectId={projectId} directionId={directionId ?? ""} lane={lane} preset={lane === "a" ? "quick" : "instant"} hidden={active !== index} tuning={tuning && active === index} onTuning={setTuning} onBoard={onBoard} onDraft={(draft) => setDrafts((current) => JSON.stringify(current[index]) === JSON.stringify(draft) ? current : index === 0 ? [draft, current[1]] : [current[0], draft])} />;
+      return <HostedVariantStudy key={lane} projectId={projectId} directionId={directionId ?? ""} lane={lane} preset={lane === "a" ? "quick" : "instant"} hidden={active !== index} tuning={tuning && active === index} onTuning={setTuning} onBoard={onBoard} onSource={(source) => setSources((current) => current[index] === source ? current : index === 0 ? [source, current[1]] : [current[0], source])} onDraft={(draft) => setDrafts((current) => JSON.stringify(current[index]) === JSON.stringify(draft) ? current : index === 0 ? [draft, current[1]] : [current[0], draft])} />;
     }) : <details className="studio-disclosure playground-tuning" open={tuning} onToggle={(event) => { if (event.target === event.currentTarget) setTuning(event.currentTarget.open); }}><summary>Tune motion <span className="studio-meta">Variant {active === 0 ? "A" : "B"}</span></summary>
       {([0, 1] as const).map((index) => <section key={index} hidden={active !== index} aria-label={`Tune variant ${index === 0 ? "A" : "B"}`}><MotionTuningControls draft={drafts[index]} onChange={(draft) => setDrafts((current) => index === 0 ? [draft, current[1]] : [current[0], draft])} /></section>)}
     </details>}

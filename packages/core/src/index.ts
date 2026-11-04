@@ -111,6 +111,6 @@ export { motionVariantSchema } from "./systems.js";
 export type { MotionVariant } from "./systems.js";
 export {
   MAX_BACKUP_VARIANTS, MAX_VARIANTS_PER_SYSTEM, assertVariantLinks, createVariantSchema, duplicateVariantSchema,
-  referencedBoardIds, remapVariant, selectVariantSchema, updateVariantSchema, variantRecordSchema,
+  referencedBoardIds, remapVariant, selectVariantSchema, updateVariantSchema, variantDefectSchema, variantRecommendationSchema, variantRecordSchema,
 } from "./variants.js";
-export type { CreateVariant, DuplicateVariant, SelectVariant, UpdateVariant, VariantLinkScope, VariantRecord } from "./variants.js";
+export type { CreateVariant, DuplicateVariant, SelectVariant, UpdateVariant, VariantDefect, VariantLinkScope, VariantRecommendation, VariantRecord } from "./variants.js";
