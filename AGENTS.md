@@ -1,79 +1,42 @@
 # Reference Studio — agent guide
 
-Reference Studio is a local visual workspace, portable creative-workflow skill, and MCP adapter for developing website art direction together with a human.
+Reference Studio is a local visual workspace, portable creative-workflow skill, and MCP adapter. Source and package manifests describe current implementation; planned requirements do not prove a feature ships.
 
-## Start with the task
+## Working boundaries
 
-- For implementation, read [product boundaries](docs/PRODUCT.md) and [current progress](docs/STATUS.md), then inspect only the relevant source and scoped rules below.
-- For Studio UI, CSS, components, canvas chrome, loading presentation, or interface motion, also read [design.md](design.md): its tokens, core rules, and shared components.
-- The product document records agreed intent; source and package manifests describe current implementation. Planned features are not proof that those features exist.
-- Questions, reviews, and diagnoses are read-only unless the user asks for changes. For an authorized change, implement and verify it without repeated permission requests.
-- Preserve unrelated edits and approved content. Resolve routine implementation choices from existing patterns; ask only when missing product intent materially changes the result.
-- Follow [PLAN.md](PLAN.md) for task order. Update `docs/STATUS.md` with evidence for validated work and remaining limits. Do not create a second task database or claim a milestone from a build alone.
+- Questions, reviews, and diagnoses are read-only unless changes are requested. For authorized work, implement and verify without repeated permission requests.
+- Inspect Git changes before editing. Preserve unrelated edits, approved content, and personal `.reference-studio/` data.
+- Resolve technical uncertainty through relevant source, documentation, or focused checks. Ask only when missing user intent would materially change scope or behavior; continue independent work. Follow existing patterns for routine choices.
+- Mention assumptions when they affect the result. Report unresolved limitations and verification evidence; omit confidence scores unless requested.
+- Do not commit, push, publish, deploy, or change global client settings unless requested.
 
-## Studio design implementation
+## Read for the task
 
-- [design.md](design.md) is the canonical Studio design specification. Use its tokens, core rules, and shared components.
-- Build the cohesive modern interface described there. Review upstream loader source when integrating it; keep the artwork and controls readable and usable.
-- Reuse the existing client primitives and the semantic token source. Feature CSS owns composition.
-- Keep Studio styles scoped away from target-project previews and records.
-- Record accepted visual feedback and justified design deviations in `design.md`; record checks and limitations in STATUS. A document or plan approval does not prove that a rendered sample has been reviewed or a feature implemented.
+- Continuing roadmap work: read the current position and relevant task in [PLAN.md](PLAN.md).
+- Product scope or behavior decisions: read the relevant section of [docs/PRODUCT.md](docs/PRODUCT.md), then its linked specification if needed.
+- Studio UI, CSS, shared controls, canvas chrome, or interface motion: read [design.md](design.md). Follow its links for affected interaction or specimen behavior.
+- Read historical evidence only to investigate a relevant decision, regression, or acceptance claim. Do not load every document before a small change.
 
-## Confidence before implementation
+Cursor auto-attaches the following rules by file path. Codex and other agents must read the applicable Markdown bodies directly; changes crossing boundaries use each applicable rule.
 
-- After initial read-only inspection and before the first edit, begin the work update with `Confidence: N% — <brief reason>.` Assess confidence in understanding the requested outcome, affected code, and verification approach.
-- Name any material uncertainty and the next check that will resolve it. Treat the score as a reasoned self-assessment, not a measured probability or proof of correctness.
-- If uncertainty could materially change the scope or behavior, ask a focused question before dependent edits. Otherwise state the assumption and continue the authorized work.
-- Reassess when new evidence changes the approach; do not repeat the score on every tool call or inflate it to justify proceeding.
-
-## Repository map
-
-- `apps/web/src/client`: React + Vite interface, styled with plain CSS.
-- `apps/web/src/server`: Fastify application service; the only persistent writer.
-- `apps/web/migrations`: ordered SQLite migrations using Node's `node:sqlite`.
-- `packages/core`: shared Zod contracts, IDs, revisions, events, and service errors; no browser, filesystem, or database dependencies.
-- `packages/mcp`: local stdio adapter to the application service. It is currently a placeholder; read `docs/STATUS.md` before claiming MCP support.
-- `skills/reference-studio`: planned distributable product skill. Repository engineering rules belong here in `AGENTS.md` and `.cursor/rules`, not inside that skill.
-
-## Load only the relevant rules
-
-Cursor auto-attaches these by file path. Other agents should read the relevant files directly; their Markdown bodies contain the same guidance.
-
-| Working on | Read |
-| --- | --- |
-| React UI, canvas, image presentation, client state, CSS | [.cursor/rules/web-client.mdc](.cursor/rules/web-client.mdc) |
-| HTTP endpoints, SQLite, migrations, asset storage | [.cursor/rules/service-storage.mdc](.cursor/rules/service-storage.mdc) |
-| Shared schemas, error shapes, events, IDs, revisions | [.cursor/rules/shared-contracts.mdc](.cursor/rules/shared-contracts.mdc) |
-| MCP transport/tools or the portable product skill | [.cursor/rules/agent-integration.mdc](.cursor/rules/agent-integration.mdc) |
-
-For a change crossing a boundary, read both applicable rules. Keep a policy in its owning document; link to it instead of repeating it in every rule.
-
-## CodeGraph: source navigation
-
-- Prefer an available CodeGraph MCP or CLI for indexed symbol discovery, call paths, and refactor impact. Use `explore`, `node`, and `callers`/`impact` for those questions.
-- Read current source before editing; fresh source returned by CodeGraph counts. Recheck only when output is incomplete, the index is stale, or files changed after retrieval.
-- Use targeted `rg` and file reads for docs/configs, unindexed files, or an unavailable graph. Continue the task and mention the fallback briefly when material; CodeGraph is not a prerequisite for progress or product authority.
-- Setup is checkout-local: the owner runs `codegraph init` once from the repository root. The project MCP config runs `codegraph serve --mcp --path ${workspaceFolder}`. Restart/reconnect Cursor's MCP server after configuration changes.
-- When an initialized graph is stale, use `codegraph sync`; do not rebuild the entire index for every edit. Keep `.codegraph/` out of Git. Do not install or upgrade global tools as part of unrelated feature work.
+- React client and CSS: [.cursor/rules/web-client.mdc](.cursor/rules/web-client.mdc).
+- HTTP, SQLite, migrations, and assets: [.cursor/rules/service-storage.mdc](.cursor/rules/service-storage.mdc).
+- Shared schemas, IDs, errors, revisions, and events: [.cursor/rules/shared-contracts.mdc](.cursor/rules/shared-contracts.mdc).
+- MCP adapter or distributable skill: [.cursor/rules/agent-integration.mdc](.cursor/rules/agent-integration.mdc).
 
 ## Engineering and verification
 
-- Use npm workspaces and the existing lockfile. Keep scripts compatible with Windows; avoid shell-specific environment assignment and Bash-only commands.
-- Follow strict TypeScript, existing named exports, and `.js` extensions on relative TypeScript module imports. Prefer `unknown` plus validation at external boundaries over `any` or unchecked casts.
-- Share behavior where repetition is real. Do not add a framework, state library, design kit, generic repository layer, or API wrapper merely to reproduce the previous project.
-- Derive required checks from the changed behavior. Add regression coverage for meaningful logic; do not write tests that merely assert prose, headings, or the implementation itself.
+- Use npm workspaces and the existing lockfile. Keep commands compatible with Windows. Preserve strict TypeScript, named exports, and `.js` extensions on relative TypeScript imports.
+- The application service is the only persistent writer. Core stays transport-independent. Extend existing owners rather than introducing a framework, generic repository layer, state library, or API wrapper without a concrete need.
+- Prefer available CodeGraph `explore`, `node`, and `callers`/`impact` for indexed source questions. Read current source before editing. If unavailable or stale, use targeted `rg` and file reads; setup is in [README.md](README.md#codegraph).
+- Derive checks from changed behavior. Add regression coverage for meaningful logic, not prose or implementation details. Documentation changes need link, structure, and diff checks.
+- Run from the root: `npm run check` for types, `npm test` for domain/service tests, `npm run build` for workspace builds, and `npm run test:e2e` for affected browser scenarios. Setup and runtime commands are in [README.md](README.md).
+- Use temporary data directories for storage and browser tests. Never reset personal data. An empty test suite or a build alone does not validate acceptance.
 
-Run from the repository root:
+## Keep documentation focused
 
-| Command | Purpose |
-| --- | --- |
-| `npm ci` | Reproduce dependencies when setting up or validating a lockfile change |
-| `npm run check` | Type-check core, server, client, and tests |
-| `npm test` | Vitest domain/service tests; narrow with `npm test -- <file>` while iterating |
-| `npm run build` | Build core, web, and MCP in workspace order |
-| `npm run dev` | Service `127.0.0.1:4317`, Vite `127.0.0.1:5173` |
-| `npm start` | Run the built production service and UI |
-| `npm run test:e2e` | Run browser scenarios once implemented; an empty suite is not validation |
-
-- Use temporary data directories for automated storage tests. Never reset the user's `.reference-studio/` to make a check pass.
-- Report the outcome, relevant checks actually run, and remaining limitations. Distinguish static/configuration validation from a live browser or client integration test.
+- `AGENTS.md` owns engineering conduct and reading routes; scoped rules own boundary-specific constraints; `docs/PRODUCT.md` owns intent; `design.md` owns Studio presentation; `PLAN.md` owns progress, task order, and acceptance gates.
+- Keep one owner for each requirement. Link to it instead of repeating it. Source owns current schema shapes and package versions; do not maintain parallel inventories.
+- Keep dates out of rules and guidance. Date human decisions when needed to establish what was agreed; historical verification records remain evidence, not current instructions.
+- Update the plan when task status, blockers, or remaining work changes. Record substantial checks once in `docs/evidence/` and link them from the affected task. Routine edits need no diary entry.
+- Update the owning specification when behavior or an accepted decision changes. Keep dated rationale in `docs/design/decisions.md` when useful. Do not create another task database, append routine change logs, or treat historical evidence as current instructions.

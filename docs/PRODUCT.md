@@ -1,66 +1,43 @@
 # Reference Studio — product boundaries
 
-This document records the agreed product direction. Read `STATUS.md` for what is implemented; do not treat the capabilities below as already shipped.
+Agreed intent, not a list of shipping features. [PLAN.md](../PLAN.md) owns delivery status.
 
-## Purpose and experience
+## Purpose
 
-Help a person and their chosen coding agent turn a broad website idea into an intentional art direction, reusable design system, and motion system using human-made references, discussion, and coded experiments.
+Help a person and their external coding agent develop website art direction, a reusable visual system, and a motion system from human-made references, discussion, and coded experiments. The loop is collect → explore directions → review an experiment → approve a revision → export a handoff.
 
-The working loop is: collect references → explore directions → review an experiment → approve a revision → export an implementation handoff.
+- Support a broad brief and people without design training, a favorite website, or established design vocabulary.
+- Preserve reference/region → observed quality → proposed translation → human feedback → decision → tested rule. Keep meaningful rejected alternatives, exceptions, and open questions without requiring the original chat.
+- A liked reference is contextual input, not a permanent taste profile or mandatory template. Material and atmosphere can lead a direction; layout must also fit the real content and task.
+- [External-agent workflow](specs/agent-workflow.md) owns discovery, research, contextual anti-slop prevention, existing-project review, and client collaboration requirements. Quality judgments remain grounded in the project, inspected references, and observed behavior.
 
-- Start with the user's growing collection. Support pasted links, clipboard images, uploaded JPEG/PNG/WebP files, and agent-added references. Reject documents and unsupported files at intake. Any note, reference, or active group clears the initial empty-board guidance.
-- Use one grouped canvas with an inbox and simple named frames. References are images/links, notes are visible free text, and groups organize either. Edit note text and group names directly on their objects; discuss design intent through visible notes and the external agent. Do not require alternate board/list/focus/compare screens for ordinary work. Approved snapshots remain later scope.
-- The canvas is the primary workspace, with a compact Note/Group/Library/Motion dock, Undo/Redo, and on-demand tools. Keep zoom as bare vertical controls at the bottom right: zoom in, slider, zoom out, percentage, and Fit. Drop/paste images directly into open space; image collection does not require an upload form. Selection and arranging stay separate from explicit inspection. Preserve the accepted Studio visual system across every control.
-- Discussion happens in the external agent's chat. The workspace persists the selected visual context, annotations, proposals, feedback, and decisions.
-- Treat imagery, atmosphere, composition, typography, material, and interaction as possible design drivers. Do not convert a liked example into a permanent aesthetic or mandatory template.
-- The workspace's controls support reviewing the material. A project direction belongs to that project, not to the application's interface as a whole.
+## Workspace and collaboration
 
-## Creative collaboration
-
-- Support people who appreciate graphic design without requiring design training, a favorite website, or a finished brief. Help them describe what attracts them to specific material and understand the consequences of their choices.
-- The external CLI/editor agent is the intended collaborator. It researches and collects with its host tools, discusses with the user in its own chat, and reads/proposes Studio records through MCP. Studio supplies the shared visual workspace and durable project memory; it does not need an embedded agent runtime. Dropping material or changing selection does not start an agent turn.
-- Analyze the project purpose, audience, constraints, actual content, references, and existing decisions before suggesting a direction. Offer meaningful alternatives with plain-language reasons and tradeoffs where choices remain open; revisit them as feedback arrives.
-- Preserve the connection from reference or selected region → observed quality → proposed translation → user feedback → project decision → tested system rule. Record what to borrow and leave behind. Keep rejected alternatives and intentional exceptions useful without requiring the entire chat transcript.
-- Treat styles, genres, and subgenres as optional vocabulary for exploration, not mandatory preset categories. Separate a reference's visual material from its layout and the target product's functional needs. Develop a coherent identity across varied screens rather than repeating one composition everywhere.
-- The user appreciates Marathon's visual identity. This is an example of interest in deliberate graphic identity, not an approved project style, a claim about particular visual attributes, or a reason to copy the game. Investigate accessible references and ask which qualities matter when relevant.
-
-## Contextual anti-slop workflow
-
-- Include anti-slop guidance in the canonical creative-workflow skill from the beginning of design, plus an entry point for reviewing an existing target project screen by screen. Keep it connected to the project's references, intent, and system rather than maintaining a competing taste skill.
-- Detect demonstrated usability/implementation defects, drift from the agreed design system, and potentially generic composition, typography, imagery, motion, or copy. Explain the affected task and evidence; aesthetic heuristics prompt judgment rather than blanket bans on fonts, colors, effects, or genres.
-- Review source, rendered screens, and interactions with the external agent's available tools. Record routes, states, viewport/context, target revision, inspection method, and inaccessible or untested areas. A source scan alone cannot establish complete visual or interaction coverage.
-- Distinguish local cleanup, shared-system fixes, and structural overhaul. Discuss consequential alternatives in understandable terms, preserve intentional character and working behavior, and implement changes in the target repository within the user's agreed scope. Recheck the affected screens and states after changes.
-- Learn from attributed primary sources such as Impeccable's slop catalog and collaboration tools and Hallmark's material/structure separation and review techniques. Inspect versions and reuse terms before adapting content or code; those tools are neither mandatory dependencies nor evidence that Studio's workflow is implemented.
-
-## Design and motion systems
-
-- Develop project-specific visual tokens, component/state recipes, and motion behavior for use across the target product's app or website.
-- Treat spatial continuity, interruption, repetitive-task speed, reduced motion, and deliberate no-animation decisions as part of the direction. Review behavior in runnable experiments; screenshots alone cannot validate motion.
-- Core experimentation stays on the canvas. Motion studies are movable board objects alongside references and notes; the board remains usable during testing. Use contextual controls or inspectors for supporting detail rather than moving ordinary experiments into a dialog.
-- Provide a project-scoped motion playground: interactive examples, comparable variants, model-appropriate sliders/options, instant and reduced-motion alternatives, and named draft recipes. Users tune behavior directly before approving it.
-- Studio also needs its own shared UI and motion primitives. Keep those separate from each target project's style and system records.
-- Read [design and motion scope](DESIGN_AND_MOTION.md) for deliverables, review criteria, and milestone integration. STATUS distinguishes delivered draft records/editors from remaining playground, approval, and export work.
+- One grouped board is the ordinary workspace. Images/links, visible editable notes, and simple named frames organize directions. No alternate board/list/focus/compare modes are required for routine work.
+- Keep compact controls and on-demand details around the material. [design.md](../design.md) owns Studio presentation; [interaction behavior](design/behaviour.md) owns board editing, inspection, saving, and recovery.
+- Conversation stays in the external agent's chat. Studio persists context, proposals, feedback, and decisions. Dropping material, changing selection, or tuning a slider never starts an agent turn. Context transfer is explicit.
+- The application service owns persistent operations shared by the browser and authenticated MCP adapter. Use explicit project and, when selection matters, board-session context; no global active project.
+- Studio executes trusted built-in interaction fixtures with validated parameters. External agents build product-specific experiments in the target repository; Studio records screenshots, preview links, and observations. Uploaded code is not executed.
+- [Target-project systems](specs/target-systems.md) owns visual/motion records and interactive comparison/tuning. Keep project preview styles separate from Studio chrome. A deliberate no-animation choice is valid.
 
 ## References and assets
 
-- Prefer human-made art, photography, and design from sources such as Pinterest, ArtStation, artists' sites, and the user's own collection. Image generation is outside this product and its skill workflow.
-- Preserve original image files and factual source links/creator attribution when known. Unknown information stays unknown; an inaccessible link can remain a bookmark with an attached screenshot.
-- Distinguish inspiration from candidate and approved website assets. A reference's inclusion is not approval to ship that image.
-- Keep global reference facts separate from direction-specific interpretations, placements, and annotations. Reusing an image must not mix project notes.
+- Prefer human-made artwork, photography, and design, including artists' sites, Pinterest, ArtStation, and the user's own material. Image generation is outside the product and its skill.
+- Accept pasted links, clipboard images, uploaded JPEG/PNG/WebP, and agent-added references; reject unsupported documents. An inaccessible page may remain a bookmark with an attached screenshot. Video research initially uses links and observations, not downloading/transcoding or platform crawling.
+- Preserve immutable originals, factual source links, creator attribution when known, and explicit unknowns. Store image regions/crops relative to the original image, separately from canvas positions.
+- Keep global source facts separate from project-specific interpretation, placements, notes, and crops.
+- Distinguish inspiration, candidate assets, and approved delivery assets. Collecting a reference or assigning a role does not establish rights or approve a direction.
 
 ## Decisions and handoff
 
-- Agent contributions are proposals; the user approves revisions through the interface.
-- Approved snapshots are immutable. Subsequent changes create a draft and preserve the earlier references, experiment versions, and review history.
-- Store image annotations relative to the original image dimensions. Record desktop/mobile crops when those choices carry the composition.
-- Studio renders trusted built-in interaction fixtures using validated motion parameters. External coding agents build product-specific experiments in the target website repository. Reference Studio stores screenshots, preview links, and feedback; it does not execute uploaded code.
-- Export `design.md`, `motion.md`, versioned `design-system.json` and `motion-system.json`, annotated references, an asset manifest, approved experiment evidence, and an implementation checklist from a specific revision. Keep both systems in the same approval snapshot. Label draft exports as drafts and identify unresolved assets or interaction decisions.
-- Carry forward reference-derived rationale, intentional exceptions, review coverage, and unresolved findings. A fresh execution agent should be able to apply the system to different screens without the original discussion or inventing a new identity.
+- Agent contributions remain proposals. Human approval is an explicit browser action; an agent bearer token is not proof of human intent.
+- An approved snapshot preserves one immutable visual/motion revision, its references, decisions, and evidence. Later edits start a draft; archival preserves material needed by approved snapshots.
+- [Experiments and handoff](specs/handoff.md) owns versioned reviews, snapshots, exports, and their acceptance criteria. Draft exports remain labeled; missing assets and unobserved behavior stay explicit.
+- A fresh agent must be able to apply the direction across distinct screens from the saved rationale, exceptions, reference interpretations, and tested rules. No framework, animation library, fixed aesthetic, or universal quality score is mandated.
 
 ## First-release boundaries
 
-- One person, local storage, Windows-first development; Cursor is the first live integration to verify.
-- One canonical skill for compatible agents, including Cursor, Claude Code, and OpenCode. Keep the workflow independent of proprietary tool names and optional client capabilities.
-- MCP uses the same application-service operations as the browser. Require an explicit project and, when selection matters, a specific board session.
-- Keep `.reference-studio/` runtime data private and separate from code. The existing environment overrides and scripts are documented in `STATUS.md` and package manifests.
-- Hosted accounts, remote browser-chat access, multiplayer, embedded AI chat, browser extensions, platform crawling, and a seeded art database are later scope.
+- Personal use, local storage, Windows-first. Cursor is the first live integration to verify; other clients are labeled according to actual verification.
+- One canonical portable skill adapts to the host's real capabilities. Installation/configuration belongs in repository setup documentation, separate from creative guidance.
+- Keep private runtime data separate from source. [README.md](../README.md) owns local setup, configuration, and development commands.
+- Hosted accounts, multiplayer, embedded agent runtime/chat, browser extensions, automated platform crawling, a seeded art database, and remote browser-chat access are later scope.

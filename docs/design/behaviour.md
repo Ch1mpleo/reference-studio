@@ -36,7 +36,7 @@ The original image viewer is a dialog with contain-fit media, zoom, a source lin
 
 ## Board
 
-One dock: Note, Group, Library, Undo, and Redo. Images are dropped or pasted onto the canvas. Dock add opens Note and Link forms only. Imported references are selected without opening a panel or moving the camera.
+One dock: Note, Group, Library, Motion, Undo, and Redo. Images are dropped or pasted onto the canvas. Dock add opens Note and Link forms only. Imported references are selected without opening a panel or moving the camera.
 
 Click selects. Shift adds or removes. A blank-canvas click clears selection unless a drag rectangle is in progress. Nodes stay keyboard focusable. Enter edits inline text. Arrow keys move selected nodes. Delete and Backspace do not delete records while editing text or without a scoped action. Selection does not change a role, save a direction, or message an agent.
 
@@ -46,7 +46,7 @@ Keep editing nodes mounted while panning. A blur or submit during a save queues 
 
 Groups are frames with a name and an item count. Moving a frame moves its children in parent-local coordinates. Archive ungroups references without moving their absolute positions. Restore reactivates the frame and does not silently regroup inbox items. Duplicate copies the saved direction, its placements, and its contextual notes, and shares global sources.
 
-Commit completed gestures as atomic arrangements. Viewport stays local to the tab. Undo and redo persist arrangements and stop on conflicts. A background reference arrival must not reset an active drag or resize.
+Commit completed gestures as atomic arrangements. Viewport stays local to the tab. Undo and redo persist arrangements. On conflict, preserve useful unsaved intent, discard invalid redo history, refetch, and explain the conflict rather than overwriting newer work. A background reference arrival must not reset an active drag or resize.
 
 Images and links keep optional Reference details and Usage and crop disclosures. A selected group can open Systems in the inspector. System edits save explicitly. Motion fields stay compatible: Instant has no duration; tween exposes milliseconds and easing; a physics spring exposes mass, stiffness, damping, initial velocity, and a named engine. Static images do not validate motion.
 
@@ -64,6 +64,6 @@ Menus use arrow keys, Home, End, Enter, Space, and Escape. A select chooses a va
 
 ## Theme and structure
 
-Studio is dark. There is no light theme and no theme toggle. Portaled popovers stay in the Studio scope. Native dialogs inherit it. Target previews use an isolated root.
+Portaled popovers stay in the Studio scope. Native dialogs inherit it. Target previews use an isolated root.
 
 One page heading, named navigation, a main board, and a labeled inspector. A nonmodal desktop inspector does not steal focus on every selection.

@@ -1,14 +1,6 @@
-# Design and motion systems
+# Target-project design and motion systems
 
-Agreed product scope, 2026-10-21. This document describes the complete intended behavior. [STATUS.md](STATUS.md) records evidence for what has been verified. [PLAN.md](../PLAN.md) owns task order. See [PRODUCT.md](PRODUCT.md) for product boundaries.
-
-## Two uses
-
-Reference Studio helps a human and an agent develop a reusable design system and motion system for each target product. A travel website, a portfolio, and a repetitive work tool can each have different systems. References, discussion, and experiments establish the reasons for those differences.
-
-Reference Studio's own interface also uses consistent visual tokens, components, and motion rules. Its interface should make it easy to examine varied material. A target project's palette, typography, or animation personality must not automatically restyle Studio's controls.
-
-Motion is a first-class part of the product direction. A deliberate choice of no animation is a valid decision.
+Read when changing target-project system records or the motion playground. [PRODUCT.md](../PRODUCT.md) owns product boundaries; [PLAN.md](../../PLAN.md) owns delivery status. Studio's own presentation is specified separately in [design.md](../../design.md).
 
 ## What a project design system contains
 
@@ -94,26 +86,9 @@ Use Studio's built-in canvas playground for direct comparison and tuning. Core e
 
 Review normal use, rapid repeated input, reversal midway through movement, keyboard input, supported small screens, and reduced motion. Include errors or loading when they affect the interaction. Compare an instant variant when the benefit of movement is unclear.
 
-Approval covers the visual system, motion system, references, and experiment evidence as one consistent revision. Systems can remain drafts during exploration; changing an approved value creates a new draft. Unresolved or unobserved behavior must remain visible in exports.
-
 ## Portable handoff
 
-Extend the existing revision export with:
-
-- `design.md`: concept, rationale, component/layout guidance, imagery, links to the systems, and unresolved decisions.
-- `design-system.json`: versioned, validated visual tokens and recipe metadata.
-- `motion.md`: purpose and behavior of interactions, no-animation choices, reduced-motion alternatives, and observed experiment evidence.
-- `motion-system.json`: versioned, validated named presets and interaction recipes, including units, engine-specific assumptions, and references to approved evidence.
-
-Keep the existing annotated references, asset manifest, experiment evidence, and implementation checklist. All outputs must identify the same project and revision and whether the export is draft or approved. The exact JSON contracts are implementation work, not established external standards.
-
-The portable skill guides discussion and interpretation; MCP reads or proposes the same service-owned records as the UI. An agent must not bypass human approval. Neither the skill nor the export requires a specific animation library.
-
-The coding agent implements reusable components and animation helpers in the target repository, following its stack. Sharing design intent across a product's app and website does not imply that every platform can consume the same React component or spring implementation.
-
-## Studio interface
-
-Studio's own visual specification is the repository root [design.md](../design.md). The implementation sequence for that interface is [PLAN.md](../PLAN.md). This document keeps the target-project design and motion scope.
+[Experiments and handoff](handoff.md) owns export contents, versioned reviews, and consistent approval snapshots. System records preserve the rationale, tested context, units, engine assumptions, and unresolved decisions required by that handoff.
 
 ## Supporting references
 

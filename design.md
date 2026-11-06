@@ -4,9 +4,9 @@ Canonical visual specification for Studio's own interface. Read it before changi
 
 This root file is Studio's interface. An exported project `design.md` belongs to that project and must not replace this file or restyle Studio.
 
-This file is the whole visual spec. There is no separate reading route.
+This file owns Studio's visual rules. Read linked interaction or specimen details only when the task affects them.
 
-Task order is in [PLAN.md](PLAN.md). Evidence is in [docs/STATUS.md](docs/STATUS.md). Product scope is [docs/PRODUCT.md](docs/PRODUCT.md). Target-project systems are [docs/DESIGN_AND_MOTION.md](docs/DESIGN_AND_MOTION.md). History is [docs/design/decisions.md](docs/design/decisions.md). `#/studio`-only behavior is [docs/design/specimen.md](docs/design/specimen.md). Save, conflict, draft, and board behavior is [docs/design/behaviour.md](docs/design/behaviour.md).
+Task order and progress: [PLAN.md](PLAN.md). Save/conflict, draft, and board interactions: [behavior](docs/design/behaviour.md). Loader integration and `#/studio` demo controls: [specimen](docs/design/specimen.md). Decision history: [decisions](docs/design/decisions.md).
 
 ## Core rules
 
@@ -90,7 +90,7 @@ Text on a surface uses ink, muted, or subtle. Disabled controls are 65% opacity.
 
 ## Library filters
 
-Kind is a radio group of four options: Any, Image, Link, and Note. Tag is one optional field. Active filters are chips, with one Clear button. Choosing a kind, or committing the tag, applies that filter in one click. There is no separate Apply step and no disclosure. The controls fit on one wrapping row. Keyword search still submits on Enter. The Library uses this recipe. The radio is the shared segment primitive so the Library does not invent a second control style. Its selected option uses the glass edge.
+Use the shared Segment for Kind (Any, Image, Link, Note), one optional Tag field, active chips, and Clear on one wrapping row. The selected segment uses the glass edge. Submission and filter interactions are owned by [behavior](docs/design/behaviour.md#fields-and-search).
 
 ## Shared components
 
