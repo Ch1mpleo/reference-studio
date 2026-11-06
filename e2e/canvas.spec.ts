@@ -73,7 +73,7 @@ test("drop, arrange, group, undo, inspect, and reload without opening an upload 
   expect(board.layout.items).toHaveLength(2);
   expect(board.layout.items.every((item) => item.frameId === board.layout.frames[0]?.id)).toBe(true);
   await first.click();
-  await first.locator("..").getByRole("button", { name: "Details", exact: true }).click();
+  await page.locator(".board-material").filter({ has: page.getByRole("img", { name: "North light", exact: true }) }).getByRole("button", { name: "Details", exact: true }).click();
   const inspector = page.getByRole("complementary", { name: "Inspector" });
   await expect(inspector).toBeVisible();
   await inspector.locator("summary").filter({ hasText: "Usage and crop" }).click();
@@ -162,7 +162,7 @@ test("a populated board keeps frame movement and image resizing persistent", asy
   }).toBe(true);
   const imageBox = await image.boundingBox();
   if (!imageBox) throw new Error("Missing selected image");
-  const handle = image.locator("..").locator(".react-flow__resize-control.handle.bottom.right");
+  const handle = page.locator(".board-material").filter({ has: page.getByRole("img", { name: "North light", exact: true }) }).locator(".react-flow__resize-control.handle.bottom.right");
   await handle.hover();
   const corner = await handle.boundingBox();
   if (!corner) throw new Error("Missing resize handle");

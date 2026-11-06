@@ -5,6 +5,7 @@ import { StudioButton } from "./StudioButton.js";
 import { StudioField } from "./StudioField.js";
 import { StudioReferenceCard } from "./StudioReferenceCard.js";
 import { StudioSegment } from "./StudioSegment.js";
+import { ImageUnavailable } from "./ImageRegions.js";
 
 type Kind = "" | "image" | "link" | "note";
 type Query = { q: string; tag: string; kind: Kind };
@@ -23,6 +24,7 @@ export function ReferenceSearch({
   placedReferenceIds: string[];
   onPlace: (referenceId: string) => Promise<ProjectReference>;
 }) {
+  const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(() => new Set());
   const [q, setQ] = useState("");
   const [appliedQ, setAppliedQ] = useState("");
   const [tagDraft, setTagDraft] = useState("");
@@ -163,16 +165,12 @@ export function ReferenceSearch({
             return (
               <li key={reference.id}>
                 <StudioReferenceCard title={reference.title} metadata={kindName(reference.kind)} selected={false}
-                  loadingMode="instant" imageState={reference.kind === "image" ? (reference.asset ? "ready" : "missing") : "none"}
+                  loadingMode="instant" imageState={reference.kind === "image" ? (reference.asset && !failedThumbnails.has(reference.asset.id) ? "ready" : "missing") : "none"}
                   onOpen={() => void place(reference.id)}
-                  media={reference.asset !== null ? (
-                    <img
-                      src={`/api/assets/${reference.asset.id}/thumbnail`}
-                      alt=""
-                      width={reference.asset.width}
-                      height={reference.asset.height}
-                    />
-                  ) : <p className="studio-meta">{reference.kind === "image" ? "Image unavailable" : kindName(reference.kind)}</p>}
+                  media={reference.asset !== null && !failedThumbnails.has(reference.asset.id) ? (
+                    <img src={`/api/assets/${reference.asset.id}/thumbnail`} alt={reference.title} width={reference.asset.width} height={reference.asset.height}
+                      onError={() => { const id = reference.asset?.id; if (id) setFailedThumbnails((current) => new Set(current).add(id)); }} />
+                  ) : reference.kind === "image" ? <ImageUnavailable title={reference.title} /> : <p className="studio-meta">{kindName(reference.kind)}</p>}
                   summary={<div className="reference-search-summary">
                     {reference.creator !== null ? <p className="studio-help">{reference.creator}</p> : null}
                     {reference.sourceUrl !== null ? (

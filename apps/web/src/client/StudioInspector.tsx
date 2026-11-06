@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStudioLayer } from "./studioLayer.js";
 import { StudioButton } from "./StudioButton.js";
@@ -11,6 +11,18 @@ export function StudioInspector({ open, onClose, retainContent = false, closeCon
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const layer = useStudioLayer();
+  // The shell changes at browser zoom/reflow, but editors and their unsaved
+  // state keep one portal destination. Moving that destination preserves them.
+  const [content] = useState(() => {
+    const element = document.createElement("div");
+    element.className = "studio-inspector-content";
+    return element;
+  });
+  useLayoutEffect(() => {
+    const host = desktop ? asideRef.current : dialogRef.current?.querySelector(".studio-dialog-sheet");
+    host?.appendChild(content);
+    return () => { content.remove(); };
+  }, [desktop, layer, content]);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 960px)");
@@ -43,17 +55,15 @@ export function StudioInspector({ open, onClose, retainContent = false, closeCon
     return () => { document.removeEventListener("keydown", escape); if (previous?.isConnected) previous.focus(); };
   }, [desktop, open]);
 
-  if (desktop) return <aside ref={asideRef} className="studio-inspector" aria-label="Inspector" hidden={!open}>
+  const aside = <aside ref={asideRef} className="studio-inspector" aria-label="Inspector" hidden={!open}>
     {closeControl === "built-in" ? <StudioButton variant="ghost" className="studio-inspector-dismiss" aria-label="Close inspector" onClick={onClose}>Close</StudioButton> : null}
-    {open || retainContent ? children : null}
   </aside>;
-  const dialog = (
+  const dialog = desktop ? null : (
     <dialog ref={dialogRef} className="studio-inspector" aria-label="Reference details" onCancel={(event) => { event.preventDefault(); onClose(); }}>
       <div className="studio-dialog-sheet">
         {closeControl === "built-in" ? <StudioButton variant="ghost" className="studio-inspector-dismiss" aria-label="Close inspector" onClick={onClose}>Close</StudioButton> : null}
-        {open || retainContent ? children : null}
       </div>
     </dialog>
   );
-  return layer === null ? dialog : createPortal(dialog, layer);
+  return <>{desktop ? aside : layer === null ? dialog : createPortal(dialog, layer)}{createPortal(open || retainContent ? children : null, content)}</>;
 }
