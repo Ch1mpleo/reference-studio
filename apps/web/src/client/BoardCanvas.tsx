@@ -35,7 +35,7 @@ function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
     <NodeResizer isVisible={selected && !data.readOnly && !data.editing} minWidth={data.frame ? 240 : 100} minHeight={data.frame ? 160 : 80}
       keepAspectRatio={!data.frame && reference?.kind === "image"} onResizeStart={data.resizeStarted} onResizeEnd={data.resized} />
     {data.frame ? <div className="board-frame-heading"><BoardInlineText value={data.title} revision={data.revision} label="Group name" editing={data.editing} disabled={data.readOnly} onEdit={data.edit} onDone={data.done} onSave={data.saveText} /><span className="studio-meta">{data.count} {data.count === 1 ? "item" : "items"}</span></div> : reference?.kind === "note" ? <div className="board-note"><BoardInlineText value={reference.observations} revision={reference.revision} label="Note text" multiline editing={data.editing} onEdit={data.edit} onDone={data.done} onSave={data.saveText} /></div> : <>
-      {reference?.asset ? data.annotations.some((note) => note.region) ? <div className="board-image-plane"><div style={{ width: `${imageWidth}%` }}><ImageRegions reference={reference} resolution="thumbnail" annotations={data.annotations} onSelect={data.inspect} /></div></div> : <img src={`/api/assets/${reference.asset.id}/thumbnail`} alt={reference.title} draggable={false} /> :
+      {reference?.asset ? <div className="board-image-plane"><div style={{ width: `${imageWidth}%` }}><ImageRegions reference={reference} resolution="thumbnail" annotations={data.annotations} onSelect={data.inspect} /></div></div> :
         <div className="board-material-text"><p className="studio-kicker">{reference?.kind}</p><h3>{data.title}</h3><p>{reference?.observations || reference?.sourceUrl || "Image unavailable"}</p></div>}
       <div className="board-item-caption"><span>{data.title}</span></div>
     </>}
@@ -202,5 +202,6 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
     panOnScroll zoomOnScroll={false} zoomOnPinch zoomOnDoubleClick={false} deleteKeyCode={null}
     minZoom={0.1} maxZoom={3} defaultViewport={{ x: 40, y: 40, zoom: 0.8 }}
     multiSelectionKeyCode="Shift"
+    attributionPosition="bottom-left"
   ><Background variant={BackgroundVariant.Dots} gap={24} size={1} /></ReactFlow>;
 }

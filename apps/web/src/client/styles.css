@@ -1237,6 +1237,7 @@ body:has(.studio-ui) {
 }
 
 .studio-inspector::backdrop { background: var(--color-scrim); }
+.studio-inspector-content { display: contents; }
 
 .studio-ui[data-details-open="true"] dialog.studio-inspector[open],
 .studio-ui:not(.studio-preview) dialog.studio-inspector[open] {

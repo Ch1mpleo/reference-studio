@@ -1,6 +1,6 @@
 import { AsciiSkeleton } from "ascii-reveal";
 import { useStudioReducedMotion } from "./studioMotion.js";
-import { useStudioEffectsPaused } from "./studioEffects.js";
+import { studioAsciiAvailable, useStudioEffectsPaused } from "./studioEffects.js";
 import { STUDIO_LOADING_DEFAULTS, type StudioLoadingOptions } from "./studioLoadingOptions.js";
 import type { CSSProperties } from "react";
 
@@ -8,7 +8,7 @@ import type { CSSProperties } from "react";
 export function StudioSkeleton({ reducedMotion = false, plain = false, kind = "media", lines = 3, options = STUDIO_LOADING_DEFAULTS }: { reducedMotion?: boolean; plain?: boolean; kind?: "media" | "text"; lines?: number; options?: StudioLoadingOptions }) {
   const reduced = useStudioReducedMotion(reducedMotion);
   const paused = useStudioEffectsPaused();
-  plain = plain || paused;
+  plain = plain || paused || !studioAsciiAvailable();
   const style = { "--ars-speed": `${1.8 / options.speed}s` } as CSSProperties;
   const animationKey = `${options.skeletonVariant}-${options.speed}`;
   if (kind === "text") {
