@@ -1,14 +1,14 @@
 ---
-description: "React/Vite client, reference imagery, canvas interactions, and responsive accessibility."
+description: "React/Vite client, canvas interactions, client state, and CSS."
 globs: "apps/web/src/client/**,apps/web/index.html"
 alwaysApply: false
 ---
 
 # Web client
 
-Follow [design.md](../../design.md) for tokens, primitives, and core rules.
+Follow [design.md](../../design.md) for Studio tokens, primitives, and presentation. Its interaction and specimen references are conditional on the affected behavior.
 
-- Functional React and plain CSS. This is Vite, not Next.js: no Server Components, Server Actions, `next/image`, or `use client`.
-- Persisted project state stays in the application service. Local state is selection, panels, and unsaved edits.
-- Parse external responses with shared core schemas. Reuse the connection hook and drop obsolete responses.
-- Keep artwork legible. Use real thumbnails and only recorded crops. Verify changed screens in a browser at desktop width. Phone layout is not required.
+- Use functional React and plain CSS with Vite.
+- Persisted project state belongs to the application service; selection, panels, viewport, and unsaved edits stay local.
+- Validate external responses with shared core schemas. Reuse connection/request hooks and discard obsolete responses without losing newer drafts.
+- Use real thumbnails and recorded crops. For changed UI, inspect the affected screen in a desktop browser and exercise relevant keyboard, loading, and reduced-motion paths.
