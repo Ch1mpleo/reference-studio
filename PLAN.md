@@ -18,7 +18,7 @@ todos:
   - {"id": "m2-collaboration-rehearsal", "content": "M2.11: manual external-chat rehearsal", "status": "completed"}
   - {"id": "m2-system-records", "content": "M2.6: draft system records", "status": "completed"}
   - {"id": "m2-motion-playground", "content": "M2.7–M2.9: canvas study and saved variants", "status": "completed"}
-  - {"id": "m2-studio-validation", "content": "M2.10: Studio acceptance", "status": "pending"}
+  - {"id": "m2-studio-validation", "content": "M2.10: Studio acceptance", "status": "completed"}
   - {"id": "m3-mcp", "content": "M3.1–M3.5: MCP and live Cursor", "status": "pending"}
   - {"id": "m3-system-tools", "content": "M3.6: system and variant tools", "status": "pending"}
   - {"id": "m3-collaboration-loop", "content": "M3.7: sustained and resumed collaboration", "status": "pending"}
@@ -36,10 +36,10 @@ Current position follows the linked acceptance evidence; in-progress changes req
 ## Current position
 
 - M0.1 workspace, M0.2 monorepo, M0.3 service, M0.4 contracts, M0.R1–M0.R4, M1.0–M1.6, and M1 acceptance are complete. M2.0a–M2.0c, M2.1–M2.9, and M2.11's manual rehearsal are complete. M2.4 covers the records delivered at that checkpoint; system and variant duplication were subsequently exercised in M2.6/M2.9.
-- M2.10 acceptance remains next. In-progress code and tests in the checkout do not close that gate. The grouped board, direction records, motion study, saved variants, and Library filters are delivered.
+- M2.10 acceptance is recorded for the merged browser-acceptance work. M2 is complete within the recorded scope; next is M3.1 adapter discovery. The grouped board, direction records, motion study, saved variants, and Library filters are delivered.
 - The MCP adapter is a placeholder and the portable product skill is not implemented. Live MCP/client recovery, persistent experiment/review records, immutable approvals, and handoff exports remain M3–M5 work.
-- Open validation includes native 200% browser zoom, populated-board/effect performance, broader browser/runtime coverage, and full M2.10 acceptance. Historical runs used differing Node/browser versions; no universal compatibility is inferred. The Vite large-chunk warning and extreme-coordinate rejection remain documented limitations.
-- Evidence: [dated implementation history](docs/evidence/implementation-history.md), [manual collaboration](docs/evidence/m2-collaboration.md), [system records](docs/evidence/m2-systems.md), [canvas study](docs/evidence/m2-playground.md), and [tuning](docs/evidence/m2-tuning.md). Historical results retain their dates and scope.
+- Native 200% browser zoom and populated-board checks now have recorded coverage. Expensive specimen ASCII work at 4x CPU does not qualify a production rollout: the board and Library remain instant. Broader platform/runtime coverage, complete accessibility conformance, and human aesthetic approval are not implied. The Vite large-chunk warning, extreme-coordinate rejection, and local-only entry distance/direction remain limitations.
+- Evidence: [M2 acceptance](docs/evidence/m2-acceptance.md), [implementation history](docs/evidence/implementation-history.md), [manual collaboration](docs/evidence/m2-collaboration.md), [system records](docs/evidence/m2-systems.md), [canvas study](docs/evidence/m2-playground.md), and [tuning](docs/evidence/m2-tuning.md). Historical results retain their scope.
 
 ## Execution and evidence
 
@@ -47,10 +47,12 @@ Read only the task being continued and its relevant linked requirements. [AGENTS
 
 Complete the gate before advancing its milestone. Record substantial checks, environment, observed outcomes, and unresolved limits once under `docs/evidence/`; link that evidence from the task and update its todo only when acceptance is met. A build or written scenario alone does not close a gate. Routine edits do not need new status entries.
 
-## M2.10 — Active acceptance gate
+## M2.10 — Recorded acceptance and regression criteria
+
+[Merged acceptance evidence](docs/evidence/m2-acceptance.md) closes this gate with the production effects limitation above. The criteria below remain the regression baseline; this documentation update did not rerun application tests.
 
 - Run `npm run check`, focused regressions during iteration, the full `npm test`, `npm run build`, and `npm run test:e2e`. Add behavioral coverage for changed loading lifecycles, retained drafts, menu/dialog focus, selection/inspector behavior, and board operations. Do not test exact prose or decorative class names.
-- Extend production browser coverage beyond the two connection scenarios: M1 collection/reuse/backup/restore, the M2 board/inspector path, and real keyboard focus with Tab/Shift+Tab/Escape. Recheck the dialog Escape change that postdates the recorded M1.6 e2e run.
+- Cover production M1 collection/reuse/backup/restore, the M2 board/inspector path, and real keyboard focus with Tab/Shift+Tab/Escape, including dialog dismissal and focus restoration.
 - Review a 1440px desktop width, a 480px-tall window, actual 200% browser zoom, the dark theme, OS reduced motion, long names/URLs/Vietnamese text, empty/loading/error/conflict, broken thumbnails, and disabled effects. Device pixel ratio emulation alone is not 200% browser zoom. Verify visible focus and text/control contrast; retain evidence and report tools' limitations honestly. Phone layout is not required.
 - Use a documented temporary board with at least 50 mixed placements and two directions; record visible count, asset dimensions, browser, machine, and whether rendering is culled. Compare ASCII enabled/disabled on the same board, including 4x CPU throttling where available. Measure data-ready-to-readable time, long tasks, layout shifts, and input/drag responsiveness; do not claim upstream benchmark numbers as Studio results.
 - Acceptance: no input waits for effects; no reveal during direct manipulation or fixture comparison; no active decorative loop after completion/unmount; no animation-induced layout shift; content remains readable on fallback and reduced motion. If the candidate creates repeatable >50ms effect-attributable long tasks or delays useful content, narrow or remove the effect and record the outcome. Artwork remains original once loaded.

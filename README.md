@@ -47,17 +47,23 @@ Run from the repository root:
 npm run check
 npm test
 npm run build
+```
+
+Vitest covers core/service behavior. Playwright builds the web workspace and runs production browser scenarios with temporary data directories and managed service lifecycles. The full suite needs installed Microsoft Edge by default and bundled Chromium for the native browser-zoom scenario:
+
+```powershell
+npx playwright install chromium
 npm run test:e2e
 ```
 
-Vitest covers core/service behavior. Playwright builds the web workspace and runs production browser scenarios with temporary data directories and managed service lifecycles. It uses installed Microsoft Edge by default. To use installed Chrome:
+The native-zoom scenario launches a visible browser and requires an interactive desktop, or a virtual display on Linux. Its extension and browser profile are temporary; it does not use a personal browser profile. To run the configured browser scenarios with installed Chrome instead of Edge:
 
 ```powershell
 $env:REFERENCE_STUDIO_BROWSER_CHANNEL = "chrome"
 npm run test:e2e
 ```
 
-A fresh machine needs the selected browser installed; the default does not rely on a bundled Chromium download. See `playwright.config.ts` and package scripts for current commands. Runtime and browser coverage is recorded with each acceptance result.
+Selecting Chrome still requires bundled Chromium for native zoom. See `playwright.config.ts` and package scripts for current commands. The [M2 acceptance record](docs/evidence/m2-acceptance.md) identifies the observed runtime/browser coverage, measurement limits, and generated report locations.
 
 ## Repository and agents
 
