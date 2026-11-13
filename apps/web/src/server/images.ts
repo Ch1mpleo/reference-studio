@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createReadStream, statSync } from "node:fs";
 import {
   IMAGE_MEDIA_TYPES,
   MAX_IMAGE_EDGE,
@@ -28,18 +29,18 @@ export type InspectedImage = {
 };
 
 export async function inspectImage(
-  source: Buffer,
+  source: Buffer | string,
   options: { maxBytes: number },
 ): Promise<InspectedImage> {
-  const bytes = source;
-  if (bytes.byteLength === 0) {
+  const byteSize = typeof source === "string" ? statSync(source).size : source.byteLength;
+  if (byteSize === 0) {
     throw new ServiceError("validation", "Send a JPEG, PNG, or WebP image.");
   }
-  if (bytes.byteLength > options.maxBytes) {
+  if (byteSize > options.maxBytes) {
     throw new ServiceError("validation", imageTooLargeMessage(options.maxBytes));
   }
 
-  const metadata = await readMetadata(bytes);
+  const metadata = await readMetadata(source);
   const format = metadata.format === undefined ? undefined : FORMATS[metadata.format];
   if (format === undefined) {
     throw new ServiceError("validation", "Send a JPEG, PNG, or WebP image.");
@@ -62,7 +63,7 @@ export async function inspectImage(
 
   let thumbnail: Buffer;
   try {
-    thumbnail = await sharp(bytes, sharpOptions())
+    thumbnail = await sharp(source, sharpOptions())
       .rotate()
       .resize({
         width: THUMBNAIL_EDGE,
@@ -77,10 +78,10 @@ export async function inspectImage(
   }
 
   return {
-    sha256: createHash("sha256").update(bytes).digest("hex"),
+    sha256: await hashSource(source),
     mediaType: format.mediaType,
     extension: format.extension,
-    byteSize: bytes.byteLength,
+    byteSize,
     width,
     height,
     thumbnail,
@@ -95,12 +96,23 @@ function sharpOptions() {
   };
 }
 
-async function readMetadata(bytes: Buffer) {
+async function readMetadata(source: Buffer | string) {
   try {
-    return await sharp(bytes, sharpOptions()).metadata();
+    return await sharp(source, sharpOptions()).metadata();
   } catch (error) {
     throw imageReadError(error);
   }
+}
+
+async function hashSource(source: Buffer | string): Promise<string> {
+  if (typeof source !== "string") {
+    return createHash("sha256").update(source).digest("hex");
+  }
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(source)) {
+    hash.update(chunk as Buffer);
+  }
+  return hash.digest("hex");
 }
 
 function imageReadError(error: unknown): ServiceError {

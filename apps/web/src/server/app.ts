@@ -1,3 +1,4 @@
+import { mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
@@ -36,6 +37,7 @@ import { registerReferenceRoutes } from "./references.js";
 import { registerReferenceImageRoutes } from "./referenceImages.js";
 import { registerSettingsRoutes } from "./settings.js";
 import { issueSessionCookie } from "./session.js";
+import { incomingUploadsDir } from "./uploads.js";
 
 export { publishChange } from "./changes.js";
 
@@ -70,6 +72,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   });
 
   migrate(dependencies.database, dependencies.migrationsDir ?? defaultMigrationsDir());
+  sweepIncomingUploads(dependencies.config.dataDir);
 
   const streams = new Set<EventStream>();
   app.addHook("preClose", async () => {
@@ -254,3 +257,24 @@ function transportError(
 type EventStream = {
   close: () => void;
 };
+
+const INCOMING_PART_MAX_AGE_MS = 60 * 60 * 1000;
+
+export function sweepIncomingUploads(dataDir: string, now = Date.now()): string[] {
+  const directory = incomingUploadsDir(dataDir);
+  mkdirSync(directory, { recursive: true });
+  const removed: string[] = [];
+  const cutoff = now - INCOMING_PART_MAX_AGE_MS;
+  for (const name of readdirSync(directory)) {
+    if (!name.endsWith(".part")) {
+      continue;
+    }
+    const absolute = path.join(directory, name);
+    const age = statSync(absolute).mtimeMs;
+    if (age < cutoff) {
+      unlinkSync(absolute);
+      removed.push(name);
+    }
+  }
+  return removed;
+}

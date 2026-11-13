@@ -30,22 +30,32 @@ import {
   type UpdateReferenceRequest,
   type CreatePlacementRequest,
 } from "@reference-studio/core";
+import { existsSync, unlinkSync } from "node:fs";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
-import { managedPath, readManagedFile, writeNewFile } from "./assetFiles.js";
+import { managedPath, publishFile, readManagedFile, removeIfUnreferenced, writeNewFile } from "./assetFiles.js";
 import { headerValue, requireCaller } from "./access.js";
 import { publishChange } from "./changes.js";
 import type { EventHub } from "./events.js";
 import { inspectImage, type InspectedImage } from "./images.js";
 import {
-  commitMutation,
+  commitMutation as commitMutationImpl,
   hashCanonicalRequest,
   readIdempotencyKey,
   rejectIdempotencyMismatch,
 } from "./idempotency.js";
+
+type CommitMutation = typeof commitMutationImpl;
+let commitMutation: CommitMutation = commitMutationImpl;
+
+/** Test-only seam to force post-publish commit failures. */
+export function setCommitMutationForTests(next: CommitMutation | undefined): void {
+  commitMutation = next ?? commitMutationImpl;
+}
 import { getProject } from "./projects.js";
 import { assertPlacementDirectionRevision, bumpPlacementDirection, readBoard, saveBoardLayout } from "./boards.js";
 import { readSettings } from "./settings.js";
+import { incomingUploadsDir, streamUploadToTemp } from "./uploads.js";
 
 const IMAGE_FIELDS = new Set(["title", "sourceUrl", "creator", "observations"]);
 const PATH_FIELDS = new Set(["path", "filePath", "filepath", "localPath"]);
@@ -109,30 +119,46 @@ export function registerReferenceRoutes(
       const projectId = requireProject(database, routeParam(request, "projectId"));
       const key = readIdempotencyKey(request.headers["idempotency-key"]);
       const maxUploadBytes = readSettings(database).maxUploadBytes;
-      const upload = await readImageUpload(request, maxUploadBytes);
-      const inspected = await inspectImage(upload.bytes, { maxBytes: maxUploadBytes });
-      const fields = parseContract(imageFieldSchema, {
-        title: upload.fields.title ?? "",
-        sourceUrl: upload.fields.sourceUrl ?? "",
-        creator: upload.fields.creator ?? "",
-        observations: upload.fields.observations ?? "",
-      }, "Image details are invalid.");
-      const canonical = imageRequestForStorage(fields, upload.filename, inspected.sha256);
-      const requestHash = hashCanonicalRequest(canonical);
-      const scope = mutationScope(caller, "reference.image", projectId);
-      rejectIdempotencyMismatch(database, scope, key, requestHash);
-      const paths = storeImageFiles(dataDir, inspected, upload.bytes);
-      const outcome = commitMutation(database, {
-        scope,
-        key,
-        requestHash,
-        execute: () => {
-          const reference = insertImageReference(database, projectId, canonical, inspected, paths);
-          return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
-        },
-      });
-      publishReference(hub, projectId, outcome);
-      return reply.code(outcome.statusCode).send(outcome.body);
+      const upload = await readImageUpload(request, maxUploadBytes, dataDir);
+      const created: string[] = [];
+      try {
+        const inspected = await inspectImage(upload.tempPath, { maxBytes: maxUploadBytes });
+        const fields = parseContract(imageFieldSchema, {
+          title: upload.fields.title ?? "",
+          sourceUrl: upload.fields.sourceUrl ?? "",
+          creator: upload.fields.creator ?? "",
+          observations: upload.fields.observations ?? "",
+        }, "Image details are invalid.");
+        const canonical = imageRequestForStorage(fields, upload.filename, inspected.sha256);
+        const requestHash = hashCanonicalRequest(canonical);
+        const scope = mutationScope(caller, "reference.image", projectId);
+        rejectIdempotencyMismatch(database, scope, key, requestHash);
+        const paths = publishImageFiles(dataDir, inspected, upload.tempPath, created);
+        const outcome = commitMutation(database, {
+          scope,
+          key,
+          requestHash,
+          execute: () => {
+            const reference = insertImageReference(database, projectId, canonical, inspected, paths);
+            return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
+          },
+        });
+        publishReference(hub, projectId, outcome);
+        return reply.code(outcome.statusCode).send(outcome.body);
+      } catch (error) {
+        for (const relativePath of created) {
+          removeIfUnreferenced(database, dataDir, relativePath);
+        }
+        throw error;
+      } finally {
+        if (existsSync(upload.tempPath)) {
+          try {
+            unlinkSync(upload.tempPath);
+          } catch {
+            // Best-effort cleanup when publish did not rename the temp file.
+          }
+        }
+      }
     },
   );
 
@@ -293,9 +319,12 @@ function requireJson(
 async function readImageUpload(
   request: FastifyRequest,
   maxUploadBytes: number,
+  dataDir: string,
 ): Promise<{
   filename: string;
-  bytes: Buffer;
+  tempPath: string;
+  sha256: string;
+  byteSize: number;
   fields: Record<string, string>;
 }> {
   const mediaType = headerValue(request.headers["content-type"])?.split(";")[0]?.trim().toLowerCase();
@@ -304,7 +333,7 @@ async function readImageUpload(
   }
   const fields: Record<string, string> = {};
   let filename = "image";
-  let bytes: Buffer | undefined;
+  let streamed: { tempPath: string; sha256: string; byteSize: number } | undefined;
   for await (const part of request.parts({ limits: { fileSize: maxUploadBytes } })) {
     if (PATH_FIELDS.has(part.fieldname)) {
       if (part.type === "file") {
@@ -313,13 +342,16 @@ async function readImageUpload(
       throw new ServiceError("validation", "Send image bytes. The service does not read local paths.");
     }
     if (part.type === "file") {
-      if (part.fieldname !== "file" || bytes !== undefined) {
+      if (part.fieldname !== "file" || streamed !== undefined) {
         await part.toBuffer().catch(() => undefined);
         throw new ServiceError("validation", "Send one image in the file field.");
       }
       filename = part.filename;
       try {
-        bytes = await part.toBuffer();
+        streamed = await streamUploadToTemp(part, {
+          dir: incomingUploadsDir(dataDir),
+          maxBytes: maxUploadBytes,
+        });
       } catch (error) {
         if (isOversizedUpload(error)) {
           throw new ServiceError("validation", imageTooLargeMessage(maxUploadBytes));
@@ -336,21 +368,32 @@ async function readImageUpload(
     }
     fields[part.fieldname] = part.value;
   }
-  if (bytes === undefined) {
+  if (streamed === undefined) {
     throw new ServiceError("validation", "Choose a JPEG, PNG, or WebP image.");
   }
-  return { filename, bytes, fields };
+  return {
+    filename,
+    tempPath: streamed.tempPath,
+    sha256: streamed.sha256,
+    byteSize: streamed.byteSize,
+    fields,
+  };
 }
 
-function storeImageFiles(
+function publishImageFiles(
   dataDir: string,
   image: InspectedImage,
-  bytes: Buffer,
+  tempPath: string,
+  created: string[],
 ): { originalPath: string; thumbnailPath: string } {
   const originalPath = `assets/originals/${image.sha256}${image.extension}`;
   const thumbnailPath = `assets/thumbnails/${image.sha256}.webp`;
-  writeNewFile(managedPath(dataDir, originalPath), bytes);
-  writeNewFile(managedPath(dataDir, thumbnailPath), image.thumbnail);
+  if (publishFile(tempPath, managedPath(dataDir, originalPath))) {
+    created.push(originalPath);
+  }
+  if (writeNewFile(managedPath(dataDir, thumbnailPath), image.thumbnail)) {
+    created.push(thumbnailPath);
+  }
   return { originalPath, thumbnailPath };
 }
 
