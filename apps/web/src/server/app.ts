@@ -34,6 +34,7 @@ import { registerVariantRoutes } from "./variants.js";
 import { registerProjectRoutes } from "./projects.js";
 import { registerReferenceRoutes } from "./references.js";
 import { registerReferenceImageRoutes } from "./referenceImages.js";
+import { registerSettingsRoutes } from "./settings.js";
 import { issueSessionCookie } from "./session.js";
 
 export { publishChange } from "./changes.js";
@@ -111,6 +112,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   registerBoardDraftRoutes(app, dependencies.database, hub);
   registerSystemRoutes(app, dependencies.database, hub);
   registerVariantRoutes(app, dependencies.database, hub);
+  registerSettingsRoutes(app, dependencies.database);
 
   app.get("/api/events", (request, reply) => {
     reply.hijack();
