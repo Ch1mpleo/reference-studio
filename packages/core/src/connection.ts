@@ -17,7 +17,14 @@ export const connectionRecordSchema = z
       context.addIssue({ code: "custom", path: ["baseUrl"], message: "baseUrl must be a URL." });
       return;
     }
-    if (url.protocol !== "http:" || !LOOPBACK_HOSTS.has(url.hostname)) {
+    if (
+      url.protocol !== "http:" ||
+      !LOOPBACK_HOSTS.has(url.hostname) ||
+      record.baseUrl.includes("@") ||
+      /^http:\/\/[^/:?#]*\.(?=[:/?#]|$)/i.test(record.baseUrl) ||
+      url.username !== "" ||
+      url.password !== ""
+    ) {
       context.addIssue({
         code: "custom",
         path: ["baseUrl"],
@@ -25,7 +32,7 @@ export const connectionRecordSchema = z
       });
       return;
     }
-    if (url.port !== String(record.port)) {
+    if ((url.port === "" ? "80" : url.port) !== String(record.port)) {
       context.addIssue({ code: "custom", path: ["baseUrl"], message: "baseUrl port must match port." });
     }
   });

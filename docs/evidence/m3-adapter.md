@@ -13,20 +13,24 @@ Checkpoint: 2026-11-13 on `feat/m3.1-mcp-adapter` (base `2187159`). The M3.1 sco
 ## Environment and versions
 
 - Node v22.23.4 (the repository declares `>=24`; all suites below passed on 22.23.4). `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.4.0, zod 4.6.7.
-- The installed SDK reports `LATEST_PROTOCOL_VERSION` `2025-11-25` (supported: 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07), not the 2026-07-28 revision named in the brief; the stdio exchange negotiated whatever the installed SDK supports. The API otherwise matched the brief (`McpServer`, `registerTool` with `z.object`, `serveStdio` from `@modelcontextprotocol/server/stdio`). `McpServer` advertises `tools.listChanged: true` by default.
+- The negotiated protocol is `2025-11-25` (SDK 2.4.0 `LATEST_PROTOCOL_VERSION`). The installed SDK reports `LATEST_PROTOCOL_VERSION` `2025-11-25` (supported: 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07), not the 2026-07-28 revision named in the brief; the stdio exchange negotiated whatever the installed SDK supports. The API otherwise matched the brief (`McpServer`, `registerTool` with `z.object`, `serveStdio` from `@modelcontextprotocol/server/stdio`). `McpServer` advertises `tools.listChanged: true` by default; the adapter sets `listChanged: false` because its tool set is static, and the built adapter now reports `{"tools":{"listChanged":false}}`.
 
 ## Verification
 
 | Command | Result |
 | --- | --- |
 | `npm run check` | pass (no type errors) |
-| `npm test` | 47 files, 181 tests passed, 0 failed, 0 skipped (includes 4 core connection, 7 service-client/discovery, 3 stdio integration tests) |
+| `npm test` | 47 files, 186 tests passed, 0 failed, 0 skipped (includes 6 core connection, 11 service-client/discovery, 3 stdio integration tests) |
 | `npm run build` | pass |
 | `REFERENCE_STUDIO_BROWSER_CHANNEL=chrome npm run test:e2e` | 65 passed, 1 failed, 0 skipped |
 
 The one e2e failure is `e2e/m2-native-zoom.spec.ts`, which launches Playwright's bundled headed Chromium (`channel: "chromium"`) to load an extension; that browser is not installed on this machine (`Executable doesn't exist ... chromium-1248`). It is environmental and unrelated to this change (no web client or service code changed); it was not re-run elsewhere. The default `msedge` channel is also not installed here, so Chrome was used.
 
 The stdio integration test (`packages/mcp/src/server.test.ts`) starts a real service with `startService` on a temporary data directory and free port, spawns the adapter through the SDK `Client` and `StdioClientTransport`, and asserts server info, exactly `["get_workspace_status"]` from `tools/list`, no resources capability, an authenticated call, then wrong token, missing `connection.json`, mismatched version and a stopped service by code. A separate raw test checks that every stdout line is JSON-RPC and that the process exits with code 0 after stdin closes.
+
+### QA rerun
+
+QA reran on a fresh clone with Node 24.22.1: `npm run check` pass, 181/181 unit tests (before the QA-follow-up tests), `npm run build` pass, and e2e 66/66 on Chromium after `npx playwright install chromium`, including `m2-native-zoom` 1/1. This supersedes the one local e2e failure above, which was an uninstalled browser. Follow-up hardening: base URLs with userinfo or a trailing-dot host are rejected, and the default port is read as 80.
 
 ## Built adapter against `npm run dev`
 
@@ -66,10 +70,9 @@ tools/call: {
 }
 ```
 
-(Whitespace condensed from the pretty-printed run; field values unchanged.) The probe used a temporary data directory rather than the personal `.reference-studio/`.
+(Captured before the `listChanged: false` change, so the initialize capabilities above showed `listChanged: true`. Whitespace condensed from the pretty-printed run; field values unchanged.) The probe used a temporary data directory rather than the personal `.reference-studio/`.
 
 ## Limits
 
 - Only a diagnostic tool exists; no Cursor or other client was live-tested (M3.5). The adapter has been exercised only through the SDK client.
 - Discovery is read per call, so restarting Studio is picked up without restarting the adapter. The pid check uses `process.kill(pid, 0)`; pid reuse can mask a stale record, in which case the health check decides.
-- Native-zoom e2e not run (above).

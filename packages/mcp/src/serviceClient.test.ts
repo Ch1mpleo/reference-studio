@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { CONTRACT_VERSION } from "@reference-studio/core";
@@ -162,6 +162,49 @@ describe("checkWorkspace", () => {
     expect(`${error.message} ${error.nextStep}`).not.toContain("wrong-token-value");
     expect(`${error.message} ${error.nextStep}`).not.toContain(TOKEN);
   });
+});
+
+describe("checkWorkspace edge failures", () => {
+  function expectSafe(error: AdapterError): void {
+    expect(error.nextStep.length).toBeGreaterThan(0);
+    expect(`${error.message} ${error.nextStep}`).not.toContain(TOKEN);
+  }
+
+  it("maps a non-200 health response to service_unavailable", async () => {
+    const dir = tempDir();
+    const port = await stub((_request, response) => json(response, 503, {}));
+    writeDiscovery(dir, port);
+    const error = await failure(dir);
+    expect(error.code).toBe("service_unavailable");
+    expectSafe(error);
+  });
+
+  it("maps a 5xx from /api/projects to service_unavailable", async () => {
+    const dir = tempDir();
+    const port = await stub((request, response) =>
+      request.url === "/api/health"
+        ? json(response, 200, { ok: true, service: "reference-studio", contractVersion: CONTRACT_VERSION })
+        : json(response, 500, {}),
+    );
+    writeDiscovery(dir, port);
+    const error = await failure(dir);
+    expect(error.code).toBe("service_unavailable");
+    expectSafe(error);
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "maps an unreadable token file to discovery_invalid",
+    async () => {
+      const dir = tempDir();
+      const port = await stub(healthy());
+      writeDiscovery(dir, port);
+      chmodSync(path.join(dir, "auth-token"), 0o000);
+      const error = await failure(dir);
+      expect(error.code).toBe("discovery_invalid");
+      expect(error.message).toContain("EACCES");
+      expectSafe(error);
+    },
+  );
 });
 
 describe("resolveDataDir", () => {

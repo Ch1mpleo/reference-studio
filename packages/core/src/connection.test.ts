@@ -28,4 +28,22 @@ describe("connection record", () => {
     const { pid: _pid, ...rest } = valid;
     expect(connectionRecordSchema.safeParse(rest).success).toBe(false);
   });
+
+  it("rejects userinfo and trailing-dot hosts", () => {
+    for (const baseUrl of [
+      "http://evil@127.0.0.1:4317",
+      "http://user:pw@localhost:4317",
+      "http://127.0.0.1.:4317",
+      "http://localhost.:4317",
+    ]) {
+      expect(connectionRecordSchema.safeParse({ ...valid, baseUrl }).success, baseUrl).toBe(false);
+    }
+  });
+
+  it("treats the default port as 80", () => {
+    const record = { ...valid, port: 80, baseUrl: "http://127.0.0.1:80" };
+    expect(connectionRecordSchema.safeParse(record).success).toBe(true);
+    expect(connectionRecordSchema.safeParse({ ...record, baseUrl: "http://127.0.0.1" }).success).toBe(true);
+    expect(connectionRecordSchema.safeParse({ ...record, port: 81 }).success).toBe(false);
+  });
 });

@@ -21,7 +21,7 @@ const errorOutput = z.object({
 export function createServer(options: ServiceClientOptions = {}): McpServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: { listChanged: false } } },
   );
 
   server.registerTool(
