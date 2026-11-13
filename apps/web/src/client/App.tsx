@@ -79,7 +79,7 @@ function AppContent() {
     <div className="studio-ui studio-canvas-app" data-reduced-motion={reducedMotion ? "true" : "false"} style={studioMotionStyle(reducedMotion)}>
       <header className="studio-topbar">
         <p className="studio-wordmark">Reference Studio</p>
-        <div className="studio-topbar-actions" style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="studio-topbar-actions">
           {import.meta.env.DEV ? <a href="#/studio">Interface preview</a> : null}
           <StudioButton onClick={() => setSettingsOpen(true)}>Settings</StudioButton>
         </div>

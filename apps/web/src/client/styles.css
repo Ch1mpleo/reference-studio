@@ -554,6 +554,13 @@ body:has(.studio-ui) {
   font: 500 14px/20px var(--font-mono);
 }
 
+.studio-topbar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .sample-switcher select,
 .studio-ui .studio-field input,
 .studio-ui .studio-field textarea,
