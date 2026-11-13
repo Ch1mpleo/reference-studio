@@ -8,6 +8,7 @@ import type { LibraryReference, Project } from "@reference-studio/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../../apps/web/src/server/config.js";
 import { startService, type RunningService } from "../../../apps/web/src/server/run.js";
+import { browserFetch } from "../../../apps/web/src/server/test/browserSession.js";
 import { MAX_LISTED_PROJECTS, readContextSnapshot, summarizeProjects, summarizeReference } from "./readTools.js";
 
 function project(index: number): Project {
@@ -171,6 +172,18 @@ async function api(method: string, route: string, body?: unknown): Promise<Json>
   return parsed;
 }
 
+async function browserApi(method: string, route: string, body?: unknown): Promise<Json> {
+  const send = await browserFetch(base);
+  const response = await send(route, {
+    method,
+    headers: { "idempotency-key": crypto.randomUUID(), ...(body === undefined ? {} : { "content-type": "application/json" }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const parsed = (await response.json()) as Json;
+  if (!response.ok) throw new Error(`${method} ${route} -> ${response.status} ${JSON.stringify(parsed)}`);
+  return parsed;
+}
+
 function adapterEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -264,7 +277,7 @@ async function seed(): Promise<Seed> {
   const feedbackId = crypto.randomUUID();
   const decisionId = crypto.randomUUID();
   const annotationBase = { borrowedQuality: "", translation: "", limitations: "" };
-  await api("PUT", `/api/projects/${projectA}/board`, {
+  await browserApi("PUT", `/api/projects/${projectA}/board`, {
     expectedRevision: board.revision,
     layout: {
       ...board.layout,
@@ -431,7 +444,7 @@ describe("read tools over stdio", () => {
     const known = await directionRevision(ids.projectA, ids.directionOne);
     const boardKnown = (await api("GET", `/api/projects/${ids.projectA}/board`)).revision as number;
 
-    await api("PATCH", `/api/projects/${ids.projectA}/directions/${ids.directionOne}`, {
+    await browserApi("PATCH", `/api/projects/${ids.projectA}/directions/${ids.directionOne}`, {
       expectedRevision: known,
       concept: "Revised concept",
     });

@@ -8,6 +8,7 @@ import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../../apps/web/src/server/config.js";
 import { startService, type RunningService } from "../../../apps/web/src/server/run.js";
+import { browserFetch } from "../../../apps/web/src/server/test/browserSession.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const cliPath = path.join(import.meta.dirname, "cli.ts");
@@ -45,6 +46,18 @@ async function api(method: string, route: string, body?: unknown | FormData): Pr
       ...(body === undefined || form ? {} : { "content-type": "application/json" }),
     },
     ...(body === undefined ? {} : { body: form ? body : JSON.stringify(body) }),
+  });
+  const parsed = (await response.json()) as Json;
+  if (!response.ok) throw new Error(`${method} ${route} -> ${response.status} ${JSON.stringify(parsed)}`);
+  return parsed;
+}
+
+async function browserApi(method: string, route: string, body?: unknown): Promise<Json> {
+  const send = await browserFetch(base);
+  const response = await send(route, {
+    method,
+    headers: { "idempotency-key": crypto.randomUUID(), ...(body === undefined ? {} : { "content-type": "application/json" }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const parsed = (await response.json()) as Json;
   if (!response.ok) throw new Error(`${method} ${route} -> ${response.status} ${JSON.stringify(parsed)}`);
@@ -215,7 +228,7 @@ describe("draft write tools over stdio", () => {
     const ids = await seed();
     const client = await connectClient();
     const revision = (await api("GET", `/api/projects/${ids.projectId}/board`)).layout.frames[0].revision as number;
-    await api("PATCH", `/api/projects/${ids.projectId}/directions/${ids.directionId}`, { expectedRevision: revision, concept: "Human rewrote this." });
+    await browserApi("PATCH", `/api/projects/${ids.projectId}/directions/${ids.directionId}`, { expectedRevision: revision, concept: "Human rewrote this." });
     await subscribe();
     const before = await boardJson(ids.projectId);
     const current = JSON.parse(before).layout.frames[0].revision as number;

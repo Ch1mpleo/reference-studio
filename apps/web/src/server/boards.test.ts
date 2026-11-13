@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { boardSchema, createId, projectReferenceSchema, projectSchema, type BoardLayout, type StudioEvent } from "@reference-studio/core";
 import { createApp } from "./app.js";
+import { browserHeaders } from "./test/browserSession.js";
 import { loadConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { EventHub } from "./events.js";
@@ -33,7 +34,9 @@ async function setup() {
     items: [{ placementId: note.placementId, frameId, rect: { x: 32, y: 64, width: 260, height: 180 } }] };
   const url = `/api/projects/${created.id}/board`;
   const put = (revision: number, next = layout, key = createId()) => app.inject({ method: "PUT", url, headers: { ...headers, "idempotency-key": key }, payload: { expectedRevision: revision, layout: next } });
-  return { app, database, dataDir, headers, created, note, layout, put, project, url, events };
+  const browser = await browserHeaders(app);
+  const putBrowser = (revision: number, next = layout, key = createId()) => app.inject({ method: "PUT", url, headers: { ...browser, "content-type": "application/json", "idempotency-key": key }, payload: { expectedRevision: revision, layout: next } });
+  return { app, database, dataDir, headers, browser, created, note, layout, put, putBrowser, project, url, events };
 }
 
 describe("project boards", () => {
@@ -62,7 +65,7 @@ describe("project boards", () => {
     const regroup = structuredClone(board.layout); regroup.items[0]!.frameId = second.id;
     board = boardSchema.parse((await ctx.put(board.revision, regroup)).json());
     expect(readPlacement().revision).toBe(5);
-    const archive = await ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/directions/${second.id}`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: board.layout.frames[1]!.revision, archived: true } });
+    const archive = await ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/directions/${second.id}`, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: board.layout.frames[1]!.revision, archived: true } });
     expect(archive.statusCode).toBe(200);
     expect(readPlacement().revision).toBe(6);
   });
@@ -75,7 +78,7 @@ describe("project boards", () => {
     changed.items[0]!.rect.x += 20;
     board = boardSchema.parse((await ctx.put(board.revision, changed)).json());
     expect(board.layout.frames.map((frame) => frame.revision)).toEqual([2, 1]);
-    const metadata = (revision: number) => ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/directions/${second.id}`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: revision, name: "Updated" } });
+    const metadata = (revision: number) => ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/directions/${second.id}`, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: revision, name: "Updated" } });
     expect((await metadata(1)).statusCode).toBe(200);
     expect((await metadata(1)).statusCode).toBe(409);
     const placement = await ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/placements/${ctx.note.placementId}`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 2, usageNotes: "Borrow spacing" } });
@@ -94,7 +97,7 @@ describe("project boards", () => {
     const decisionId = createId();
     const annotation = { id: annotationId, target: { type: "placement", placementId: ctx.note.placementId }, body: "User prefers quiet", borrowedQuality: "Spacing", translation: "Room for text", limitations: "No image claims", provenance: { author: "human", name: "Owner" } };
     const decision = { ...annotation, id: decisionId, target: { type: "direction", directionId: ctx.layout.frames[0]!.id }, decision: { rationale: "Keep space", annotationId } };
-    const first = await ctx.put(1, { ...ctx.layout, annotations: [annotation, decision] } as BoardLayout);
+    const first = await ctx.putBrowser(1, { ...ctx.layout, annotations: [annotation, decision] } as BoardLayout);
     expect(first.statusCode).toBe(200);
     const key = createId();
     const duplicate = () => ctx.app.inject({ method: "POST", url: `/api/projects/${ctx.created.id}/directions/${ctx.layout.frames[0]!.id}/duplicate`, headers: { ...ctx.headers, "idempotency-key": key }, payload: { expectedRevision: 1 } });
@@ -133,7 +136,7 @@ describe("project boards", () => {
     expect((await ctx.put(1, { ...ctx.layout, annotations: [annotation] } as BoardLayout)).statusCode).toBe(200);
     let board = boardSchema.parse((await ctx.app.inject({ url: ctx.url, headers: ctx.headers })).json());
     const old = structuredClone(ctx.layout); old.frames[0]!.name = "Renamed";
-    expect((await ctx.put(board.revision, old)).statusCode).toBe(200);
+    expect((await ctx.putBrowser(board.revision, old)).statusCode).toBe(200);
     board = boardSchema.parse((await ctx.app.inject({ url: ctx.url, headers: ctx.headers })).json());
     expect(board.layout.annotations).toHaveLength(1);
     for (const invalid of [
@@ -155,7 +158,8 @@ describe("project boards", () => {
       { id: feedbackId, target: { type: "placement", placementId: ctx.note.placementId }, body: "Reject dense technical layout: too busy for this audience. Keep occasional large typography as an intentional exception.", borrowedQuality: "Typographic contrast", translation: "Quiet body, expressive headings", limitations: "Check mobile wrapping", provenance: { author: "human", name: "Owner" }, decision: { rationale: "Readability matters more than visual density", annotationId: evidenceId } },
       { id: decisionId, target: { type: "direction", directionId }, body: "Use the editorial alternative; revisit the small-screen headings.", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "agent", name: "Researcher" }, decision: { rationale: "Follow the user's feedback", annotationId: feedbackId } },
     ];
-    const initial = boardSchema.parse((await ctx.put(1, { ...ctx.layout, annotations })).json());
+    const seeded = boardSchema.parse((await ctx.put(1, { frames: [], items: [], annotations: [annotations[0]!] })).json());
+    const initial = boardSchema.parse((await ctx.putBrowser(seeded.revision, { ...ctx.layout, annotations })).json());
     const response = await ctx.app.inject({ method: "POST", url: `/api/projects/${ctx.created.id}/directions/${directionId}/duplicate`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 1, name: "Expressive editorial" } });
     expect(response.statusCode).toBe(201);
     let board = boardSchema.parse(response.json());
@@ -173,13 +177,13 @@ describe("project boards", () => {
 
     const changed = structuredClone(board.layout);
     changed.annotations!.find((entry) => entry.id === copiedDecision.id)!.body = "Try larger headings in this branch only.";
-    board = boardSchema.parse((await ctx.put(board.revision, changed)).json());
+    board = boardSchema.parse((await ctx.putBrowser(board.revision, changed)).json());
     expect(board.layout.frames.find((frame) => frame.id === directionId)?.revision).toBe(1);
     expect(board.layout.frames.find((frame) => frame.id === copy.id)?.revision).toBe(2);
     expect(board.layout.annotations!.find((entry) => entry.id === decisionId)).toEqual(annotations[2]);
 
     const directionUrl = `/api/projects/${ctx.created.id}/directions/${copy.id}`;
-    const archive = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 2, archived: true } });
+    const archive = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: 2, archived: true } });
     expect(archive.statusCode).toBe(200);
     board = boardSchema.parse(archive.json());
     expect(board.layout.annotations).toEqual(changed.annotations);
@@ -253,17 +257,17 @@ describe("project boards", () => {
     expect((await patch(2)).statusCode).toBe(200);
     expect(ctx.database.prepare("SELECT usage_notes FROM placements WHERE id = ?").get(ctx.note.placementId)?.usage_notes).toBe("");
     const directionUrl = `/api/projects/${ctx.created.id}/directions/${directionId}`;
-    const archive = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 3, archived: true } });
+    const archive = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: 3, archived: true } });
     expect(archive.statusCode).toBe(200);
     board = boardSchema.parse(archive.json());
     expect(board.layout.frames[0]).toMatchObject({ archived: true, revision: 4, concept: "Editorial" });
     expect(board.layout.items.every((item) => item.frameId === null)).toBe(true);
     expect(board.layout.items[0]!.rect.x).toBe(ctx.layout.items[0]!.rect.x + ctx.layout.frames[0]!.rect.x);
-    const restore = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 4, archived: false } });
+    const restore = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: 4, archived: false } });
     expect(restore.statusCode).toBe(200);
     expect(boardSchema.parse(restore.json()).layout.frames[0]).toMatchObject({ archived: false, revision: 5 });
     const other = await ctx.project("Other");
-    expect((await ctx.app.inject({ method: "PATCH", url: `/api/projects/${other.id}/directions/${directionId}`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 5, name: "Wrong project" } })).statusCode).toBe(404);
+    expect((await ctx.app.inject({ method: "PATCH", url: `/api/projects/${other.id}/directions/${directionId}`, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: 5, name: "Wrong project" } })).statusCode).toBe(404);
     expect((await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { host: ctx.headers.host, "idempotency-key": createId() }, payload: { expectedRevision: 5, name: "No auth" } })).statusCode).toBe(401);
   });
 
@@ -376,7 +380,7 @@ describe("project boards", () => {
     const editedLayout = structuredClone(version2Board.layout);
     editedLayout.frames[0]!.concept = "Editorial with generous margins";
     editedLayout.items[0]!.rect.x += 16;
-    const edited = await ctx.app.inject({ method: "PUT", url: version2Url, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: version2Board.revision, layout: editedLayout } });
+    const edited = await ctx.app.inject({ method: "PUT", url: version2Url, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: version2Board.revision, layout: editedLayout } });
     expect(edited.statusCode).toBe(200);
     const editedBoard = boardSchema.parse(edited.json());
     expect(editedBoard.revision).toBe(version2Board.revision + 1);
