@@ -13,6 +13,7 @@ export const ADAPTER_ERROR_CODES = [
   "not_found",
   "revision_conflict",
   "asset_missing",
+  "image_too_large",
 ] as const;
 
 export type AdapterErrorCode = (typeof ADAPTER_ERROR_CODES)[number];

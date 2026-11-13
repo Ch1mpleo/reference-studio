@@ -20,11 +20,11 @@ Checkpoint: 2026-11-13 on `feat/m3.2-reference-images` (base `cb5e088`). M3.2b o
 - Uploading an image also creates an inbox placement, so a project that placed the reference once through the board lists two placements.
 - Annotations follow M3.2a: those targeting the reference's placements, human-authored or carrying a decision, last 20 in board order.
 - Placement location comes from the board data already held: a placement with a board item is `board` and `directionId` is that item's frame (null when loose on the board); a placement with no board item is `inbox` with `directionId: null`. No schema or storage change.
-- The last-resort render is also checked against the 1,000,000-byte cap; if it still exceeds, the render route answers 415 `unsupported_media` with `details.reason: "image_too_large"` instead of returning an oversized image (the adapter reports it as `service_unavailable` with the HTTP status).
+- The last-resort render is also checked against the 1,000,000-byte cap; if it still exceeds, the render route answers 415 `unsupported_media` with `details.reason: "image_too_large"` instead of returning an oversized image (the adapter maps it to the dedicated code `image_too_large` (next step: pass a crop, use a smaller `maxEdge`, or continue from metadata), covered by a service-client unit test).
 
 ## Environment and versions
 
-- Node v22.23.4 here (the repository declares `>=24`; Node 24 was not available). QA independently reran on Node 24.22.1: check pass, 236/236 unit, build pass, e2e 66/66 on Chromium, before the fixes below. `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.4.0, sharp 0.35.x, zod 4.6.7.
+- Node v22.23.4 here (the repository declares `>=24`; Node 24 was not available). The full unit run was on Node v22.23.4 by the worker and on Node 24.22.1 by QA (QA's 236/236 unit, check, build, and 66/66 Chromium e2e were on the earlier commit `196c6e5`); the worker did not run Node 24. `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.4.0, sharp 0.35.x, zod 4.6.7.
 - Negotiated protocol: `2025-11-25`.
 
 ## Verification
@@ -32,7 +32,7 @@ Checkpoint: 2026-11-13 on `feat/m3.2-reference-images` (base `cb5e088`). M3.2b o
 | Command | Result |
 | --- | --- |
 | `npm run check` | pass (no type errors) |
-| `npm test` | 51 files, 240 tests passed, 0 failed, 0 skipped (236 before the QA fixes; adds 3 `renderForAgent` fallback tests and 1 stdio annotation-cap test) |
+| `npm test` | 51 files, 241 tests passed, 0 failed, 0 skipped on Node v22.23.4 (236 at `196c6e5`; adds 3 `renderForAgent` fallback tests, 1 stdio annotation-cap test, and 1 service-client error-code test; not yet rerun by QA on Node 24) |
 | `npm run build` | pass |
 | `npm run test:e2e` (default `msedge` channel) | not run: Microsoft Edge is not installed; Chromium used instead |
 | `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` after `npx playwright install chromium` | 66 passed, 0 failed, 0 skipped |

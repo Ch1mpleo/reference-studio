@@ -185,7 +185,14 @@ function mapServiceFailure(status: number, body: unknown, path: string): Adapter
       "Correct the input named in the message and call the tool again.",
     );
   }
-  if (status === 404 && hasAssetMissingReason(body)) {
+  if (status === 415 && hasReason(body, "image_too_large")) {
+    return new AdapterError(
+      "image_too_large",
+      message ?? "The image is too large to send to an agent.",
+      "The image is still too large after shrinking; pass a crop, use a smaller maxEdge, or continue from metadata.",
+    );
+  }
+  if (status === 404 && hasReason(body, "asset_missing")) {
     return new AdapterError(
       "asset_missing",
       message ?? "The stored image file is missing.",
@@ -220,11 +227,11 @@ function mapServiceFailure(status: number, body: unknown, path: string): Adapter
   );
 }
 
-function hasAssetMissingReason(body: unknown): boolean {
+function hasReason(body: unknown, reason: string): boolean {
   const reported = serviceErrorBodySchema.safeParse(body);
   if (!reported.success) return false;
   const details = reported.data.error.details;
-  return typeof details === "object" && details !== null && "reason" in details && details.reason === "asset_missing";
+  return typeof details === "object" && details !== null && "reason" in details && details.reason === reason;
 }
 
 function processIsAlive(pid: number): boolean {

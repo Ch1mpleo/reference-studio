@@ -280,6 +280,28 @@ describe("connect().getJson", () => {
     expect(error.message).toBe("Service said no.");
   });
 
+  it("maps 415 image_too_large and 404 asset_missing reasons to dedicated codes", async () => {
+    for (const [status, reason, code] of [
+      [415, "image_too_large", "image_too_large"],
+      [404, "asset_missing", "asset_missing"],
+    ] as const) {
+      const service = await client(
+        serving(() => ({ status, body: { error: { code: "x", message: "Nope.", details: { reason } } } })),
+      );
+      for (const read of [service.getBytes("/api/thing"), service.getJson("/api/thing", thing)]) {
+        const error = await failureOf(read);
+        expect(error.code).toBe(code);
+        expect(error.message).toBe("Nope.");
+      }
+      const plain = await client(serving(() => ({ status, body: { error: { code: "x", message: "Nope." } } })));
+      expect((await failureOf(plain.getBytes("/api/thing"))).code).not.toBe(code);
+    }
+    const next = await failureOf(
+      (await client(serving(() => ({ status: 415, body: { error: { code: "x", message: "m", details: { reason: "image_too_large" } } } })))).getBytes("/x"),
+    );
+    expect(next.nextStep).toBe("The image is still too large after shrinking; pass a crop, use a smaller maxEdge, or continue from metadata.");
+  });
+
   it("maps error statuses without a service error body", async () => {
     const service = await client(serving(() => ({ status: 404, body: "oops" })));
     expect((await failureOf(service.getJson("/api/thing", thing))).code).toBe("not_found");
