@@ -41,11 +41,11 @@ export class IsolatedServer {
   }
 
   /**
-   * In-process Studio with a test-only loopback allow for the fake image
-   * server. Uses the real production serveClient path. Never controlled by a
-   * production env var.
+   * In-process Studio with a test-only loopback allow for one fake image
+   * server port. Uses the real production serveClient path. Never controlled
+   * by a production env var.
    */
-  static async createAllowingLoopbackFetch(loopbackPort?: number): Promise<IsolatedServer> {
+  static async createAllowingLoopbackFetch(loopbackPort: number): Promise<IsolatedServer> {
     const dataDir = mkdtempSync(path.join(tmpdir(), "reference-studio-e2e-url-"));
     const port = await freePort();
     const server = new IsolatedServer(dataDir, port);
@@ -80,7 +80,7 @@ export class IsolatedServer {
     }
   }
 
-  private async startInProcessAllowingLoopback(loopbackPort?: number): Promise<void> {
+  private async startInProcessAllowingLoopback(loopbackPort: number): Promise<void> {
     if (this.child !== undefined || this.inProcess !== undefined) {
       throw new Error("The isolated service is already running.");
     }
@@ -89,7 +89,6 @@ export class IsolatedServer {
     const { loadConfig } = await load("config.js");
     const { openDatabase } = await load("db.js");
     const { createApp } = await load("app.js");
-    const { isBlockedAddress } = await load("remoteFetch.js");
 
     const config = loadConfig({
       ...process.env,
@@ -99,16 +98,12 @@ export class IsolatedServer {
       REFERENCE_STUDIO_LOG_LEVEL: "silent",
     });
     const database = openDatabase(config.dataDir);
-    const remoteFetch =
-      loopbackPort !== undefined
-        ? { allowLoopbackPort: loopbackPort }
-        : {
-            isBlocked: (ip: string) => ip !== "127.0.0.1" && isBlockedAddress(ip),
-          };
     const app = await createApp({
       config,
       database,
-      remoteFetch,
+      remoteFetch: {
+        allowLoopbackPort: loopbackPort,
+      },
     });
     await app.listen({ host: config.host, port: config.port });
     this.inProcess = { app, database };

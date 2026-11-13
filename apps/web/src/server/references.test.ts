@@ -10,7 +10,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createServer, request as httpRequest, type Server } from "node:http";
+import { Agent, createServer, request as httpRequest, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -1767,5 +1767,65 @@ describe("POST /api/projects/:projectId/references/url-image", () => {
     expect(response.statusCode).toBe(403);
     expect(response.json()).toMatchObject({ error: { code: "forbidden" } });
     expect(hits.value).toBe(0);
+  });
+
+  it("reuses a keep-alive socket for 12 sequential url-image requests without late abort", async () => {
+    const { origin } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("Expected a TCP address.");
+    }
+    const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+    try {
+      for (let index = 0; index < 12; index += 1) {
+        const payload = JSON.stringify({ url: `${origin}/pixel-${index}.png` });
+        const body = await new Promise<string>((resolve, reject) => {
+          const req = httpRequest(
+            {
+              host: "127.0.0.1",
+              port: address.port,
+              method: "POST",
+              path: `/api/projects/${projectId}/references/url-image`,
+              agent,
+              headers: {
+                host,
+                origin: browser.origin,
+                cookie: browser.cookie,
+                "sec-fetch-site": "same-origin",
+                "content-type": "application/json",
+                "idempotency-key": `keep-alive-${index}`,
+                "content-length": String(Buffer.byteLength(payload)),
+                connection: "keep-alive",
+              },
+            },
+            (response) => {
+              const chunks: Buffer[] = [];
+              response.on("data", (chunk) => {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+              });
+              response.on("end", () => {
+                const text = Buffer.concat(chunks).toString("utf8");
+                if (response.statusCode !== 201) {
+                  reject(new Error(`Expected 201, got ${response.statusCode}: ${text}`));
+                  return;
+                }
+                resolve(text);
+              });
+            },
+          );
+          req.on("error", reject);
+          req.write(payload);
+          req.end();
+        });
+        expect(JSON.parse(body)).toMatchObject({ reference: { kind: "image" } });
+      }
+    } finally {
+      agent.destroy();
+      await app.close();
+    }
   });
 });

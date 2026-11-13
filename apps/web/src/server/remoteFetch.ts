@@ -518,6 +518,11 @@ async function readExact(
     if (state.timedOut || signal.aborted) {
       throw timeoutError();
     }
+    // A destroyed/errored response can leave readableEnded false while read()
+    // returns null forever; bail before waiting so the event loop stays live.
+    if (response.destroyed || response.errored) {
+      throw fetchFailedError();
+    }
     const chunk = response.read(size - total);
     if (chunk !== null) {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
@@ -529,31 +534,50 @@ async function readExact(
       break;
     }
     await new Promise<void>((resolve, reject) => {
-      const onReadable = (): void => {
-        cleanup();
-        resolve();
-      };
-      const onEnd = (): void => {
-        cleanup();
-        resolve();
-      };
-      const onError = (error: Error): void => {
-        cleanup();
-        reject(error);
-      };
-      const onAbort = (): void => {
-        cleanup();
-        reject(timeoutError());
-      };
+      let settled = false;
       const cleanup = (): void => {
         response.off("readable", onReadable);
         response.off("end", onEnd);
-        response.off("error", onError);
+        response.off("error", onFailed);
+        response.off("close", onFailed);
+        response.off("aborted", onFailed);
         signal.removeEventListener("abort", onAbort);
       };
+      const finish = (next: () => void): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        next();
+      };
+      // Defer resolve: attaching "readable" can emit synchronously and starve
+      // close/error/abort timers if we loop without returning to the event loop.
+      const onReadable = (): void => {
+        finish(() => {
+          setImmediate(resolve);
+        });
+      };
+      const onEnd = (): void => {
+        finish(() => {
+          setImmediate(resolve);
+        });
+      };
+      const onFailed = (): void => {
+        finish(() => reject(fetchFailedError()));
+      };
+      const onAbort = (): void => {
+        finish(() => reject(timeoutError()));
+      };
+      if (response.destroyed || response.errored) {
+        finish(() => reject(fetchFailedError()));
+        return;
+      }
       response.on("readable", onReadable);
       response.on("end", onEnd);
-      response.on("error", onError);
+      response.on("error", onFailed);
+      response.on("close", onFailed);
+      response.on("aborted", onFailed);
       signal.addEventListener("abort", onAbort, { once: true });
     });
   }
@@ -565,8 +589,18 @@ async function* prependChunks(
   response: http.IncomingMessage,
 ): AsyncGenerator<Buffer> {
   yield head;
-  for await (const chunk of response) {
-    yield Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+  try {
+    for await (const chunk of response) {
+      if (response.destroyed || response.errored) {
+        throw fetchFailedError();
+      }
+      yield Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    }
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      throw error;
+    }
+    throw fetchFailedError();
   }
 }
 

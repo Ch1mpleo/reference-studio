@@ -246,14 +246,14 @@ export function registerReferenceRoutes(
     }
 
     const disconnect = new AbortController();
-    // request.raw "close" fires when the body finishes, not when the client
-    // disconnects; watch the socket so a mid-fetch abort cancels the outbound GET.
+    // Per-response signal: reply.raw "close" before the response finishes means
+    // the client left. Keep-alive sockets must not abort later requests.
     const onClientClose = (): void => {
-      if (!reply.sent) {
+      if (!reply.raw.writableFinished) {
         disconnect.abort();
       }
     };
-    request.socket.on("close", onClientClose);
+    reply.raw.on("close", onClientClose);
     fetchOptions.signal = disconnect.signal;
 
     let fetched: FetchedRemoteImage | undefined;
@@ -316,7 +316,7 @@ export function registerReferenceRoutes(
       }
       throw error;
     } finally {
-      request.socket.off("close", onClientClose);
+      reply.raw.off("close", onClientClose);
       if (paths !== undefined && !released) {
         releasePublishedPath(paths.originalPath);
         releasePublishedPath(paths.thumbnailPath);

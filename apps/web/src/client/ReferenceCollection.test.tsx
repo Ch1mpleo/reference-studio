@@ -321,7 +321,8 @@ describe("ReferenceCollection", () => {
     });
     expect(onAddLink).not.toHaveBeenCalled();
     const status = view.container.querySelector(".canvas-status");
-    expect(status?.textContent).toContain("Failed to fetch");
+    expect(status?.textContent).toContain("Studio couldn't reach the service.");
+    expect(status?.textContent?.includes("Failed to fetch")).toBe(false);
     expect(status?.textContent?.includes("Saved as a link")).toBe(false);
     await act(async () => {
       view.root.unmount();

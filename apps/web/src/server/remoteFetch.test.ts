@@ -487,6 +487,79 @@ describe("fetchRemoteImageToTemp", () => {
     expectIncomingEmpty(dataDir);
   });
 
+  it.each([1, 4, 11])(
+    "maps %s body bytes then a reset to url_fetch_failed without starving the loop",
+    async (byteCount) => {
+      const dataDir = tempDir();
+      const idleMs = 200;
+      const { origin } = await listen((_request, response) => {
+        response.writeHead(200, {
+          "content-type": "image/png",
+          "transfer-encoding": "chunked",
+        });
+        response.write(PNG_1X1.subarray(0, byteCount));
+        setTimeout(() => {
+          response.destroy();
+        }, 10);
+      });
+      let timerFired = false;
+      const liveness = new Promise<void>((resolve) => {
+        setTimeout(() => {
+          timerFired = true;
+          resolve();
+        }, 40);
+      });
+      const started = Date.now();
+      await expect(
+        fetchRemoteImageToTemp(`${origin}/short-${byteCount}`, {
+          dataDir,
+          maxBytes: 1024 * 1024,
+          isBlocked: allowLoopback,
+          timeouts: { totalMs: 5_000, connectMs: 500, idleMs },
+        }),
+      ).rejects.toMatchObject({ details: { reason: "url_fetch_failed" } });
+      expect(Date.now() - started).toBeLessThan(idleMs + 500);
+      await liveness;
+      expect(timerFired).toBe(true);
+      expectIncomingEmpty(dataDir);
+    },
+  );
+
+  it("maps content-length overshoot with a reset to url_fetch_failed", async () => {
+    const dataDir = tempDir();
+    const idleMs = 200;
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "content-length": 1024,
+      });
+      response.write(PNG_1X1.subarray(0, 16));
+      setTimeout(() => {
+        response.destroy();
+      }, 10);
+    });
+    let timerFired = false;
+    const liveness = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        timerFired = true;
+        resolve();
+      }, 40);
+    });
+    const started = Date.now();
+    await expect(
+      fetchRemoteImageToTemp(`${origin}/short-cl`, {
+        dataDir,
+        maxBytes: 1024 * 1024,
+        isBlocked: allowLoopback,
+        timeouts: { totalMs: 5_000, connectMs: 500, idleMs },
+      }),
+    ).rejects.toMatchObject({ details: { reason: "url_fetch_failed" } });
+    expect(Date.now() - started).toBeLessThan(idleMs + 500);
+    await liveness;
+    expect(timerFired).toBe(true);
+    expectIncomingEmpty(dataDir);
+  });
+
   it("times out a drip feed past the total budget and removes the temp", async () => {
     const dataDir = tempDir();
     const { origin, server } = await listen((_request, response) => {

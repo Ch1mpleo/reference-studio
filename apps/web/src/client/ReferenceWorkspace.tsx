@@ -243,6 +243,10 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
             setMessage(`Saved as a link: ${urlImageFallbackReason(error.reason, maxUploadBytes)}`);
             return;
           }
+          if (error instanceof TypeError) {
+            setMessage("Studio couldn't reach the service.");
+            return;
+          }
           setMessage(error instanceof Error ? error.message : "Could not add the reference.");
         } finally {
           setFetchingImage(false);
