@@ -153,6 +153,13 @@ export const libraryReferenceSchema = z.object({
 
 export type LibraryReference = z.infer<typeof libraryReferenceSchema>;
 
+export const referenceDetailSchema = z.object({
+  reference: libraryReferenceSchema,
+  projectIds: z.array(z.uuid()),
+});
+
+export type ReferenceDetail = z.infer<typeof referenceDetailSchema>;
+
 export const projectReferenceSchema = z.object({
   placementId: z.uuid(),
   role: z.enum(PLACEMENT_ROLES),

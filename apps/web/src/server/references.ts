@@ -948,7 +948,7 @@ function sameCrop(left: ImageCrop | null, right: ImageCrop | null): boolean {
   return left.x === right.x && left.y === right.y && left.width === right.width && left.height === right.height;
 }
 
-function findLibraryReference(database: DatabaseSync, id: string): LibraryReference | undefined {
+export function findLibraryReference(database: DatabaseSync, id: string): LibraryReference | undefined {
   const row = database
     .prepare(
       `SELECT ${LIBRARY_COLUMNS}
@@ -960,7 +960,7 @@ function findLibraryReference(database: DatabaseSync, id: string): LibraryRefere
   return row === undefined ? undefined : libraryReferenceFromRow(row);
 }
 
-function projectIdsForReference(database: DatabaseSync, referenceId: string): string[] {
+export function projectIdsForReference(database: DatabaseSync, referenceId: string): string[] {
   const rows = database.prepare("SELECT DISTINCT project_id AS id FROM placements WHERE reference_id = ?").all(referenceId);
   return rows.flatMap((row) => (isIdRow(row) ? [row.id] : []));
 }
