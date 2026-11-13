@@ -10,12 +10,13 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { request as httpRequest } from "node:http";
+import { createServer, request as httpRequest, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_IMAGE_BYTES,
+  ServiceError,
   UPLOAD_LIMIT_MIN,
   imageTooLargeMessage,
   type StudioEvent,
@@ -29,6 +30,12 @@ import { openDatabase } from "./db.js";
 import { EventHub } from "./events.js";
 import { resetPublishedPathRetentionForTests } from "./assetFiles.js";
 import { setAfterPublishForTests, setCommitMutationForTests } from "./references.js";
+import {
+  fetchRemoteImageToTemp,
+  isBlockedAddress,
+  type FetchRemoteImageOptions,
+  type FetchedRemoteImage,
+} from "./remoteFetch.js";
 import { browserHeaders } from "./test/browserSession.js";
 import { incomingUploadsDir } from "./uploads.js";
 
@@ -39,7 +46,12 @@ const PNG_1X1 = Buffer.from(
 
 const directories: string[] = [];
 const closers: Array<() => void> = [];
+const servers: Server[] = [];
 const host = "127.0.0.1:4317";
+
+function allowLoopback(ip: string): boolean {
+  return ip !== "127.0.0.1" && isBlockedAddress(ip);
+}
 
 function tempDir(): string {
   const directory = mkdtempSync(path.join(tmpdir(), "reference-studio-library-"));
@@ -84,6 +96,10 @@ afterEach(() => {
   setCommitMutationForTests(undefined);
   setAfterPublishForTests(undefined);
   resetPublishedPathRetentionForTests();
+  for (const server of servers.splice(0)) {
+    server.closeAllConnections();
+    server.close();
+  }
   for (const close of closers.splice(0)) {
     close();
   }
@@ -91,6 +107,78 @@ afterEach(() => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+async function listenPngServer(
+  handler?: (requestCount: { value: number }) => Buffer | "html" | "hang",
+): Promise<{ origin: string; hits: { value: number } }> {
+  const hits = { value: 0 };
+  const server = createServer((_request, response) => {
+    hits.value += 1;
+    const kind = handler?.(hits) ?? "png";
+    if (kind === "hang") {
+      return;
+    }
+    if (kind === "html") {
+      response.writeHead(200, { "content-type": "text/html" });
+      response.end("<!doctype html><title>Nope</title>");
+      return;
+    }
+    const body = kind === "png" ? PNG_1X1 : kind;
+    response.writeHead(200, {
+      "content-type": "image/png",
+      "content-length": body.byteLength,
+    });
+    response.end(body);
+  });
+  servers.push(server);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (typeof address !== "object" || address === null) {
+    throw new Error("Missing server address.");
+  }
+  return { origin: `http://127.0.0.1:${address.port}`, hits };
+}
+
+async function startAppWithRemoteFetch(remoteFetch?: {
+  fetchRemoteImageToTemp?: (
+    url: string,
+    options: FetchRemoteImageOptions,
+  ) => Promise<FetchedRemoteImage>;
+  isBlocked?: (ip: string) => boolean;
+}): Promise<{
+  app: FastifyInstance;
+  database: DatabaseSync;
+  hub: EventHub;
+  config: AppConfig;
+}> {
+  const dataDir = tempDir();
+  const database = openDatabase(dataDir);
+  const hub = new EventHub();
+  const config = testConfig(dataDir);
+  const app = await createApp({
+    config,
+    database,
+    hub,
+    remoteFetch: {
+      isBlocked: allowLoopback,
+      ...remoteFetch,
+    },
+  });
+  closers.push(() => {
+    database.close();
+  });
+  return { app, database, hub, config };
+}
+
+function assetDirsEmpty(dataDir: string): void {
+  for (const relative of ["assets/.incoming", "assets/originals", "assets/thumbnails"]) {
+    const dir = path.join(dataDir, ...relative.split("/"));
+    expect(existsSync(dir) ? readdirSync(dir) : []).toEqual([]);
+  }
+}
 
 function agentHeaders(idempotencyKey?: string, extra?: Record<string, string>): Record<string, string> {
   return {
@@ -1374,5 +1462,241 @@ describe("asset roles", () => {
     ]);
     expect(events.filter((event) => event.type === "changed" && event.entity === "reference")).toHaveLength(2);
     unsubscribe();
+  });
+});
+
+describe("POST /api/projects/:projectId/references/url-image", () => {
+  it("stores a fetched image with the pasted sourceUrl, asset, thumbnail, one event, and revision +1", async () => {
+    const { origin } = await listenPngServer();
+    const { app, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const browser = await browserHeaders(app);
+    const url = `${origin}/photos/north%20wall.png`;
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "url-image-1" },
+      payload: { url },
+    });
+    expect(response.statusCode).toBe(201);
+    const body = response.json() as {
+      reference: {
+        kind: string;
+        title: string;
+        sourceUrl: string;
+        revision: number;
+        asset: { id: string; mediaType: string } | null;
+      };
+    };
+    expect(body.reference).toMatchObject({
+      kind: "image",
+      title: "north wall",
+      sourceUrl: url,
+      revision: 1,
+      asset: { mediaType: "image/png" },
+    });
+    expect(body.reference.asset?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    const thumbnail = await app.inject({
+      method: "GET",
+      url: `/api/assets/${body.reference.asset!.id}/thumbnail`,
+      headers: browser,
+    });
+    expect(thumbnail.statusCode).toBe(200);
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
+    expect(existsSync(path.join(config.dataDir, "assets", "originals"))).toBe(true);
+  });
+
+  it("replays the same idempotency key without refetching", async () => {
+    const { origin } = await listenPngServer();
+    let fetches = 0;
+    const { app } = await startAppWithRemoteFetch({
+      fetchRemoteImageToTemp: async (url, options) => {
+        fetches += 1;
+        return fetchRemoteImageToTemp(url, { ...options, isBlocked: allowLoopback });
+      },
+    });
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const payload = { url: `${origin}/pixel.png` };
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "url-replay" },
+      payload,
+    });
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "url-replay" },
+      payload,
+    });
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    expect(second.json()).toEqual(first.json());
+    expect(fetches).toBe(1);
+  });
+
+  it("rejects the same key with a different URL", async () => {
+    const { origin } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "url-mismatch" },
+      payload: { url: `${origin}/a.png` },
+    });
+    const mismatch = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "url-mismatch" },
+      payload: { url: `${origin}/b.png` },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json()).toMatchObject({
+      error: { details: { reason: "idempotency_mismatch" } },
+    });
+  });
+
+  it.each([
+    ["url_not_allowed", "That URL cannot be fetched."],
+    ["url_blocked_address", "That URL cannot be fetched."],
+    ["url_too_many_redirects", "That URL cannot be fetched."],
+    ["not_an_image", "That address is not a JPEG, PNG, or WebP image."],
+    ["url_fetch_failed", "That URL cannot be fetched."],
+    ["url_timeout", "That URL timed out."],
+    ["image_too_large", imageTooLargeMessage(UPLOAD_LIMIT_MIN)],
+  ] as const)("maps %s without creating rows, events, or files", async (reason, message) => {
+    const { app, hub, config, database } = await startAppWithRemoteFetch({
+      fetchRemoteImageToTemp: async () => {
+        throw new ServiceError(
+          reason === "image_too_large" ? "validation" : "validation",
+          reason === "image_too_large" ? imageTooLargeMessage(UPLOAD_LIMIT_MIN) : message,
+          { reason },
+        );
+      },
+    });
+    const projectId = await createProject(app);
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const browser = await browserHeaders(app);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": `fail-${reason}` },
+      payload: { url: "https://example.com/x.png" },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: { code: "validation", details: { reason } },
+    });
+    const count = database.prepare('SELECT COUNT(*) AS c FROM "references"').get() as {
+      c: number | bigint;
+    };
+    expect(Number(count.c)).toBe(0);
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    assetDirsEmpty(config.dataDir);
+  });
+
+  it("maps storage_full to 507 without leftovers", async () => {
+    const { app, hub, config, database } = await startAppWithRemoteFetch({
+      fetchRemoteImageToTemp: async () => {
+        throw new ServiceError("storage_full", "Not enough free disk space for this upload.");
+      },
+    });
+    const projectId = await createProject(app);
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const browser = await browserHeaders(app);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "storage-full" },
+      payload: { url: "https://example.com/x.png" },
+    });
+    expect(response.statusCode).toBe(507);
+    expect(response.json()).toMatchObject({ error: { code: "storage_full" } });
+    const count = database.prepare('SELECT COUNT(*) AS c FROM "references"').get() as {
+      c: number | bigint;
+    };
+    expect(Number(count.c)).toBe(0);
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    assetDirsEmpty(config.dataDir);
+  });
+
+  it("rejects a 12,001 px PNG as validation", async () => {
+    const wide = await sharp({
+      create: { width: 12_001, height: 10, channels: 3, background: { r: 1, g: 2, b: 3 } },
+    })
+      .png()
+      .toBuffer();
+    const { origin } = await listenPngServer(() => wide);
+    const { app, config, database } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "too-wide" },
+      payload: { url: `${origin}/wide.png` },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: "validation" } });
+    const count = database.prepare('SELECT COUNT(*) AS c FROM "references"').get() as {
+      c: number | bigint;
+    };
+    expect(Number(count.c)).toBe(0);
+    assetDirsEmpty(config.dataDir);
+  });
+
+  it("refuses a 2 MiB image when the limit is 1 MiB", async () => {
+    const big = Buffer.concat([PNG_1X1, Buffer.alloc(2 * 1024 * 1024)]);
+    // Still starts with PNG magic so fetch accepts; inspect/size check uses maxBytes.
+    const { origin } = await listenPngServer(() => big);
+    const { app, config, database } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const settings = await app.inject({
+      method: "PUT",
+      url: "/api/settings",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "limit-1" },
+      payload: { expectedRevision: 1, maxUploadBytes: UPLOAD_LIMIT_MIN },
+    });
+    expect(settings.statusCode).toBe(200);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "over-limit" },
+      payload: { url: `${origin}/big.png` },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: { code: "validation", details: { reason: "image_too_large" } },
+    });
+    const count = database.prepare('SELECT COUNT(*) AS c FROM "references"').get() as {
+      c: number | bigint;
+    };
+    expect(Number(count.c)).toBe(0);
+    assetDirsEmpty(config.dataDir);
+  });
+
+  it("forbids agent callers without fetching", async () => {
+    const { origin, hits } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: agentHeaders("agent-url", { "content-type": "application/json" }),
+      payload: { url: `${origin}/pixel.png` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: { code: "forbidden" } });
+    expect(hits.value).toBe(0);
   });
 });

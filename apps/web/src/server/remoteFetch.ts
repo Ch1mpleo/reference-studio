@@ -65,6 +65,16 @@ export type FetchedRemoteImage = {
   finalUrl: string;
 };
 
+/** Test-only seams passed through AppDependencies into the url-image route. */
+export type RemoteFetchDependencies = {
+  fetchRemoteImageToTemp?: (
+    url: string,
+    options: FetchRemoteImageOptions,
+  ) => Promise<FetchedRemoteImage>;
+  isBlocked?: (ip: string) => boolean;
+  resolver?: AddressResolver;
+};
+
 export function assertFetchableUrl(raw: string): URL {
   let url: URL;
   try {

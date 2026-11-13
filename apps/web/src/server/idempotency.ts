@@ -56,6 +56,20 @@ export function readIdempotencyKey(value: string | string[] | undefined): string
   return parseContract(idempotencyKeySchema, value, "Idempotency-Key is invalid.");
 }
 
+/** Replay a committed outcome without re-running the mutation (no refetch). */
+export function findCommittedOutcome(
+  database: DatabaseSync,
+  scope: string,
+  key: string,
+  requestHash: string,
+): MutationOutcome | undefined {
+  const existing = findIdempotency(database, scope, key);
+  if (existing === undefined) {
+    return undefined;
+  }
+  return replay(existing, requestHash);
+}
+
 export function commitMutation(
   database: DatabaseSync,
   input: {

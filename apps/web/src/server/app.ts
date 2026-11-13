@@ -37,6 +37,7 @@ import { registerReferenceRoutes } from "./references.js";
 import { registerReferenceImageRoutes } from "./referenceImages.js";
 import { registerSettingsRoutes } from "./settings.js";
 import { issueSessionCookie } from "./session.js";
+import type { RemoteFetchDependencies } from "./remoteFetch.js";
 import { incomingUploadsDir } from "./uploads.js";
 
 export { publishChange } from "./changes.js";
@@ -49,6 +50,8 @@ export type AppDependencies = {
   database: DatabaseSync;
   hub?: EventHub;
   migrationsDir?: string;
+  /** Test-only remote URL fetch seams; production never sets this. */
+  remoteFetch?: RemoteFetchDependencies;
 };
 
 export async function createApp(dependencies: AppDependencies): Promise<FastifyInstance> {
@@ -111,7 +114,13 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   });
 
   registerProjectRoutes(app, dependencies.database, hub);
-  registerReferenceRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
+  registerReferenceRoutes(
+    app,
+    dependencies.database,
+    dependencies.config.dataDir,
+    hub,
+    dependencies.remoteFetch,
+  );
   registerReferenceImageRoutes(app, dependencies.database, dependencies.config.dataDir);
   registerBackupRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
   registerBoardRoutes(app, dependencies.database, hub);
