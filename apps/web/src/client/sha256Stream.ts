@@ -147,9 +147,13 @@ async function sha256HexIncrementalBlob(blob: Blob): Promise<string> {
   return hash.hex();
 }
 
+function hasSubtleDigest(): boolean {
+  return typeof globalThis.crypto?.subtle?.digest === "function";
+}
+
 /** Prefer native digest for files up to 64 MiB; stream the incremental hasher above that. */
 export async function sha256HexFromBlob(blob: Blob): Promise<string> {
-  if (blob.size <= NATIVE_SHA256_MAX_BYTES) {
+  if (blob.size <= NATIVE_SHA256_MAX_BYTES && hasSubtleDigest()) {
     return sha256HexNative(blob);
   }
   return sha256HexIncrementalBlob(blob);

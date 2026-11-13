@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -680,7 +681,7 @@ describe("reference ingestion", () => {
     expect(readdirSync(incomingUploadsDir(config.dataDir))).toEqual([]);
   });
 
-  it("sets Content-Length on original and returns 404 when the file is missing", async () => {
+  it("sets Content-Length from the opened file and returns 404 when missing", async () => {
     const { app, config } = await startApp();
     const projectId = await createProject(app);
     const bytes = await paddedPng(8 * 1024);
@@ -696,13 +697,19 @@ describe("reference ingestion", () => {
       reference: { asset: { id: string; byteSize: number; sha256: string } };
     };
     const assetId = body.reference.asset.id;
+    const absolute = path.join(
+      config.dataDir,
+      "assets",
+      "originals",
+      `${body.reference.asset.sha256}.png`,
+    );
     const original = await app.inject({
       method: "GET",
       url: `/api/assets/${assetId}/original`,
       headers: agentHeaders(),
     });
     expect(original.statusCode).toBe(200);
-    expect(original.headers["content-length"]).toBe(String(body.reference.asset.byteSize));
+    expect(original.headers["content-length"]).toBe(String(statSync(absolute).size));
     expect(original.rawPayload.byteLength).toBe(body.reference.asset.byteSize);
 
     const head = await app.inject({
@@ -711,14 +718,8 @@ describe("reference ingestion", () => {
       headers: agentHeaders(),
     });
     expect(head.statusCode).toBe(200);
-    expect(head.headers["content-length"]).toBe(String(body.reference.asset.byteSize));
+    expect(head.headers["content-length"]).toBe(String(statSync(absolute).size));
 
-    const absolute = path.join(
-      config.dataDir,
-      "assets",
-      "originals",
-      `${body.reference.asset.sha256}.png`,
-    );
     unlinkSync(absolute);
     const missing = await app.inject({
       method: "GET",
@@ -727,6 +728,38 @@ describe("reference ingestion", () => {
     });
     expect(missing.statusCode).toBe(404);
     expect(JSON.stringify(missing.json())).toContain("Image was not found.");
+  });
+
+  it("returns a clean 500 when the on-disk original is truncated", async () => {
+    const { app, config } = await startApp();
+    const projectId = await createProject(app);
+    const bytes = await paddedPng(8 * 1024);
+    const form = multipart(bytes, "trunc.png");
+    const uploaded = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/images`,
+      headers: agentHeaders("trunc-asset", { "content-type": form.contentType }),
+      payload: form.payload,
+    });
+    expect(uploaded.statusCode).toBe(201);
+    const body = uploaded.json() as {
+      reference: { asset: { id: string; byteSize: number; sha256: string } };
+    };
+    const absolute = path.join(
+      config.dataDir,
+      "assets",
+      "originals",
+      `${body.reference.asset.sha256}.png`,
+    );
+    writeFileSync(absolute, bytes.subarray(0, Math.max(1, Math.floor(bytes.byteLength / 2))));
+    const truncated = await app.inject({
+      method: "GET",
+      url: `/api/assets/${body.reference.asset.id}/original`,
+      headers: agentHeaders(),
+    });
+    expect(truncated.statusCode).toBe(500);
+    expect(truncated.json()).toEqual({ error: { code: "internal", message: "Internal error" } });
+    expect(truncated.rawPayload.byteLength).toBeLessThan(body.reference.asset.byteSize);
   });
 
   it("rejects oversized JSON bodies with a non-image message", async () => {

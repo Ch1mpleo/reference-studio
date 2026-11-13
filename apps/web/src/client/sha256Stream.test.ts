@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   NATIVE_SHA256_MAX_BYTES,
   sha256HexFromBlob,
@@ -44,21 +44,46 @@ describe("incremental Sha256", () => {
 });
 
 describe("sha256HexFromBlob switch", () => {
-  it("uses native and incremental interchangeably at the 64 MiB boundary", async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("calls subtle.digest at or below 64 MiB and not above", async () => {
+    const digest = vi.spyOn(crypto.subtle, "digest");
+
+    const below = randomBytes(NATIVE_SHA256_MAX_BYTES - 1);
+    expect(await sha256HexFromBlob(new Blob([below]))).toBe(nodeHex(below));
+    expect(digest).toHaveBeenCalled();
+    digest.mockClear();
+
+    const exact = randomBytes(NATIVE_SHA256_MAX_BYTES);
+    expect(await sha256HexFromBlob(new Blob([exact]))).toBe(nodeHex(exact));
+    expect(digest).toHaveBeenCalled();
+    digest.mockClear();
+
+    const above = randomBytes(NATIVE_SHA256_MAX_BYTES + 1);
+    expect(await sha256HexFromBlob(new Blob([above]))).toBe(nodeHex(above));
+    expect(digest).not.toHaveBeenCalled();
+  }, 120_000);
+
+  it("falls back to incremental when subtle is missing", async () => {
+    const bytes = randomBytes(2048);
+    vi.stubGlobal("crypto", { subtle: undefined });
+    expect(await sha256HexFromBlob(new Blob([bytes]))).toBe(nodeHex(bytes));
+  });
+
+  it("agrees native and incremental around the switch point", async () => {
     const exact = randomBytes(NATIVE_SHA256_MAX_BYTES);
     const blobExact = new Blob([exact]);
     const nativeExact = await sha256HexFromBlobNative(blobExact);
     const incrementalExact = await sha256HexFromBlobIncremental(blobExact);
     expect(nativeExact).toBe(nodeHex(exact));
     expect(incrementalExact).toBe(nativeExact);
-    expect(await sha256HexFromBlob(blobExact)).toBe(nativeExact);
 
-    const above = randomBytes(NATIVE_SHA256_MAX_BYTES + 1);
-    const blobAbove = new Blob([above]);
-    const nativeAbove = await sha256HexFromBlobNative(blobAbove);
-    const incrementalAbove = await sha256HexFromBlobIncremental(blobAbove);
-    expect(nativeAbove).toBe(nodeHex(above));
-    expect(incrementalAbove).toBe(nativeAbove);
-    expect(await sha256HexFromBlob(blobAbove)).toBe(incrementalAbove);
+    const below = randomBytes(NATIVE_SHA256_MAX_BYTES - 1);
+    expect(await sha256HexFromBlobNative(new Blob([below]))).toBe(
+      await sha256HexFromBlobIncremental(new Blob([below])),
+    );
   }, 120_000);
 });

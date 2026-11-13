@@ -732,30 +732,50 @@ async function sendAsset(
   } catch {
     throw new ServiceError("not_found", "Image was not found.");
   }
-  let handle;
+  let handle: Awaited<ReturnType<typeof openFile>> | undefined;
   try {
-    handle = await openFile(absolute, "r");
+    try {
+      handle = await openFile(absolute, "r");
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+        throw new ServiceError("not_found", "Image was not found.");
+      }
+      throw error;
+    }
+    let stats: { size: number };
+    try {
+      stats = await handle.stat();
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      handle = undefined;
+      throw error;
+    }
+    if (variant === "original" && stats.size !== readInteger(row.byte_size)) {
+      await handle.close().catch(() => undefined);
+      handle = undefined;
+      throw new Error("Stored image size does not match the asset record.");
+    }
+    const stream = handle.createReadStream();
+    const owned = handle;
+    handle = undefined;
+    stream.on("close", () => {
+      void owned.close().catch(() => undefined);
+    });
+    stream.on("error", () => {
+      void owned.close().catch(() => undefined);
+    });
+    const mediaType = variant === "thumbnail" ? "image/webp" : row.media_type;
+    return reply
+      .header("cache-control", "private, max-age=86400")
+      .header("content-length", String(stats.size))
+      .type(mediaType)
+      .send(stream);
   } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-      throw new ServiceError("not_found", "Image was not found.");
+    if (handle !== undefined) {
+      await handle.close().catch(() => undefined);
     }
     throw error;
   }
-  const stats = await handle.stat();
-  const stream = handle.createReadStream();
-  stream.on("close", () => {
-    void handle.close().catch(() => undefined);
-  });
-  stream.on("error", () => {
-    void handle.close().catch(() => undefined);
-  });
-  const mediaType = variant === "thumbnail" ? "image/webp" : row.media_type;
-  const byteLength = variant === "original" ? readInteger(row.byte_size) : stats.size;
-  return reply
-    .header("cache-control", "private, max-age=86400")
-    .header("content-length", String(byteLength))
-    .type(mediaType)
-    .send(stream);
 }
 
 const PLACEMENT_COLUMNS = `
