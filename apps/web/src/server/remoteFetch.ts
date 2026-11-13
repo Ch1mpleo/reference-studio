@@ -1,6 +1,17 @@
 import { promises as dns } from "node:dns";
-import { BlockList, isIP, isIPv4, isIPv6 } from "node:net";
-import { ServiceError } from "@reference-studio/core";
+import http from "node:http";
+import https from "node:https";
+import { BlockList, isIP, isIPv4, isIPv6, type Socket } from "node:net";
+import { Readable } from "node:stream";
+import { unlinkSync } from "node:fs";
+import { ServiceError, imageTooLargeMessage } from "@reference-studio/core";
+import { incomingUploadsDir, streamToTemp } from "./uploads.js";
+
+const TOTAL_MS = 30_000;
+const CONNECT_MS = 5_000;
+const IDLE_MS = 10_000;
+const MAX_REDIRECTS = 3;
+const MAGIC_BYTES = 12;
 
 const ipv4Blocked = new BlockList();
 for (const [subnet, prefix] of [
@@ -35,6 +46,24 @@ export type AddressResolver = (
   host: string,
   options: { all: true; verbatim: true },
 ) => Promise<Array<{ address: string; family: number }>>;
+
+export type FetchRemoteImageOptions = {
+  dataDir: string;
+  maxBytes: number;
+  resolver?: AddressResolver;
+  isBlocked?: (ip: string) => boolean;
+  /** Test-only timing overrides. */
+  timeouts?: { totalMs?: number; connectMs?: number; idleMs?: number };
+  /** Test-only observation of the pinned connection. */
+  onPinned?: (info: { address: string; remoteAddress: string | undefined }) => void;
+};
+
+export type FetchedRemoteImage = {
+  tempPath: string;
+  bytes: number;
+  sha256: string;
+  finalUrl: string;
+};
 
 export function assertFetchableUrl(raw: string): URL {
   let url: URL;
@@ -83,10 +112,11 @@ export function isBlockedAddress(ip: string): boolean {
 export async function resolvePublicAddress(
   host: string,
   resolver: AddressResolver = dns.lookup,
+  isBlocked: (ip: string) => boolean = isBlockedAddress,
 ): Promise<{ address: string; family: number }> {
   const literal = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
   if (isIP(literal) !== 0) {
-    if (isBlockedAddress(literal)) {
+    if (isBlocked(literal)) {
       throw new ServiceError("validation", "That URL cannot be fetched.", {
         reason: "url_blocked_address",
       });
@@ -95,7 +125,7 @@ export async function resolvePublicAddress(
   }
 
   const records = await resolver(host, { all: true, verbatim: true });
-  if (records.length === 0 || records.some((record) => isBlockedAddress(record.address))) {
+  if (records.length === 0 || records.some((record) => isBlocked(record.address))) {
     throw new ServiceError("validation", "That URL cannot be fetched.", {
       reason: "url_blocked_address",
     });
@@ -109,6 +139,404 @@ export async function resolvePublicAddress(
   return { address: first.address, family: first.family };
 }
 
+export async function fetchRemoteImageToTemp(
+  raw: string,
+  options: FetchRemoteImageOptions,
+): Promise<FetchedRemoteImage> {
+  const isBlocked = options.isBlocked ?? isBlockedAddress;
+  const resolver = options.resolver ?? dns.lookup;
+  const totalMs = options.timeouts?.totalMs ?? TOTAL_MS;
+  const connectMs = options.timeouts?.connectMs ?? CONNECT_MS;
+  const idleMs = options.timeouts?.idleMs ?? IDLE_MS;
+  const signal = AbortSignal.timeout(totalMs);
+
+  let url = assertFetchableUrl(raw);
+  let hops = 0;
+  let tempPath: string | undefined;
+  let activeRequest: http.ClientRequest | undefined;
+  let activeResponse: http.IncomingMessage | undefined;
+
+  const cleanupNetwork = (): void => {
+    if (activeResponse !== undefined && !activeResponse.destroyed) {
+      activeResponse.destroy();
+    }
+    if (activeRequest !== undefined && !activeRequest.destroyed) {
+      activeRequest.destroy();
+    }
+  };
+
+  try {
+    while (true) {
+      if (signal.aborted) {
+        throw timeoutError();
+      }
+      const { address, family } = await resolvePublicAddress(url.hostname, resolver, isBlocked);
+      const response = await openPinnedRequest(url, {
+        address,
+        family,
+        signal,
+        connectMs,
+        idleMs,
+        onRequest: (request) => {
+          activeRequest = request;
+        },
+      });
+      activeResponse = response;
+      options.onPinned?.({
+        address,
+        remoteAddress: response.socket?.remoteAddress,
+      });
+
+      if (isRedirectStatus(response.statusCode)) {
+        const location = response.headers.location;
+        drainAndDestroy(response);
+        activeResponse = undefined;
+        activeRequest = undefined;
+        if (typeof location !== "string" || location.trim() === "") {
+          throw new ServiceError("validation", "That URL cannot be fetched.", {
+            reason: "url_fetch_failed",
+            status: response.statusCode,
+          });
+        }
+        hops += 1;
+        if (hops > MAX_REDIRECTS) {
+          throw new ServiceError("validation", "That URL cannot be fetched.", {
+            reason: "url_too_many_redirects",
+          });
+        }
+        try {
+          url = assertFetchableUrl(new URL(location, url).href);
+        } catch (error) {
+          if (error instanceof ServiceError) {
+            throw error;
+          }
+          throw new ServiceError("validation", "That URL cannot be fetched.", {
+            reason: "url_not_allowed",
+          });
+        }
+        continue;
+      }
+
+      if (response.statusCode === undefined || response.statusCode < 200 || response.statusCode >= 300) {
+        const status = response.statusCode;
+        drainAndDestroy(response);
+        activeResponse = undefined;
+        activeRequest = undefined;
+        throw new ServiceError("validation", "That URL cannot be fetched.", {
+          reason: "url_fetch_failed",
+          status,
+        });
+      }
+
+      const contentLength = response.headers["content-length"];
+      if (contentLength !== undefined) {
+        const length = Number(contentLength);
+        if (Number.isFinite(length) && length > options.maxBytes) {
+          drainAndDestroy(response);
+          activeResponse = undefined;
+          activeRequest = undefined;
+          throw new ServiceError("validation", imageTooLargeMessage(options.maxBytes), {
+            reason: "image_too_large",
+          });
+        }
+      }
+
+      const head = await readExact(response, MAGIC_BYTES, signal);
+      if (!isImageMagic(head)) {
+        drainAndDestroy(response);
+        activeResponse = undefined;
+        activeRequest = undefined;
+        throw new ServiceError("validation", "That address is not a JPEG, PNG, or WebP image.", {
+          reason: "not_an_image",
+        });
+      }
+
+      const body = Readable.from(prependChunks(head, response));
+      body.on("error", () => {
+        // Observed through streamToTemp.
+      });
+
+      try {
+        const streamed = await streamToTemp(body, {
+          dir: incomingUploadsDir(options.dataDir),
+          maxBytes: options.maxBytes,
+          prefix: "url",
+        });
+        tempPath = streamed.tempPath;
+        activeResponse = undefined;
+        activeRequest = undefined;
+        return {
+          tempPath: streamed.tempPath,
+          bytes: streamed.byteSize,
+          sha256: streamed.sha256,
+          finalUrl: url.href,
+        };
+      } catch (error) {
+        drainAndDestroy(response);
+        activeResponse = undefined;
+        activeRequest = undefined;
+        if (
+          error instanceof ServiceError &&
+          error.code === "validation" &&
+          (error.details === undefined ||
+            typeof error.details !== "object" ||
+            error.details === null ||
+            !("reason" in error.details))
+        ) {
+          throw new ServiceError("validation", error.message, {
+            reason: "image_too_large",
+          });
+        }
+        throw error;
+      }
+    }
+  } catch (error) {
+    cleanupNetwork();
+    if (tempPath !== undefined) {
+      unlinkQuietly(tempPath);
+    }
+    if (signal.aborted || isAbortError(error)) {
+      throw timeoutError();
+    }
+    throw error;
+  } finally {
+    cleanupNetwork();
+  }
+}
+
+function timeoutError(): ServiceError {
+  return new ServiceError("validation", "That URL timed out.", { reason: "url_timeout" });
+}
+
+function isRedirectStatus(status: number | undefined): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+function openPinnedRequest(
+  url: URL,
+  options: {
+    address: string;
+    family: number;
+    signal: AbortSignal;
+    connectMs: number;
+    idleMs: number;
+    onRequest: (request: http.ClientRequest) => void;
+  },
+): Promise<http.IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    if (options.signal.aborted) {
+      reject(timeoutError());
+      return;
+    }
+
+    const transport = url.protocol === "https:" ? https : http;
+    const requestOptions: http.RequestOptions = {
+      protocol: url.protocol,
+      hostname: url.hostname.replace(/^\[|\]$/g, ""),
+      port: url.port === "" ? undefined : Number(url.port),
+      path: `${url.pathname}${url.search}`,
+      method: "GET",
+      agent: false,
+      signal: options.signal,
+      headers: {
+        host: url.host,
+        "user-agent": "ReferenceStudio",
+        accept: "image/jpeg,image/png,image/webp",
+        "accept-encoding": "identity",
+      },
+      lookup: (_hostname, lookupOptions, callback) => {
+        // Node 24's HTTP stack always requests all:true results from custom lookup.
+        if (lookupOptions && typeof lookupOptions === "object" && "all" in lookupOptions && lookupOptions.all) {
+          (callback as (err: Error | null, addresses: Array<{ address: string; family: number }>) => void)(
+            null,
+            [{ address: options.address, family: options.family }],
+          );
+          return;
+        }
+        (callback as (err: Error | null, address: string, family: number) => void)(
+          null,
+          options.address,
+          options.family,
+        );
+      },
+    };
+    if (url.protocol === "https:") {
+      (requestOptions as https.RequestOptions).servername = url.hostname.replace(/^\[|\]$/g, "");
+    }
+
+    const request = transport.request(requestOptions, (response) => {
+      resolve(response);
+    });
+    options.onRequest(request);
+
+    const fail = (error: unknown): void => {
+      request.destroy();
+      if (isAbortError(error) || (error instanceof Error && error.name === "AbortError")) {
+        reject(timeoutError());
+        return;
+      }
+      if (error instanceof ServiceError) {
+        reject(error);
+        return;
+      }
+      reject(
+        new ServiceError("validation", "That URL cannot be fetched.", {
+          reason: "url_fetch_failed",
+        }),
+      );
+    };
+
+    request.on("error", fail);
+    options.signal.addEventListener(
+      "abort",
+      () => {
+        request.destroy();
+        reject(timeoutError());
+      },
+      { once: true },
+    );
+
+    request.on("socket", (socket: Socket) => {
+      socket.setTimeout(options.connectMs);
+      const armIdle = (): void => {
+        socket.setTimeout(options.idleMs);
+      };
+      if (url.protocol === "https:") {
+        socket.once("secureConnect", armIdle);
+      } else {
+        socket.once("connect", armIdle);
+      }
+      socket.on("timeout", () => {
+        request.destroy();
+        reject(timeoutError());
+      });
+    });
+
+    request.end();
+  });
+}
+
+function isImageMagic(bytes: Buffer): boolean {
+  if (bytes.length < 3) {
+    return false;
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return true;
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return true;
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return true;
+  }
+  return false;
+}
+
+async function readExact(
+  response: http.IncomingMessage,
+  size: number,
+  signal: AbortSignal,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  while (total < size) {
+    if (signal.aborted) {
+      throw timeoutError();
+    }
+    const chunk = response.read(size - total);
+    if (chunk !== null) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      chunks.push(buffer);
+      total += buffer.byteLength;
+      continue;
+    }
+    if (response.readableEnded) {
+      break;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const onReadable = (): void => {
+        cleanup();
+        resolve();
+      };
+      const onEnd = (): void => {
+        cleanup();
+        resolve();
+      };
+      const onError = (error: Error): void => {
+        cleanup();
+        reject(error);
+      };
+      const onAbort = (): void => {
+        cleanup();
+        reject(timeoutError());
+      };
+      const cleanup = (): void => {
+        response.off("readable", onReadable);
+        response.off("end", onEnd);
+        response.off("error", onError);
+        signal.removeEventListener("abort", onAbort);
+      };
+      response.on("readable", onReadable);
+      response.on("end", onEnd);
+      response.on("error", onError);
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+  return Buffer.concat(chunks, total);
+}
+
+async function* prependChunks(
+  head: Buffer,
+  response: http.IncomingMessage,
+): AsyncGenerator<Buffer> {
+  yield head;
+  for await (const chunk of response) {
+    yield Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+  }
+}
+
+function drainAndDestroy(response: http.IncomingMessage): void {
+  response.resume();
+  response.destroy();
+}
+
+function unlinkQuietly(filePath: string): void {
+  try {
+    unlinkSync(filePath);
+  } catch (error) {
+    if (!(typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")) {
+      // Best-effort cleanup.
+    }
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (typeof error === "object" && error !== null && "code" in error && error.code === "ABORT_ERR") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
+
 function embeddedIpv4(ip: string): string | undefined {
   if (!isIPv6(ip)) {
     return undefined;
@@ -117,7 +545,6 @@ function embeddedIpv4(ip: string): string | undefined {
   if (bytes === undefined) {
     return undefined;
   }
-  // IPv4-mapped ::ffff:0:0/96
   if (
     bytes[10] === 0xff &&
     bytes[11] === 0xff &&
@@ -125,7 +552,6 @@ function embeddedIpv4(ip: string): string | undefined {
   ) {
     return `${bytes[12]}.${bytes[13]}.${bytes[14]}.${bytes[15]}`;
   }
-  // NAT64 64:ff9b::/96
   if (
     bytes[0] === 0x00 &&
     bytes[1] === 0x64 &&

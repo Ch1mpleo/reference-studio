@@ -40,10 +40,19 @@ export async function streamUploadToTemp(
   part: StreamUploadPart,
   options: { dir: string; maxBytes: number },
 ): Promise<StreamedUpload> {
+  return streamToTemp(part.file, options);
+}
+
+/** Stream-agnostic temp write used by multipart uploads and remote URL fetches. */
+export async function streamToTemp(
+  source: Readable & { truncated?: boolean; destroy?: (error?: Error) => void },
+  options: { dir: string; maxBytes: number; prefix?: string },
+): Promise<StreamedUpload> {
   mkdirSync(options.dir, { recursive: true });
   await assertFreeSpace(options.dir, options.maxBytes + UPLOAD_SPACE_RESERVE_BYTES);
 
-  const tempPath = path.join(options.dir, `upload-${randomBytes(16).toString("hex")}.part`);
+  const prefix = options.prefix ?? "upload";
+  const tempPath = path.join(options.dir, `${prefix}-${randomBytes(16).toString("hex")}.part`);
   const hash = createHash("sha256");
   let byteSize = 0;
   let writtenSinceCheck = 0;
@@ -80,20 +89,20 @@ export async function streamUploadToTemp(
 
   try {
     try {
-      await pipeline(part.file, counter, output);
+      await pipeline(source, counter, output);
     } catch (error) {
-      destroyQuietly(part.file);
+      destroyQuietly(source);
       destroyQuietly(counter);
       destroyQuietly(output);
       await Promise.allSettled([
-        finished(part.file).catch(() => undefined),
+        finished(source).catch(() => undefined),
         finished(counter).catch(() => undefined),
         finished(output).catch(() => undefined),
       ]);
       throw error;
     }
 
-    if (part.file.truncated) {
+    if (source.truncated) {
       throw new ServiceError("validation", imageTooLargeMessage(options.maxBytes));
     }
 
@@ -104,11 +113,11 @@ export async function streamUploadToTemp(
       byteSize,
     };
   } catch (error) {
-    destroyQuietly(part.file);
+    destroyQuietly(source);
     destroyQuietly(counter);
     destroyQuietly(output);
     await Promise.allSettled([
-      finished(part.file).catch(() => undefined),
+      finished(source).catch(() => undefined),
       finished(counter).catch(() => undefined),
       finished(output).catch(() => undefined),
     ]);
