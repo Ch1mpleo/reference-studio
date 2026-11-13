@@ -1,6 +1,6 @@
 import { CONTRACT_VERSION, serviceErrorBodySchema } from "@reference-studio/core";
 import type { ZodType } from "zod";
-import { AdapterError, readDiscovery, resolveDataDir } from "./discovery.js";
+import { AdapterError, readDiscovery, resolveDataDir, type ConflictDetails } from "./discovery.js";
 
 const REQUEST_TIMEOUT_MS = 5000;
 const START_STUDIO = "Start Studio with `npm run dev` from the Reference Studio repository.";
@@ -30,6 +30,7 @@ export type ImageBytes = {
 export type ServiceConnection = WorkspaceStatus & {
   getJson<T>(path: string, schema: ZodType<T>): Promise<T>;
   getBytes(path: string): Promise<ImageBytes>;
+  sendJson<T>(method: "POST", path: string, body: unknown, schema: ZodType<T>, mutationKey: string): Promise<{ data: T; replayed: boolean }>;
 };
 
 export async function checkWorkspace(options: ServiceClientOptions = {}): Promise<WorkspaceStatus> {
@@ -96,6 +97,7 @@ export async function connect(options: ServiceClientOptions = {}): Promise<Servi
     authenticated: true,
     getJson: (path, schema) => getJson(baseUrl, token, timeoutMs, path, schema),
     getBytes: (path) => getBytes(baseUrl, token, timeoutMs, path),
+    sendJson: (method, path, body, schema, mutationKey) => sendJson(baseUrl, token, timeoutMs, method, path, body, schema, mutationKey),
   };
 }
 
@@ -119,6 +121,62 @@ async function getJson<T>(
     return parsed.data;
   }
   throw mapServiceFailure(response.status, response.body, path);
+}
+
+const REVISION_NEXT_STEP =
+  "Call get_project_context (with directionId) to read the current revision and the human's changes, then retry against currentRevision with a new mutationKey.";
+
+/** Writes are sent once: the adapter never retries, so a lost reply is resolved by the caller replaying its mutationKey. */
+async function sendJson<T>(
+  baseUrl: string,
+  token: string,
+  timeoutMs: number,
+  method: string,
+  path: string,
+  body: unknown,
+  schema: ZodType<T>,
+  mutationKey: string,
+): Promise<{ data: T; replayed: boolean }> {
+  const url = `${baseUrl}${path}`;
+  let response: Response;
+  let text: string;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": mutationKey },
+      body: JSON.stringify(body),
+      redirect: "error",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    text = await response.text();
+  } catch (error) {
+    const reason = error instanceof Error && error.name === "TimeoutError" ? "timed out; the write may or may not have been applied" : "refused the connection";
+    throw new AdapterError(
+      "service_unavailable",
+      `Studio at ${new URL(url).origin} ${reason}.`,
+      reason.startsWith("timed out")
+        ? "Retry with the same mutationKey and the same request: Studio replays the original result if the write landed, or applies it once."
+        : START_STUDIO,
+    );
+  }
+  let parsedBody: unknown;
+  try {
+    parsedBody = JSON.parse(text);
+  } catch {
+    parsedBody = undefined;
+  }
+  if (response.status >= 200 && response.status < 300) {
+    const parsed = schema.safeParse(parsedBody);
+    if (!parsed.success) {
+      throw new AdapterError(
+        "service_unavailable",
+        `Studio returned an unexpected response for ${routeLabel(path)}.`,
+        "Rebuild and restart Studio and the MCP adapter from the same checkout (`npm run build`, then `npm run dev`).",
+      );
+    }
+    return { data: parsed.data, replayed: response.headers.get("idempotency-replayed") === "true" };
+  }
+  throw mapServiceFailure(response.status, parsedBody, path, true);
 }
 
 async function getBytes(baseUrl: string, token: string, timeoutMs: number, path: string): Promise<ImageBytes> {
@@ -175,7 +233,7 @@ function routeLabel(path: string): string {
   return path.split("?")[0] ?? path;
 }
 
-function mapServiceFailure(status: number, body: unknown, path: string): AdapterError {
+function mapServiceFailure(status: number, body: unknown, path: string, write = false): AdapterError {
   const reported = serviceErrorBodySchema.safeParse(body);
   const message = reported.success ? reported.data.error.message : undefined;
   if (status === 400) {
@@ -206,11 +264,19 @@ function mapServiceFailure(status: number, body: unknown, path: string): Adapter
       "Call list_projects to find current project IDs, then retry with an ID from this project.",
     );
   }
+  if (status === 409 && hasReason(body, "idempotency_mismatch")) {
+    return new AdapterError(
+      "idempotency_mismatch",
+      message ?? "This mutationKey was already used for a different request.",
+      "Send a new mutationKey for a new request, or repeat the original request unchanged to replay its result.",
+    );
+  }
   if (status === 409) {
     return new AdapterError(
       "revision_conflict",
       message ?? "The record changed since the revision the caller knew.",
-      "Refetch the context without knownRevision (or with the current revision) and continue from it.",
+      write ? REVISION_NEXT_STEP : "Refetch the context without knownRevision (or with the current revision) and continue from it.",
+      conflictDetails(body),
     );
   }
   if (status === 401 || status === 403) {
@@ -225,6 +291,18 @@ function mapServiceFailure(status: number, body: unknown, path: string): Adapter
     `Studio answered ${routeLabel(path)} with HTTP ${status}.`,
     "Check the Studio terminal output, then retry.",
   );
+}
+
+function conflictDetails(body: unknown): ConflictDetails | undefined {
+  const reported = serviceErrorBodySchema.safeParse(body);
+  const details = reported.success ? reported.data.error.details : undefined;
+  if (typeof details !== "object" || details === null) return undefined;
+  const record = details as Record<string, unknown>;
+  return {
+    ...(typeof record.currentRevision === "number" ? { currentRevision: record.currentRevision } : {}),
+    ...(typeof record.recordType === "string" ? { recordType: record.recordType } : {}),
+    ...(typeof record.recordId === "string" ? { recordId: record.recordId } : {}),
+  };
 }
 
 function hasReason(body: unknown, reason: string): boolean {

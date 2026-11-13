@@ -3,6 +3,7 @@ import { z } from "zod";
 import { failureResult } from "./failure.js";
 import { registerReadTools } from "./readTools.js";
 import { registerReferenceTool } from "./referenceTool.js";
+import { registerWriteTools } from "./writeTools.js";
 import { checkWorkspace, type ServiceClientOptions } from "./serviceClient.js";
 
 export const SERVER_NAME = "reference-studio";
@@ -49,6 +50,7 @@ export function createServer(options: ServiceClientOptions = {}): McpServer {
 
   registerReadTools(server, options);
   registerReferenceTool(server, options);
+  registerWriteTools(server, options);
 
   return server;
 }

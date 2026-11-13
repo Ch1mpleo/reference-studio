@@ -327,3 +327,86 @@ describe("connect().getJson", () => {
     expect((await failureOf(service.getJson("/api/thing", thing))).code).toBe("service_unavailable");
   });
 });
+
+describe("connect().sendJson", () => {
+  const result = z.object({ id: z.string() });
+  type Seen = { method?: string; url?: string; key?: string | string[]; auth?: string; body: string };
+
+  async function client(route: (seen: Seen) => { status: number; body: unknown; headers?: Record<string, string> }) {
+    const seen: Seen[] = [];
+    const base = healthy();
+    const dir = tempDir();
+    writeDiscovery(
+      dir,
+      await stub((request, response) => {
+        if (request.url === "/api/health" || request.url === "/api/projects") {
+          base(request, response);
+          return;
+        }
+        let body = "";
+        request.on("data", (chunk) => (body += chunk));
+        request.on("end", () => {
+          const entry = { method: request.method, url: request.url, key: request.headers["idempotency-key"], auth: request.headers.authorization, body };
+          seen.push(entry);
+          const outcome = route(entry);
+          response.writeHead(outcome.status, { "content-type": "application/json", ...outcome.headers });
+          response.end(JSON.stringify(outcome.body));
+        });
+      }),
+    );
+    return { service: await connect({ env: { REFERENCE_STUDIO_DATA_DIR: dir }, timeoutMs: 1000 }), seen };
+  }
+
+  async function failureOf(promise: Promise<unknown>): Promise<AdapterError> {
+    const error = await promise.then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(AdapterError);
+    const adapterError = error as AdapterError;
+    expect(JSON.stringify([adapterError.message, adapterError.nextStep, adapterError.conflict])).not.toContain(TOKEN);
+    return adapterError;
+  }
+
+  it("posts JSON with the bearer token and mutation key and reports replays", async () => {
+    let calls = 0;
+    const { service, seen } = await client(() => ({ status: 201, body: { id: "a" }, headers: (++calls > 1 ? { "idempotency-replayed": "true" } : {}) as Record<string, string> }));
+    await expect(service.sendJson("POST", "/api/x", { a: 1 }, result, "key-1")).resolves.toEqual({ data: { id: "a" }, replayed: false });
+    await expect(service.sendJson("POST", "/api/x", { a: 1 }, result, "key-1")).resolves.toEqual({ data: { id: "a" }, replayed: true });
+    expect(seen[0]).toMatchObject({ method: "POST", url: "/api/x", key: "key-1", auth: `Bearer ${TOKEN}`, body: '{"a":1}' });
+  });
+
+  it("maps a revision 409 to revision_conflict with the current revision and a write next step", async () => {
+    const details = { currentRevision: 7, expectedRevision: 3, recordType: "direction", recordId: "d-1" };
+    const { service, seen } = await client(() => ({ status: 409, body: { error: { code: "conflict", message: "The record changed since it was loaded.", details } } }));
+    const error = await failureOf(service.sendJson("POST", "/api/x", {}, result, "k"));
+    expect(error.code).toBe("revision_conflict");
+    expect(error.conflict).toEqual({ currentRevision: 7, recordType: "direction", recordId: "d-1" });
+    expect(error.nextStep).toContain("get_project_context");
+    expect(error.nextStep).toContain("new mutationKey");
+    expect(seen).toHaveLength(1);
+  });
+
+  it("maps an idempotency 409 to idempotency_mismatch and never retries", async () => {
+    const { service, seen } = await client(() => ({ status: 409, body: { error: { code: "conflict", message: "Key reused.", details: { reason: "idempotency_mismatch" } } } }));
+    const error = await failureOf(service.sendJson("POST", "/api/x", {}, result, "k"));
+    expect(error.code).toBe("idempotency_mismatch");
+    expect(error.conflict).toBeUndefined();
+    expect(seen).toHaveLength(1);
+  });
+
+  it.each([
+    [400, "validation"],
+    [404, "not_found"],
+    [401, "unauthorized"],
+    [500, "service_unavailable"],
+  ] as const)("maps write failure %i to %s", async (status, code) => {
+    const { service } = await client(() => ({ status, body: { error: { code: "x", message: "Service said no." } } }));
+    expect((await failureOf(service.sendJson("POST", "/api/x", {}, result, "k"))).code).toBe(code);
+  });
+
+  it("rejects an unexpected success body", async () => {
+    const { service } = await client(() => ({ status: 201, body: { nope: true } }));
+    expect((await failureOf(service.sendJson("POST", "/api/x", {}, result, "k"))).code).toBe("service_unavailable");
+  });
+});

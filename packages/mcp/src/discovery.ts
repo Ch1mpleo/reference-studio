@@ -12,21 +12,30 @@ export const ADAPTER_ERROR_CODES = [
   "validation",
   "not_found",
   "revision_conflict",
+  "idempotency_mismatch",
   "asset_missing",
   "image_too_large",
 ] as const;
 
 export type AdapterErrorCode = (typeof ADAPTER_ERROR_CODES)[number];
 
+export type ConflictDetails = {
+  currentRevision?: number;
+  recordType?: string;
+  recordId?: string;
+};
+
 export class AdapterError extends Error {
   readonly code: AdapterErrorCode;
   readonly nextStep: string;
+  readonly conflict: ConflictDetails | undefined;
 
-  constructor(code: AdapterErrorCode, message: string, nextStep: string) {
+  constructor(code: AdapterErrorCode, message: string, nextStep: string, conflict?: ConflictDetails) {
     super(message);
     this.name = "AdapterError";
     this.code = code;
     this.nextStep = nextStep;
+    this.conflict = conflict;
   }
 }
 

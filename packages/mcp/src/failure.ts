@@ -5,13 +5,16 @@ export const errorOutput = z.object({
   code: z.enum(ADAPTER_ERROR_CODES),
   message: z.string(),
   nextStep: z.string(),
+  currentRevision: z.number().optional(),
+  recordType: z.string().optional(),
+  recordId: z.string().optional(),
 });
 
 export type Failure = z.infer<typeof errorOutput>;
 
 export function toFailure(error: unknown): Failure {
   if (error instanceof AdapterError) {
-    return { code: error.code, message: error.message, nextStep: error.nextStep };
+    return { code: error.code, message: error.message, nextStep: error.nextStep, ...error.conflict };
   }
   return {
     code: "service_unavailable",
