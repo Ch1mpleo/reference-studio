@@ -30,7 +30,7 @@ export type InspectedImage = {
 
 export async function inspectImage(
   source: Buffer | string,
-  options: { maxBytes: number },
+  options: { maxBytes: number; sha256?: string },
 ): Promise<InspectedImage> {
   const byteSize = typeof source === "string" ? statSync(source).size : source.byteLength;
   if (byteSize === 0) {
@@ -78,7 +78,7 @@ export async function inspectImage(
   }
 
   return {
-    sha256: await hashSource(source),
+    sha256: options.sha256 ?? (await hashSource(source)),
     mediaType: format.mediaType,
     extension: format.extension,
     byteSize,

@@ -10,6 +10,9 @@ import {
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
+/** In-process retain counts so concurrent identical publishes survive a failed sibling commit. */
+const publishRetention = new Map<string, number>();
+
 export function managedPath(dataDir: string, relativePosix: string): string {
   if (relativePosix.includes("\\") || relativePosix.startsWith("/") || relativePosix.includes("\0")) {
     throw new Error("Asset path is not managed.");
@@ -71,11 +74,33 @@ export function publishFile(tempPath: string, finalPath: string): boolean {
   }
 }
 
+/** Hold a published relative path until the owning request finishes its commit attempt. */
+export function retainPublishedPath(relativePosix: string): void {
+  publishRetention.set(relativePosix, (publishRetention.get(relativePosix) ?? 0) + 1);
+}
+
+export function releasePublishedPath(relativePosix: string): void {
+  const current = publishRetention.get(relativePosix) ?? 0;
+  if (current <= 1) {
+    publishRetention.delete(relativePosix);
+    return;
+  }
+  publishRetention.set(relativePosix, current - 1);
+}
+
+/** Test-only: clear retain counts between cases. */
+export function resetPublishedPathRetentionForTests(): void {
+  publishRetention.clear();
+}
+
 export function removeIfUnreferenced(
   database: DatabaseSync,
   dataDir: string,
   relativePosix: string,
 ): void {
+  if ((publishRetention.get(relativePosix) ?? 0) > 0) {
+    return;
+  }
   const row = database
     .prepare("SELECT id FROM assets WHERE original_path = ? OR thumbnail_path = ? LIMIT 1")
     .get(relativePosix, relativePosix);

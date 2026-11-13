@@ -30,10 +30,17 @@ import {
   type UpdateReferenceRequest,
   type CreatePlacementRequest,
 } from "@reference-studio/core";
-import { existsSync, unlinkSync } from "node:fs";
+import { createReadStream, existsSync, unlinkSync } from "node:fs";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
-import { managedPath, publishFile, readManagedFile, removeIfUnreferenced, writeNewFile } from "./assetFiles.js";
+import {
+  managedPath,
+  publishFile,
+  releasePublishedPath,
+  removeIfUnreferenced,
+  retainPublishedPath,
+  writeNewFile,
+} from "./assetFiles.js";
 import { headerValue, requireCaller } from "./access.js";
 import { publishChange } from "./changes.js";
 import type { EventHub } from "./events.js";
@@ -47,10 +54,16 @@ import {
 
 type CommitMutation = typeof commitMutationImpl;
 let commitMutation: CommitMutation = commitMutationImpl;
+let afterPublishForTests: (() => Promise<void>) | undefined;
 
 /** Test-only seam to force post-publish commit failures. */
 export function setCommitMutationForTests(next: CommitMutation | undefined): void {
   commitMutation = next ?? commitMutationImpl;
+}
+
+/** Test-only yield after publish so concurrent retain races can be exercised. */
+export function setAfterPublishForTests(next: (() => Promise<void>) | undefined): void {
+  afterPublishForTests = next;
 }
 import { getProject } from "./projects.js";
 import { assertPlacementDirectionRevision, bumpPlacementDirection, readBoard, saveBoardLayout } from "./boards.js";
@@ -121,8 +134,13 @@ export function registerReferenceRoutes(
       const maxUploadBytes = readSettings(database).maxUploadBytes;
       const upload = await readImageUpload(request, maxUploadBytes, dataDir);
       const created: string[] = [];
+      let paths: { originalPath: string; thumbnailPath: string } | undefined;
+      let released = false;
       try {
-        const inspected = await inspectImage(upload.tempPath, { maxBytes: maxUploadBytes });
+        const inspected = await inspectImage(upload.tempPath, {
+          maxBytes: maxUploadBytes,
+          sha256: upload.sha256,
+        });
         const fields = parseContract(imageFieldSchema, {
           title: upload.fields.title ?? "",
           sourceUrl: upload.fields.sourceUrl ?? "",
@@ -133,24 +151,36 @@ export function registerReferenceRoutes(
         const requestHash = hashCanonicalRequest(canonical);
         const scope = mutationScope(caller, "reference.image", projectId);
         rejectIdempotencyMismatch(database, scope, key, requestHash);
-        const paths = publishImageFiles(dataDir, inspected, upload.tempPath, created);
+        paths = publishImageFiles(dataDir, inspected, upload.tempPath, created);
+        if (afterPublishForTests !== undefined) {
+          await afterPublishForTests();
+        }
         const outcome = commitMutation(database, {
           scope,
           key,
           requestHash,
           execute: () => {
-            const reference = insertImageReference(database, projectId, canonical, inspected, paths);
+            const reference = insertImageReference(database, projectId, canonical, inspected, paths!);
             return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
           },
         });
         publishReference(hub, projectId, outcome);
         return reply.code(outcome.statusCode).send(outcome.body);
       } catch (error) {
+        if (paths !== undefined) {
+          releasePublishedPath(paths.originalPath);
+          releasePublishedPath(paths.thumbnailPath);
+          released = true;
+        }
         for (const relativePath of created) {
           removeIfUnreferenced(database, dataDir, relativePath);
         }
         throw error;
       } finally {
+        if (paths !== undefined && !released) {
+          releasePublishedPath(paths.originalPath);
+          releasePublishedPath(paths.thumbnailPath);
+        }
         if (existsSync(upload.tempPath)) {
           try {
             unlinkSync(upload.tempPath);
@@ -334,50 +364,62 @@ async function readImageUpload(
   const fields: Record<string, string> = {};
   let filename = "image";
   let streamed: { tempPath: string; sha256: string; byteSize: number } | undefined;
-  for await (const part of request.parts({ limits: { fileSize: maxUploadBytes } })) {
-    if (PATH_FIELDS.has(part.fieldname)) {
-      if (part.type === "file") {
-        await part.toBuffer().catch(() => undefined);
-      }
-      throw new ServiceError("validation", "Send image bytes. The service does not read local paths.");
-    }
-    if (part.type === "file") {
-      if (part.fieldname !== "file" || streamed !== undefined) {
-        await part.toBuffer().catch(() => undefined);
-        throw new ServiceError("validation", "Send one image in the file field.");
-      }
-      filename = part.filename;
-      try {
-        streamed = await streamUploadToTemp(part, {
-          dir: incomingUploadsDir(dataDir),
-          maxBytes: maxUploadBytes,
-        });
-      } catch (error) {
-        if (isOversizedUpload(error)) {
-          throw new ServiceError("validation", imageTooLargeMessage(maxUploadBytes));
+  let handedOff = false;
+  try {
+    for await (const part of request.parts({ limits: { fileSize: maxUploadBytes } })) {
+      if (PATH_FIELDS.has(part.fieldname)) {
+        if (part.type === "file") {
+          part.file.resume();
         }
-        throw error;
+        throw new ServiceError("validation", "Send image bytes. The service does not read local paths.");
       }
-      continue;
+      if (part.type === "file") {
+        if (part.fieldname !== "file" || streamed !== undefined) {
+          part.file.resume();
+          throw new ServiceError("validation", "Send one image in the file field.");
+        }
+        filename = part.filename;
+        try {
+          streamed = await streamUploadToTemp(part, {
+            dir: incomingUploadsDir(dataDir),
+            maxBytes: maxUploadBytes,
+          });
+        } catch (error) {
+          if (isOversizedUpload(error)) {
+            throw new ServiceError("validation", imageTooLargeMessage(maxUploadBytes));
+          }
+          throw error;
+        }
+        continue;
+      }
+      if (!IMAGE_FIELDS.has(part.fieldname)) {
+        throw new ServiceError("validation", "That image field is not supported.");
+      }
+      if (typeof part.value !== "string" || part.valueTruncated) {
+        throw new ServiceError("validation", "That field is too long.");
+      }
+      fields[part.fieldname] = part.value;
     }
-    if (!IMAGE_FIELDS.has(part.fieldname)) {
-      throw new ServiceError("validation", "That image field is not supported.");
+    if (streamed === undefined) {
+      throw new ServiceError("validation", "Choose a JPEG, PNG, or WebP image.");
     }
-    if (typeof part.value !== "string" || part.valueTruncated) {
-      throw new ServiceError("validation", "That field is too long.");
+    handedOff = true;
+    return {
+      filename,
+      tempPath: streamed.tempPath,
+      sha256: streamed.sha256,
+      byteSize: streamed.byteSize,
+      fields,
+    };
+  } finally {
+    if (!handedOff && streamed !== undefined) {
+      try {
+        unlinkSync(streamed.tempPath);
+      } catch {
+        // Best-effort cleanup when a later multipart part fails the request.
+      }
     }
-    fields[part.fieldname] = part.value;
   }
-  if (streamed === undefined) {
-    throw new ServiceError("validation", "Choose a JPEG, PNG, or WebP image.");
-  }
-  return {
-    filename,
-    tempPath: streamed.tempPath,
-    sha256: streamed.sha256,
-    byteSize: streamed.byteSize,
-    fields,
-  };
 }
 
 function publishImageFiles(
@@ -388,6 +430,8 @@ function publishImageFiles(
 ): { originalPath: string; thumbnailPath: string } {
   const originalPath = `assets/originals/${image.sha256}${image.extension}`;
   const thumbnailPath = `assets/thumbnails/${image.sha256}.webp`;
+  retainPublishedPath(originalPath);
+  retainPublishedPath(thumbnailPath);
   if (publishFile(tempPath, managedPath(dataDir, originalPath))) {
     created.push(originalPath);
   }
@@ -670,14 +714,20 @@ function sendAsset(
     throw new ServiceError("not_found", "Image was not found.");
   }
   const relativePath = variant === "original" ? row.original_path : row.thumbnail_path;
-  let bytes: Buffer;
+  let absolute: string;
   try {
-    bytes = readManagedFile(dataDir, relativePath);
+    absolute = managedPath(dataDir, relativePath);
   } catch {
     throw new Error("Stored image is missing.");
   }
+  if (!existsSync(absolute)) {
+    throw new Error("Stored image is missing.");
+  }
   const mediaType = variant === "thumbnail" ? "image/webp" : row.media_type;
-  return reply.header("cache-control", "private, max-age=86400").type(mediaType).send(bytes);
+  return reply
+    .header("cache-control", "private, max-age=86400")
+    .type(mediaType)
+    .send(createReadStream(absolute));
 }
 
 const PLACEMENT_COLUMNS = `

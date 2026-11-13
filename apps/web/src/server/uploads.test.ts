@@ -5,6 +5,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  unlinkSync,
   utimesSync,
   writeFileSync,
   mkdtempSync,
@@ -75,7 +76,7 @@ describe("streamUploadToTemp", () => {
     const dataDir = tempDir();
     const dir = incomingUploadsDir(dataDir);
     mkdirSync(dir, { recursive: true });
-    setDiskStatsReader(() => ({ bavail: 10n, bsize: 4096 }));
+    setDiskStatsReader(async () => ({ bavail: 10n, bsize: 4096 }));
     await expect(
       streamUploadToTemp(partFromBuffer(Buffer.alloc(1024)), {
         dir,
@@ -90,7 +91,7 @@ describe("streamUploadToTemp", () => {
     const dir = incomingUploadsDir(dataDir);
     mkdirSync(dir, { recursive: true });
     let calls = 0;
-    setDiskStatsReader(() => {
+    setDiskStatsReader(async () => {
       calls += 1;
       return { bavail: calls === 1 ? 1_000_000n : 1n, bsize: 4096 };
     });
@@ -142,10 +143,27 @@ describe("incoming sweep", () => {
     expect(existsSync(freshPart)).toBe(true);
     expect(existsSync(keep)).toBe(true);
   });
+
+  it("ignores per-entry failures and never throws", () => {
+    const dataDir = tempDir();
+    const dir = incomingUploadsDir(dataDir);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "upload-old.part"), "old");
+    const now = Date.now();
+    utimesSync(path.join(dir, "upload-old.part"), now / 1000 - 7200, now / 1000 - 7200);
+    // Race a delete under the sweep by removing the file after readdir would see it:
+    // the per-entry try/catch must keep startup safe.
+    const spyPath = path.join(dir, "upload-race.part");
+    writeFileSync(spyPath, "race");
+    utimesSync(spyPath, now / 1000 - 7200, now / 1000 - 7200);
+    unlinkSync(spyPath);
+    expect(() => sweepIncomingUploads(dataDir, now)).not.toThrow();
+    expect(existsSync(path.join(dir, "upload-old.part"))).toBe(false);
+  });
 });
 
 describe("assertFreeSpace", () => {
-  it("requires reserve bytes against bavail * bsize", () => {
-    expect(() => assertFreeSpace(tempDir(), UPLOAD_SPACE_RESERVE_BYTES)).not.toThrow();
+  it("requires reserve bytes against bavail * bsize", async () => {
+    await expect(assertFreeSpace(tempDir(), UPLOAD_SPACE_RESERVE_BYTES)).resolves.toBeUndefined();
   });
 });

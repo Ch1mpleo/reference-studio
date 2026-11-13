@@ -221,14 +221,20 @@ function transportError(
       body: serviceErrorBody(new ServiceError("unsupported_media", "Unsupported media type.")),
     };
   }
-  const restore = (url.split("?")[0] ?? url) === "/api/projects/restore";
+  const pathOnly = url.split("?")[0] ?? url;
+  const restore = pathOnly === "/api/projects/restore";
+  const imageUpload = /\/api\/projects\/[^/]+\/references\/images$/.test(pathOnly);
   if (error.code === "FST_REQ_FILE_TOO_LARGE" || error.code === "FST_ERR_CTP_BODY_TOO_LARGE") {
     return {
       status: 400,
       body: serviceErrorBody(
         new ServiceError(
           "validation",
-          restore ? backupTooLargeMessage() : imageTooLargeMessage(UPLOAD_LIMIT_MAX),
+          restore
+            ? backupTooLargeMessage()
+            : imageUpload
+              ? imageTooLargeMessage(UPLOAD_LIMIT_MAX)
+              : "Request body is too large.",
         ),
       ),
     };
@@ -262,18 +268,34 @@ const INCOMING_PART_MAX_AGE_MS = 60 * 60 * 1000;
 
 export function sweepIncomingUploads(dataDir: string, now = Date.now()): string[] {
   const directory = incomingUploadsDir(dataDir);
-  mkdirSync(directory, { recursive: true });
+  try {
+    mkdirSync(directory, { recursive: true });
+  } catch {
+    return [];
+  }
+  let names: string[];
+  try {
+    names = readdirSync(directory);
+  } catch {
+    return [];
+  }
   const removed: string[] = [];
   const cutoff = now - INCOMING_PART_MAX_AGE_MS;
-  for (const name of readdirSync(directory)) {
+  for (const name of names) {
     if (!name.endsWith(".part")) {
       continue;
     }
     const absolute = path.join(directory, name);
-    const age = statSync(absolute).mtimeMs;
-    if (age < cutoff) {
-      unlinkSync(absolute);
-      removed.push(name);
+    try {
+      const age = statSync(absolute).mtimeMs;
+      if (age < cutoff) {
+        unlinkSync(absolute);
+        removed.push(name);
+      }
+    } catch (error) {
+      if (!(typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")) {
+        // Ignore per-entry failures so startup never crashes on a stale .part.
+      }
     }
   }
   return removed;

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createWriteStream, mkdirSync, statfsSync, unlinkSync } from "node:fs";
+import { createWriteStream, mkdirSync, unlinkSync } from "node:fs";
+import { statfs } from "node:fs/promises";
 import path from "node:path";
 import { Transform, type Readable } from "node:stream";
 import { finished, pipeline } from "node:stream/promises";
@@ -19,16 +20,16 @@ export type StreamedUpload = {
   byteSize: number;
 };
 
-export type DiskStatsReader = (dir: string) => {
+export type DiskStatsReader = (dir: string) => Promise<{
   bavail: number | bigint;
   bsize: number | bigint;
-};
+}>;
 
-/** Test seam for free-space checks; production uses fs.statfsSync. */
-export let readDiskStats: DiskStatsReader = (dir) => statfsSync(dir);
+/** Test seam for free-space checks; production uses fs.promises.statfs. */
+export let readDiskStats: DiskStatsReader = (dir) => statfs(dir);
 
 export function setDiskStatsReader(reader: DiskStatsReader | undefined): void {
-  readDiskStats = reader ?? ((dir) => statfsSync(dir));
+  readDiskStats = reader ?? ((dir) => statfs(dir));
 }
 
 export function incomingUploadsDir(dataDir: string): string {
@@ -40,7 +41,7 @@ export async function streamUploadToTemp(
   options: { dir: string; maxBytes: number },
 ): Promise<StreamedUpload> {
   mkdirSync(options.dir, { recursive: true });
-  assertFreeSpace(options.dir, options.maxBytes + UPLOAD_SPACE_RESERVE_BYTES);
+  await assertFreeSpace(options.dir, options.maxBytes + UPLOAD_SPACE_RESERVE_BYTES);
 
   const tempPath = path.join(options.dir, `upload-${randomBytes(16).toString("hex")}.part`);
   const hash = createHash("sha256");
@@ -64,7 +65,11 @@ export async function streamUploadToTemp(
         writtenSinceCheck += chunk.byteLength;
         if (writtenSinceCheck >= SPACE_RECHECK_BYTES) {
           writtenSinceCheck = 0;
-          assertFreeSpace(options.dir, UPLOAD_SPACE_RESERVE_BYTES);
+          void assertFreeSpace(options.dir, UPLOAD_SPACE_RESERVE_BYTES).then(
+            () => callback(null, chunk),
+            (error: unknown) => callback(error instanceof Error ? error : new Error("Upload failed.")),
+          );
+          return;
         }
         callback(null, chunk);
       } catch (error) {
@@ -119,8 +124,8 @@ export async function streamUploadToTemp(
   }
 }
 
-export function assertFreeSpace(dir: string, requiredBytes: number): void {
-  const stats = readDiskStats(dir);
+export async function assertFreeSpace(dir: string, requiredBytes: number): Promise<void> {
+  const stats = await readDiskStats(dir);
   const available = Number(stats.bavail) * Number(stats.bsize);
   if (available < requiredBytes) {
     throw new ServiceError("storage_full", "Not enough free disk space for this upload.");

@@ -23,6 +23,7 @@ import {
   type ProjectReference,
   type ReferenceSearchResult,
 } from "@reference-studio/core";
+import { sha256HexFromBlob } from "./sha256Stream.js";
 
 export class ReferenceRequestError extends Error {
   readonly code: string;
@@ -93,7 +94,7 @@ export async function uploadProjectImage(
     creator: fields.creator ?? "",
     observations: fields.observations,
   }, "Image details are invalid.");
-  const contentSha256 = await sha256Hex(await file.arrayBuffer());
+  const contentSha256 = await sha256HexFromBlob(file);
   const canonical = imageRequestForStorage(parsedFields, file.name, contentSha256);
   const body = new FormData();
   body.set("file", file);
@@ -210,11 +211,6 @@ function idempotencyKey(canonical: unknown): string {
   const key = crypto.randomUUID();
   keyMemory = { key, hash };
   return key;
-}
-
-async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)].map((part) => part.toString(16).padStart(2, "0")).join("");
 }
 
 async function readError(response: Response): Promise<ReferenceRequestError> {

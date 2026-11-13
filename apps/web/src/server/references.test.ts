@@ -1,19 +1,15 @@
 import { createHash, randomFillSync } from "node:crypto";
 import {
-  createReadStream,
-  createWriteStream,
   existsSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { finished } from "node:stream/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_IMAGE_BYTES,
@@ -28,7 +24,8 @@ import { createApp } from "./app.js";
 import type { AppConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { EventHub } from "./events.js";
-import { setCommitMutationForTests } from "./references.js";
+import { resetPublishedPathRetentionForTests } from "./assetFiles.js";
+import { setAfterPublishForTests, setCommitMutationForTests } from "./references.js";
 import { browserHeaders } from "./test/browserSession.js";
 import { incomingUploadsDir } from "./uploads.js";
 
@@ -82,6 +79,8 @@ async function startApp(): Promise<{
 afterEach(() => {
   vi.unstubAllGlobals();
   setCommitMutationForTests(undefined);
+  setAfterPublishForTests(undefined);
+  resetPublishedPathRetentionForTests();
   for (const close of closers.splice(0)) {
     close();
   }
@@ -131,6 +130,43 @@ function multipart(
   return { payload: Buffer.concat(chunks), contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
+/** Client order: file part first, then text fields (and optional extra parts). */
+function multipartFileFirst(
+  bytes: Buffer,
+  filename: string,
+  options: {
+    fields?: Record<string, string>;
+    extraFiles?: Array<{ field: string; filename: string; bytes: Buffer }>;
+    omitClosing?: boolean;
+  } = {},
+): { payload: Buffer; contentType: string } {
+  const boundary = "refstudioBoundary";
+  const chunks: Buffer[] = [];
+  chunks.push(
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+    ),
+  );
+  chunks.push(bytes);
+  chunks.push(Buffer.from("\r\n"));
+  for (const [name, value] of Object.entries(options.fields ?? {})) {
+    chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`));
+  }
+  for (const extra of options.extraFiles ?? []) {
+    chunks.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${extra.field}"; filename="${extra.filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+      ),
+    );
+    chunks.push(extra.bytes);
+    chunks.push(Buffer.from("\r\n"));
+  }
+  if (!options.omitClosing) {
+    chunks.push(Buffer.from(`--${boundary}--\r\n`));
+  }
+  return { payload: Buffer.concat(chunks), contentType: `multipart/form-data; boundary=${boundary}` };
+}
+
 function countRows(database: DatabaseSync, table: string): number {
   const row = database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number | bigint };
   return Number(row.count);
@@ -146,71 +182,6 @@ async function paddedPng(targetBytes: number): Promise<Buffer> {
     throw new Error(`Base PNG is larger than ${targetBytes} bytes.`);
   }
   return Buffer.concat([base, Buffer.alloc(targetBytes - base.byteLength)]);
-}
-
-async function writePaddedPngFile(filePath: string, targetBytes: number): Promise<void> {
-  const base = await sharp({
-    create: { width: 32, height: 32, channels: 3, background: { r: 12, g: 34, b: 56 } },
-  })
-    .png()
-    .toBuffer();
-  const output = createWriteStream(filePath);
-  output.write(base);
-  let remaining = targetBytes - base.byteLength;
-  const chunk = Buffer.alloc(1024 * 1024, 0);
-  while (remaining > 0) {
-    const size = Math.min(remaining, chunk.byteLength);
-    if (!output.write(chunk.subarray(0, size))) {
-      await new Promise<void>((resolve) => output.once("drain", resolve));
-    }
-    remaining -= size;
-  }
-  output.end();
-  await finished(output);
-}
-
-async function streamMultipartFile(input: {
-  port: number;
-  projectId: string;
-  filePath: string;
-  filename: string;
-  idempotencyKey: string;
-}): Promise<number> {
-  const boundary = "refstudioBoundary";
-  const preface = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${input.filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
-  );
-  const ending = Buffer.from(`\r\n--${boundary}--\r\n`);
-  const size = statSync(input.filePath).size;
-  return new Promise((resolve, reject) => {
-    const req = httpRequest(
-      {
-        host: "127.0.0.1",
-        port: input.port,
-        method: "POST",
-        path: `/api/projects/${input.projectId}/references/images`,
-        headers: {
-          host: "127.0.0.1:4317",
-          authorization: "Bearer local-test-token",
-          "content-type": `multipart/form-data; boundary=${boundary}`,
-          "idempotency-key": input.idempotencyKey,
-          "content-length": String(preface.byteLength + size + ending.byteLength),
-        },
-      },
-      (response) => {
-        response.resume();
-        response.on("end", () => resolve(response.statusCode ?? 0));
-      },
-    );
-    req.on("error", reject);
-    req.write(preface);
-    createReadStream(input.filePath)
-      .on("error", reject)
-      .on("end", () => {
-        req.end(ending);
-      })
-      .pipe(req, { end: false });
-  });
 }
 
 async function noisePngNear(targetBytes: number): Promise<Buffer> {
@@ -511,52 +482,195 @@ describe("reference ingestion", () => {
     expect(existsSync(thumbnailPath)).toBe(true);
   });
 
-  it("keeps RSS growth bounded while streaming a 100 MiB upload", { timeout: 180_000 }, async () => {
+  it("leaves no .incoming temp file after multipart failures that follow the file part", async () => {
     const { app, config } = await startApp();
     const projectId = await createProject(app);
-    const browser = await browserHeaders(app);
-    const limit = 128 * 1024 * 1024;
-    const settings = await app.inject({
-      method: "PUT",
-      url: "/api/settings",
-      headers: { ...browser, "content-type": "application/json", "idempotency-key": "limit-128" },
-      payload: { expectedRevision: 1, maxUploadBytes: limit },
-    });
-    expect(settings.statusCode).toBe(200);
+    const incoming = incomingUploadsDir(config.dataDir);
+    const cases: Array<{ name: string; form: ReturnType<typeof multipartFileFirst>; message: string }> = [
+      {
+        name: "unknown-field",
+        form: multipartFileFirst(PNG_1X1, "photo.png", { fields: { mystery: "nope" } }),
+        message: "That image field is not supported.",
+      },
+      {
+        name: "second-file",
+        form: multipartFileFirst(PNG_1X1, "photo.png", {
+          extraFiles: [{ field: "file", filename: "again.png", bytes: PNG_1X1 }],
+        }),
+        // Fastify files:1 limit maps to the shared "Send one image." transport message.
+        message: "Send one image.",
+      },
+      {
+        name: "path-file-after",
+        form: multipartFileFirst(PNG_1X1, "photo.png", {
+          extraFiles: [{ field: "path", filename: "local.png", bytes: PNG_1X1 }],
+        }),
+        // Fastify files:1 fires before the path part is parsed.
+        message: "Send one image.",
+      },
+      {
+        name: "path-field",
+        form: multipartFileFirst(PNG_1X1, "photo.png", { fields: { path: "/tmp/secret.png" } }),
+        message: "does not read local paths",
+      },
+      {
+        name: "path-file-only",
+        form: (() => {
+          const boundary = "refstudioBoundary";
+          const chunks = [
+            Buffer.from(
+              `--${boundary}\r\nContent-Disposition: form-data; name="path"; filename="local.png"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+            ),
+            PNG_1X1,
+            Buffer.from(`\r\n--${boundary}--\r\n`),
+          ];
+          return {
+            payload: Buffer.concat(chunks),
+            contentType: `multipart/form-data; boundary=${boundary}`,
+          };
+        })(),
+        message: "does not read local paths",
+      },
+      {
+        name: "huge-title",
+        form: multipartFileFirst(PNG_1X1, "photo.png", { fields: { title: "x".repeat(2 * 1024 * 1024) } }),
+        message: "too long",
+      },
+    ];
+    for (const sample of cases) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/projects/${projectId}/references/images`,
+        headers: agentHeaders(sample.name, { "content-type": sample.form.contentType }),
+        payload: sample.form.payload,
+      });
+      expect(response.statusCode, sample.name).toBe(400);
+      expect(JSON.stringify(response.json()), sample.name).toContain(sample.message);
+      expect(readdirSync(incoming), sample.name).toEqual([]);
+    }
+  });
 
-    const filePath = path.join(config.dataDir, "hundred.png");
-    await writePaddedPngFile(filePath, 100 * 1024 * 1024);
+  it("leaves no .incoming temp file when the socket aborts after the file part", { timeout: 30_000 }, async () => {
+    const { app, config } = await startApp();
+    const projectId = await createProject(app);
+    const incoming = incomingUploadsDir(config.dataDir);
     await app.listen({ host: "127.0.0.1", port: 0 });
     const address = app.server.address();
     if (address === null || typeof address === "string") {
       throw new Error("Expected a TCP address.");
     }
-
-    if (typeof globalThis.gc === "function") {
-      globalThis.gc();
-    }
-    const before = process.memoryUsage().rss;
-    const status = await streamMultipartFile({
-      port: address.port,
-      projectId,
-      filePath,
-      filename: "hundred.png",
-      idempotencyKey: "hundred-mib",
+    const form = multipartFileFirst(PNG_1X1, "photo.png", {
+      fields: { title: "aborted" },
+      omitClosing: true,
     });
-    expect(status).toBe(201);
-    if (typeof globalThis.gc === "function") {
-      globalThis.gc();
-    }
-    const growth = process.memoryUsage().rss - before;
-    console.info(`upload-memory-rss-growth-bytes=${growth}`);
-    if (growth >= 64 * 1024 * 1024) {
-      console.warn(
-        `RSS growth ${growth} exceeded the 64 MiB soft bound; recorded for evidence.`,
+    await new Promise<void>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          host: "127.0.0.1",
+          port: address.port,
+          method: "POST",
+          path: `/api/projects/${projectId}/references/images`,
+          headers: {
+            host,
+            authorization: "Bearer local-test-token",
+            "content-type": form.contentType,
+            "idempotency-key": "abort-after-file",
+            "content-length": String(form.payload.byteLength + 64),
+          },
+        },
+        () => {
+          reject(new Error("Expected the request to abort before a response."));
+        },
       );
-    } else {
-      expect(growth).toBeLessThan(64 * 1024 * 1024);
-    }
+      req.on("error", () => resolve());
+      req.write(form.payload);
+      setTimeout(() => {
+        req.destroy(new Error("aborted"));
+      }, 20);
+    });
+    await expect
+      .poll(() => readdirSync(incoming), { timeout: 5_000 })
+      .toEqual([]);
     await app.close();
+  });
+
+  it("keeps a published original when a concurrent identical upload still retains it", async () => {
+    const { app, config, database } = await startApp();
+    const projectId = await createProject(app);
+    const bytes = await paddedPng(32 * 1024);
+    const sha = createHash("sha256").update(bytes).digest("hex");
+    const originalPath = path.join(config.dataDir, "assets", "originals", `${sha}.png`);
+    const { commitMutation: realCommit } = await import("./idempotency.js");
+
+    let resolveBPublished!: () => void;
+    const bPublished = new Promise<void>((resolve) => {
+      resolveBPublished = resolve;
+    });
+    let resolveAContinue!: () => void;
+    const aContinue = new Promise<void>((resolve) => {
+      resolveAContinue = resolve;
+    });
+    let responseB!: Awaited<ReturnType<typeof app.inject>>;
+    let publishCount = 0;
+    setAfterPublishForTests(async () => {
+      publishCount += 1;
+      if (publishCount === 1) {
+        const formB = multipart(bytes, "b.png");
+        const pendingB = app.inject({
+          method: "POST",
+          url: `/api/projects/${projectId}/references/images`,
+          headers: agentHeaders("concurrent-b", { "content-type": formB.contentType }),
+          payload: formB.payload,
+        });
+        void pendingB.then((response) => {
+          responseB = response;
+        });
+        await bPublished;
+      } else {
+        resolveBPublished();
+        await aContinue;
+      }
+    });
+    let commitCount = 0;
+    setCommitMutationForTests((databaseArg, options) => {
+      commitCount += 1;
+      if (commitCount === 1) {
+        throw new Error("forced A commit failure");
+      }
+      return realCommit(databaseArg, options);
+    });
+
+    const formA = multipart(bytes, "a.png");
+    const responseA = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/images`,
+      headers: agentHeaders("concurrent-a", { "content-type": formA.contentType }),
+      payload: formA.payload,
+    });
+    // A failed after B retained; allow B to commit.
+    resolveAContinue();
+    await expect.poll(() => responseB?.statusCode).toBe(201);
+    expect(responseA.statusCode).toBe(500);
+    expect(existsSync(originalPath)).toBe(true);
+    expect(countRows(database, "assets")).toBe(1);
+    expect(readdirSync(incomingUploadsDir(config.dataDir))).toEqual([]);
+  });
+
+  it("rejects oversized JSON bodies with a non-image message", async () => {
+    const { app } = await startApp();
+    const payload = Buffer.alloc(22 * 1024 * 1024, 0x61);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      headers: agentHeaders("huge-json", {
+        "content-type": "application/json",
+        "content-length": String(payload.byteLength),
+      }),
+      payload,
+    });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.stringify(response.json())).toContain("Request body is too large.");
+    expect(JSON.stringify(response.json())).not.toContain("Image is larger");
   });
 
   it("does not read a local path and keeps a url as a bookmark", async () => {
