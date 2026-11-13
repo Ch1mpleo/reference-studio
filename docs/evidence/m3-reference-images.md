@@ -8,7 +8,7 @@ Checkpoint: 2026-11-13 on `feat/m3.2-reference-images` (base `cb5e088`). M3.2b o
 - `GET /api/references/:referenceId/image?x&y&width&height&maxEdge` (`apps/web/src/server/referenceImages.ts`). Crop parameters are all four or none and validated with `imageCropSchema`; `maxEdge` is an integer from 64 to 1,568 (default 1,568). A non-image reference is 400 `validation`; a missing original is 404 with `details.reason: "asset_missing"`. The existing `/api/assets` routes still answer 500 for a missing file and were not changed.
   - sharp pipeline: `.rotate()` (EXIF), extract in oriented pixels (`left=floor(x*W)`, `top=floor(y*H)`, `w=max(1,round(width*W))`, clamped), resize `fit: inside` without enlargement, JPEG quality 85 or PNG when the source has alpha.
   - Over 1,000,000 bytes: quality 70, then 1,024 px, then 768 px; last resort is the stored thumbnail (full image) or a 480 px render (crop). Headers: `content-type`, `x-image-width`, `x-image-height`, `x-source-width`, `x-source-height`, `x-image-fallback` (`none|requality|downscale|thumbnail`). Nothing is written to disk.
-- `get_reference` (`packages/mcp/src/referenceTool.ts`). Input: `referenceId`, optional `projectId`, `placementId` (requires `projectId`; uses its saved crop), `crop` (exclusive with `placementId`), `includeImage` (default true), `maxEdge`. `structuredContent`: metadata, `source.{url,creator}`, observations excerpt (2,000 characters), `projectIds`, with `projectId` that project's placements and the annotations on them (each capped at 20 with `total` and `truncated`; placements first 20, annotations first 20 in board order), and `image.{status, variant, mimeType, width, height, sourceWidth, sourceHeight, crop, fallback}`. `content` is a text summary plus one image block (`data` is bare base64) when included; the text states that source URLs are attribution only.
+- `get_reference` (`packages/mcp/src/referenceTool.ts`). Input: `referenceId`, optional `projectId`, `placementId` (requires `projectId`; uses its saved crop), `crop` (exclusive with `placementId`), `includeImage` (default true), `maxEdge`. `structuredContent`: metadata, `source.{url,creator}`, observations excerpt (2,000 characters), `projectIds`, with `projectId` that project's placements (first 20, each with `location` `inbox|board` and `directionId`) and the annotations on them (last 20 in board order, human-authored or decision only, via the shared `bounded` and `isHumanOrDecision` helpers of `context.ts`; both lists carry `total` and `truncated`), and `image.{status, variant, mimeType, width, height, sourceWidth, sourceHeight, crop, fallback}`. `content` is a text summary plus one image block (`data` is bare base64) when included; the text states that source URLs are attribution only.
 - `ServiceConnection.getBytes(path)` returns bytes plus the image headers; a 404 with `details.reason: "asset_missing"` maps to the new adapter code `asset_missing`.
 - `sharp` is a `devDependency` of `@reference-studio/mcp` (same range as web) for test decoding only.
 
@@ -18,11 +18,13 @@ Checkpoint: 2026-11-13 on `feat/m3.2-reference-images` (base `cb5e088`). M3.2b o
 - An explicit crop on a non-image reference is forwarded to the service, which answers 400, so the tool reports `validation`; a plain call on it reports `image.status: "not_image"`.
 - Invalid tool input (crop outside the image, `placementId` with `crop`, `placementId` without `projectId`) is rejected by the SDK input schema as an `isError` result whose text begins `Input validation error: Invalid arguments for tool get_reference`, with no `structuredContent` (same as M3.2a).
 - Uploading an image also creates an inbox placement, so a project that placed the reference once through the board lists two placements.
-- Annotations on a reference are all annotations targeting its placements, any author; the M3.2a context filter (human or decision) is not applied here.
+- Annotations follow M3.2a: those targeting the reference's placements, human-authored or carrying a decision, last 20 in board order.
+- Placement location comes from the board data already held: a placement with a board item is `board` and `directionId` is that item's frame (null when loose on the board); a placement with no board item is `inbox` with `directionId: null`. No schema or storage change.
+- The last-resort render is also checked against the 1,000,000-byte cap; if it still exceeds, the render route answers 415 `unsupported_media` with `details.reason: "image_too_large"` instead of returning an oversized image (the adapter reports it as `service_unavailable` with the HTTP status).
 
 ## Environment and versions
 
-- Node v22.23.4 (the repository declares `>=24`; Node 24 was not available here). `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.4.0, sharp 0.35.x, zod 4.6.7.
+- Node v22.23.4 here (the repository declares `>=24`; Node 24 was not available). QA independently reran on Node 24.22.1: check pass, 236/236 unit, build pass, e2e 66/66 on Chromium, before the fixes below. `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.4.0, sharp 0.35.x, zod 4.6.7.
 - Negotiated protocol: `2025-11-25`.
 
 ## Verification
@@ -30,7 +32,7 @@ Checkpoint: 2026-11-13 on `feat/m3.2-reference-images` (base `cb5e088`). M3.2b o
 | Command | Result |
 | --- | --- |
 | `npm run check` | pass (no type errors) |
-| `npm test` | 51 files, 236 tests passed, 0 failed, 0 skipped (adds 4 route tests and 9 image-render tests in `referenceImages.test.ts`, and 1 stdio test in `referenceTool.test.ts`) |
+| `npm test` | 51 files, 240 tests passed, 0 failed, 0 skipped (236 before the QA fixes; adds 3 `renderForAgent` fallback tests and 1 stdio annotation-cap test) |
 | `npm run build` | pass |
 | `npm run test:e2e` (default `msedge` channel) | not run: Microsoft Edge is not installed; Chromium used instead |
 | `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` after `npx playwright install chromium` | 66 passed, 0 failed, 0 skipped |
@@ -213,7 +215,7 @@ get_reference {referenceId, crop: x.5 y0 w.5 h.5, maxEdge: 300}:
 
 ## Limits
 
-- Not run: Node 24, default Edge channel, a real MCP host client, and the `downscale` and `thumbnail` fallback steps (the noisy fixture succeeds at `requality`, so only that step is asserted).
+- Not run by the author: Node 24 (QA ran it), default Edge channel, and a real MCP host client. The `downscale`, `thumbnail`, and size-error paths are covered by `renderForAgent` unit tests with small byte caps.
 - Renders are computed per request and not cached; a very large crop of a 12,000 px source decodes the original each attempt.
 - The existing `/api/assets` routes still return 500 for a missing file.
 - No write tools, annotation creation, sessions, resources, or prompts exist yet.

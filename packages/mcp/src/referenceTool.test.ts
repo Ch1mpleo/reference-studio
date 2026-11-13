@@ -310,10 +310,15 @@ describe("get_reference over stdio", () => {
     expect(project.placements.total).toBe(2);
     expect(project.placements.items.find((entry: Json) => entry.placementId === ids.placementId)).toMatchObject({
       placementId: ids.placementId,
+      location: "board",
+      directionId: expect.any(String),
       role: "candidate",
       crop: PLACEMENT_CROP,
       usageNotes: { text: "Borrow the colour blocking.", truncated: false },
     });
+    expect(project.placements.items.filter((entry: Json) => entry.location === "inbox")).toEqual([
+      expect.objectContaining({ directionId: null, role: "inspiration" }),
+    ]);
     expect(project.annotations.items).toHaveLength(1);
     expect(project.annotations.items[0]).toMatchObject({
       id: ids.annotationId,
@@ -402,4 +407,39 @@ describe("get_reference over stdio", () => {
     expect(stopped.isError).toBe(true);
     expect(stopped.structuredContent).toMatchObject({ code: "service_unavailable" });
   }, 60_000);
+
+  it("keeps the last 20 human or decision annotations in board order and drops agent notes", async () => {
+    const ids = await seed();
+    const board = await api("GET", `/api/projects/${ids.projectId}/board`);
+    const base = { borrowedQuality: "", translation: "", limitations: "", target: { type: "placement", placementId: ids.placementId } };
+    const human = Array.from({ length: 22 }, (_, index) => ({
+      ...base,
+      id: crypto.randomUUID(),
+      body: `human ${index}`,
+      provenance: { author: "human" },
+    }));
+    const agentNote = { ...base, id: crypto.randomUUID(), body: "agent note", provenance: { author: "agent", name: "bot" } };
+    const agentDecision = {
+      ...base,
+      id: crypto.randomUUID(),
+      body: "agent decision",
+      provenance: { author: "agent", name: "bot" },
+      decision: { rationale: "Fits." },
+    };
+    await api("PUT", `/api/projects/${ids.projectId}/board`, {
+      expectedRevision: board.revision,
+      layout: { ...board.layout, annotations: [agentNote, ...human, agentDecision] },
+    });
+    const client = await connectClient();
+    const result = await call(client, { referenceId: ids.quadId, projectId: ids.projectId, includeImage: false });
+    const annotations = (result.structuredContent?.project as Json).annotations;
+    expect(annotations.total).toBe(23);
+    expect(annotations.truncated).toBe(true);
+    const bodies = annotations.items.map((entry: Json) => entry.body.text);
+    expect(bodies).toHaveLength(20);
+    expect(bodies).not.toContain("agent note");
+    expect(bodies.at(-1)).toBe("agent decision");
+    expect(bodies.at(0)).toBe("human 3");
+    expect(annotations.items.at(-1).decision).toEqual({ rationale: { text: "Fits.", truncated: false } });
+  }, 30_000);
 });

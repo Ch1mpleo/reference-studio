@@ -8,6 +8,7 @@ import sharp from "sharp";
 import type { FastifyInstance } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
 import { createApp } from "./app.js";
+import { renderForAgent } from "./referenceImages.js";
 import type { AppConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 
@@ -319,5 +320,49 @@ describe("GET /api/references/:referenceId/image", () => {
       expect(body.error.code).toBe("not_found");
       expect(body.error.details.reason).toBe("asset_missing");
     }
+  });
+});
+
+describe("renderForAgent fallbacks", () => {
+  async function noise(width: number, height: number): Promise<Buffer> {
+    return sharp(randomBytes(width * height * 3), { raw: { width, height, channels: 3 } }).png({ compressionLevel: 0 }).toBuffer();
+  }
+  const tiny = Buffer.from("thumb".repeat(20));
+  const thumbnail = async () => ({ bytes: tiny, mimeType: "image/webp", width: 40, height: 30 });
+
+  it("steps through requality, downscale, and the stored thumbnail as the cap tightens", async () => {
+    const source = await noise(1000, 750);
+    const steps: Array<[number, string]> = [
+      [600_000, "none"],
+      [450_000, "requality"],
+      [300_000, "downscale"],
+      [30_000, "thumbnail"],
+    ];
+    for (const [cap, expected] of steps) {
+      const { rendered, fallback } = await renderForAgent(source, null, 1568, thumbnail, cap);
+      expect(fallback).toBe(expected);
+      expect(rendered.bytes.byteLength).toBeLessThanOrEqual(cap);
+      if (expected === "downscale") expect(rendered.width).toBe(768);
+      if (expected === "thumbnail") expect(rendered.width).toBe(40);
+    }
+  });
+
+  it("falls back to a 480 px render for a crop when the cap is tight", async () => {
+    const source = await noise(1000, 750);
+    const { rendered, fallback } = await renderForAgent(source, { x: 0, y: 0, width: 1, height: 1 }, 1568, thumbnail, 100_000);
+    expect(fallback).toBe("thumbnail");
+    expect(rendered.width).toBe(480);
+    expect(rendered.bytes.byteLength).toBeLessThanOrEqual(100_000);
+  });
+
+  it("errors instead of returning an oversized last resort", async () => {
+    const source = await noise(800, 600);
+    await expect(renderForAgent(source, null, 1568, async () => undefined, 1000)).rejects.toMatchObject({
+      code: "unsupported_media",
+      details: { reason: "image_too_large" },
+    });
+    await expect(
+      renderForAgent(source, { x: 0, y: 0, width: 1, height: 1 }, 1568, thumbnail, 1000),
+    ).rejects.toMatchObject({ code: "unsupported_media" });
   });
 });

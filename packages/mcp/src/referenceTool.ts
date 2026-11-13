@@ -13,7 +13,7 @@ import {
   type LibraryReference,
 } from "@reference-studio/core";
 import { z } from "zod";
-import { excerptOf } from "./context.js";
+import { MAX_ANNOTATIONS, bounded, excerptOf, isHumanOrDecision } from "./context.js";
 import { AdapterError } from "./discovery.js";
 import { failureResult } from "./failure.js";
 import { connect, type ImageBytes, type ServiceClientOptions } from "./serviceClient.js";
@@ -56,6 +56,8 @@ const getReferenceInput = z
 
 const placementOutput = z.object({
   placementId: z.string(),
+  location: z.enum(["inbox", "board"]),
+  directionId: z.string().nullable(),
   role: z.enum(PLACEMENT_ROLES),
   usageNotes: excerpt,
   crop: cropOrNull,
@@ -137,11 +139,6 @@ const NO_IMAGE: ImageState = {
   fallback: null,
 };
 
-function bounded<T>(all: T[], max: number) {
-  const items = all.slice(0, max);
-  return { items, total: all.length, truncated: all.length > items.length };
-}
-
 export function summarizeReferenceDetail(reference: LibraryReference) {
   return {
     id: reference.id,
@@ -185,7 +182,7 @@ export function registerReferenceTool(server: McpServer, options: ServiceClientO
     "get_reference",
     {
       title: "Get reference",
-      description: `Fetch one reference: metadata, provenance (source URL and creator are attribution only, never evidence that the image was inspected), an observations excerpt, and the image itself as MCP image content, optionally cropped. Pass projectId to also receive that project's placements of the reference and the board annotations on them (each list capped at ${MAX_REFERENCE_LINKS}, with truncated). Pass crop (normalized 0-1 from the top left of the original) or placementId with projectId (uses that placement's saved crop) to inspect a region; never both. maxEdge (${AGENT_IMAGE_MIN_EDGE}-${AGENT_IMAGE_MAX_EDGE}) bounds the longest edge; images are re-encoded to at most 1 MB and image.fallback reports any quality or size reduction. includeImage false returns metadata only. If the stored file is missing, a plain call returns metadata with image.status "missing"; an explicit crop or placementId returns asset_missing. Read-only: nothing is saved or changed.`,
+      description: `Fetch one reference: metadata, provenance (source URL and creator are attribution only, never evidence that the image was inspected), an observations excerpt, and the image itself as MCP image content, optionally cropped. Pass projectId to also receive that project's placements of the reference and the board annotations on them (human feedback and decisions only; placements keep the first ${MAX_REFERENCE_LINKS} and annotations the last ${MAX_ANNOTATIONS} in board order, with total and truncated; each placement has location inbox or board and its directionId). Pass crop (normalized 0-1 from the top left of the original) or placementId with projectId (uses that placement's saved crop) to inspect a region; never both. maxEdge (${AGENT_IMAGE_MIN_EDGE}-${AGENT_IMAGE_MAX_EDGE}) bounds the longest edge; images are re-encoded to at most 1 MB and image.fallback reports any quality or size reduction. includeImage false returns metadata only. If the stored file is missing, a plain call returns metadata with image.status "missing"; an explicit crop or placementId returns asset_missing. Read-only: nothing is saved or changed.`,
       inputSchema: getReferenceInput,
       outputSchema: getReferenceOutput,
     },
@@ -215,8 +212,11 @@ export function registerReferenceTool(server: McpServer, options: ServiceClientO
             }
             crop = chosen.crop;
           }
+          const itemFrame = new Map(board.layout.items.map((item) => [item.placementId, item.frameId]));
           const annotations = (board.layout.annotations ?? []).flatMap((annotation) =>
-            annotation.target.type === "placement" && placementIds.has(annotation.target.placementId)
+            isHumanOrDecision(annotation) &&
+            annotation.target.type === "placement" &&
+            placementIds.has(annotation.target.placementId)
               ? [
                   {
                     id: annotation.id,
@@ -237,6 +237,8 @@ export function registerReferenceTool(server: McpServer, options: ServiceClientO
             placements: bounded(
               placements.map((entry) => ({
                 placementId: entry.placementId,
+                location: itemFrame.has(entry.placementId) ? ("board" as const) : ("inbox" as const),
+                directionId: itemFrame.get(entry.placementId) ?? null,
                 role: entry.role,
                 usageNotes: excerptOf(entry.usageNotes),
                 crop: entry.crop,
@@ -244,7 +246,7 @@ export function registerReferenceTool(server: McpServer, options: ServiceClientO
               })),
               MAX_REFERENCE_LINKS,
             ),
-            annotations: bounded(annotations, MAX_REFERENCE_LINKS),
+            annotations: bounded(annotations, MAX_ANNOTATIONS, true),
           };
         }
 

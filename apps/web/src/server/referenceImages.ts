@@ -65,11 +65,12 @@ export function registerReferenceImageRoutes(app: FastifyInstance, database: Dat
   });
 }
 
-async function renderForAgent(
+export async function renderForAgent(
   original: Buffer,
   crop: ImageCrop | null,
   maxEdge: number,
   thumbnail: () => Promise<Rendered | undefined>,
+  maxBytes: number = AGENT_IMAGE_MAX_BYTES,
 ): Promise<{ rendered: Rendered; fallback: Fallback }> {
   const meta = await sharp(original, { failOn: "error", limitInputPixels: SOURCE_PIXEL_LIMIT }).metadata();
   const turned = meta.orientation !== undefined && meta.orientation >= 5;
@@ -90,17 +91,22 @@ async function renderForAgent(
     if (seen.has(key)) continue;
     seen.add(key);
     const rendered = await encode(original, oriented, crop, attempt.edge, attempt.quality);
-    if (rendered.bytes.byteLength <= AGENT_IMAGE_MAX_BYTES) {
+    if (rendered.bytes.byteLength <= maxBytes) {
       return { rendered, fallback: attempt.fallback };
     }
   }
   if (crop === null) {
     const stored = await thumbnail();
-    if (stored !== undefined && stored.bytes.byteLength <= AGENT_IMAGE_MAX_BYTES) {
+    if (stored !== undefined && stored.bytes.byteLength <= maxBytes) {
       return { rendered: stored, fallback: "thumbnail" };
     }
   }
   const last = await encode(original, oriented, crop, Math.min(maxEdge, THUMBNAIL_FALLBACK_EDGE), 70);
+  if (last.bytes.byteLength > maxBytes) {
+    throw new ServiceError("unsupported_media", "This image cannot be rendered within the agent size limit.", {
+      reason: "image_too_large",
+    });
+  }
   return { rendered: last, fallback: "thumbnail" };
 }
 
