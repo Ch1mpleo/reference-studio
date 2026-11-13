@@ -1,6 +1,9 @@
 #!/usr/bin/env node
-import { CONTRACT_VERSION } from "@reference-studio/core";
-import { describeAdapter } from "./status.js";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { createServer } from "./server.js";
 
-console.error(describeAdapter(CONTRACT_VERSION));
-process.exitCode = 1;
+serveStdio(() => createServer(), {
+  onerror: (error) => {
+    process.stderr.write(`reference-studio-mcp: ${error.message}\n`);
+  },
+});

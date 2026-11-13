@@ -9,6 +9,8 @@ export {
 export type { ServiceErrorBody, ServiceErrorCode } from "./errors.js";
 export { assertExpectedRevision } from "./revisions.js";
 export type { RevisionTarget } from "./revisions.js";
+export { connectionRecordSchema } from "./connection.js";
+export type { ConnectionRecord } from "./connection.js";
 export { healthResponse, healthResponseSchema } from "./health.js";
 export type { HealthResponse } from "./health.js";
 export { changedEvent, readyEvent, studioEventSchema, STUDIO_ENTITY_TYPES } from "./events.js";
