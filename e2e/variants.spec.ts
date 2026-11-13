@@ -138,10 +138,11 @@ test("keeps slider values when a save fails or loses a revision race", async ({ 
     return response.status;
   });
   expect(raced).toBe(200);
-  // The competing PATCH already returns 200 with 220 ms on the server; the open
-  // editor can still briefly hold the prior draft, so retry the fill until the
-  // slider accepts 480 rather than polling the server again.
+  // Refilling the same "480" can be a no-op (no change event), so the slider —
+  // which follows the draft prop — never moves. Nudge the field first so each
+  // retry fires a real change, then set 480.
   await expect(async () => {
+    await duration.fill("479");
     await duration.fill("480");
     await expect(slider).toHaveValue("480");
   }).toPass({ timeout: 5_000 });

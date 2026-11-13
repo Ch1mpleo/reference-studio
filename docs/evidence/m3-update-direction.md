@@ -129,7 +129,7 @@ board identical after rollback: true
 ## Flake fixes (task 6, test-only)
 
 - `canvas-simplicity` "zoom stays bare": wait for the saved note display text, select the React Flow node, then click Fit selection. `--repeat-each=10`: 10 passed.
-- `variants` "keeps slider values when a save fails or loses a revision race": the competing PATCH already returns 200 with the new server value; stability comes from wrapping the 480 fill/slider assertion in `expect().toPass()` (not from polling the server again). `--repeat-each=10`: 10 passed.
+- `variants` "keeps slider values when a save fails or loses a revision race": each toPass retry nudges the duration field (479 then 480) so a change event fires; refilling the same 480 alone can leave the slider behind. `--repeat-each=10`: see QA follow-up.
 
 ## QA follow-up
 
@@ -142,3 +142,16 @@ Strict append-only annotations on bearer PUT /board (no edit/delete of any exist
 | `npm run build` | exit 0 |
 | `npm run test:e2e` (Chromium) | 69 tests: 69 passed, 0 failed, 0 skipped |
 | `e2e/agent-writes.spec.ts --repeat-each=5` | 15 passed (3 tests × 5) |
+
+## Test nits (post-QA)
+
+- Variants race: toPass retry fills 479 then 480 so a change event always fires; slider follows the draft prop.
+- Boards "Broken link": browser-seeded human decision with a missing `annotationId`, asserting issue `"A decision links to a missing annotation."`.
+- Field/slider sync after an outside refresh: `StudioParameter` keeps them aligned when the `value` prop changes (`useEffect` reconciles local text when `value !== accepted.current`). They diverge only by design while the number field holds invalid intent. No product change.
+
+| Command | Result |
+| --- | --- |
+| `npm test` | 53 files, 286 tests: 286 passed |
+| `npm run test:e2e` (Chromium) run 1 | 69 passed |
+| `npm run test:e2e` (Chromium) run 2 | 69 passed |
+| `variants.spec.ts` "keeps slider values…" `--repeat-each=10` | 10 passed |

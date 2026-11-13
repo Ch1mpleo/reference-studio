@@ -143,8 +143,12 @@ describe("project boards", () => {
       { ...annotation, id: createId(), target: { type: "project", projectId: createId() } },
       { ...annotation, id: createId(), target: { type: "placement", placementId: createId() } },
       { ...annotation, id: createId(), target: { type: "placement", placementId: ctx.note.placementId }, region: { x: 0, y: 0, width: 1, height: 1 } },
-      { ...annotation, id: createId(), decision: { rationale: "Broken link", annotationId: createId() } },
     ]) expect((await ctx.put(board.revision, { ...board.layout, annotations: [...(board.layout.annotations ?? []), invalid] } as BoardLayout)).statusCode).toBe(400);
+    const broken = { ...annotation, id: createId(), provenance: { author: "human" as const }, decision: { rationale: "Broken link", annotationId: createId() } };
+    const linked = await ctx.putBrowser(board.revision, { ...board.layout, annotations: [...(board.layout.annotations ?? []), broken] } as BoardLayout);
+    expect(linked.statusCode).toBe(400);
+    expect(linked.json().error.message).toBe("The board arrangement is invalid.");
+    expect(linked.json().error.details.issues).toEqual(expect.arrayContaining([expect.objectContaining({ message: "A decision links to a missing annotation." })]));
   });
 
   it("branches direction reasoning without copying shared evidence or changing the source", async () => {
