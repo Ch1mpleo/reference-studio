@@ -14,6 +14,7 @@ Read for MCP context/session tools or the portable creative-workflow skill. This
 **M3.2 — Read tools.** `list_projects`, `get_project_context`, `search_references`, `get_reference`.
 
 - Context includes explicit project/direction/revision, purpose/audience/content/constraints, saved interpretations, alternatives/tradeoffs, user feedback, accepted decisions, intentional exceptions, unresolved questions, and system summary; include approved snapshot summary only when M5 exists. Return bounded summaries with stable links/IDs for retrieving source detail, not an entire unbounded discussion log. Report what changed relative to the caller's known revision or require a refetch; never assume the host remembers prior chat.
+- `knownRevision` rule (accepted): with a direction ID it is that direction's revision, otherwise the board's; the project revision is always reported. A stale value returns fresh context with `revisionChanged: {known, current}` and no diff; a value above the current revision is a `revision_conflict`; a direction outside the project is `not_found`. Intentional exceptions have no store yet and are returned as `notRecorded`.
 - Return concise paginated metadata first; retrieve actual images/crops as MCP image content on demand. URLs are not proof that an agent visually inspected the image.
 - Crop requests validate normalized geometry. Include stable IDs, source attribution, and relevant revision.
 

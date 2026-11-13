@@ -3,12 +3,16 @@ import {
   MAX_REFERENCE_PAGE_LIMIT,
   REFERENCE_KINDS,
   REFERENCE_PAGE_LIMIT,
+  boardSchema,
   projectListSchema,
+  projectReferenceListSchema,
+  projectSchema,
   referenceSearchResultSchema,
   type LibraryReference,
   type Project,
 } from "@reference-studio/core";
 import { z } from "zod";
+import { buildProjectContext, projectContextSchema } from "./context.js";
 import { failureResult } from "./failure.js";
 import { connect, type ServiceClientOptions } from "./serviceClient.js";
 
@@ -137,6 +141,57 @@ export function registerReadTools(server: McpServer, options: ServiceClientOptio
         };
       } catch (error) {
         return failureResult("search_references", error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_project_context",
+    {
+      title: "Get project context",
+      description:
+        "Fetch bounded, explicit context for one project: purpose, audience, constraints, the target direction's concept, feeling, decisions and questions, other directions as alternatives, saved reference interpretations (placement, reference, role, usage notes), human feedback and decision annotations, and a systems summary, each with stable IDs. Text is excerpted to 2,000 characters and lists are capped, with truncated flags. intentionalExceptions is notRecorded because Studio has no store for them. Pass directionId to focus on one direction. Pass knownRevision (that direction's revision, or the board revision without directionId) to learn whether context changed: a stale value returns fresh context with revisionChanged and no diff, a value above the current revision is revision_conflict. Always reports the project revision. The adapter remembers nothing between calls.",
+      inputSchema: z.object({
+        projectId: z.uuid().describe("Project ID from list_projects."),
+        directionId: z.uuid().optional().describe("Direction to focus on."),
+        knownRevision: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("The direction revision (with directionId) or board revision the caller last saw."),
+      }),
+      outputSchema: projectContextSchema,
+    },
+    async (input) => {
+      try {
+        const service = await connect(options);
+        const base = `/api/projects/${encodeURIComponent(input.projectId)}`;
+        const project = await service.getJson(base, projectSchema);
+        const board = await service.getJson(`${base}/board`, boardSchema);
+        const { references } = await service.getJson(`${base}/references`, projectReferenceListSchema);
+        const context = buildProjectContext({
+          project,
+          board,
+          placements: references,
+          directionId: input.directionId,
+          knownRevision: input.knownRevision,
+        });
+        const changed =
+          context.revisionChanged === undefined
+            ? ""
+            : ` Revision changed from ${context.revisionChanged.known} to ${context.revisionChanged.current}; read the fresh context below.`;
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Context for ${context.project.name} (project revision ${context.project.revision}, ${context.scope.revisionKind} revision ${context.scope.revision}).${changed}\n${JSON.stringify(context, null, 2)}`,
+            },
+          ],
+          structuredContent: context,
+        };
+      } catch (error) {
+        return failureResult("get_project_context", error);
       }
     },
   );
