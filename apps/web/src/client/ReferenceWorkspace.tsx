@@ -70,12 +70,19 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   const latest = useRef(board); latest.current = board;
   useEffect(() => {
     let cancelled = false;
-    void getSettings().then((settings) => {
-      if (!cancelled) setMaxUploadBytes(settings.maxUploadBytes);
-    }).catch(() => {
-      if (!cancelled) setMaxUploadBytes(UPLOAD_LIMIT_DEFAULT);
-    });
-    return () => { cancelled = true; };
+    const load = () => {
+      void getSettings().then((settings) => {
+        if (!cancelled) setMaxUploadBytes(settings.maxUploadBytes);
+      }).catch(() => {
+        if (!cancelled) setMaxUploadBytes(UPLOAD_LIMIT_DEFAULT);
+      });
+    };
+    load();
+    window.addEventListener("reference-studio:settings", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("reference-studio:settings", load);
+    };
   }, [projectId, refreshKey]);
   const selected = references.find((item) => item.placementId === inspectedId) ?? null;
   const viewed = references.find((item) => item.placementId === viewer) ?? null;

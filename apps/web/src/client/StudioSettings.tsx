@@ -69,6 +69,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
       });
       applyLoaded(saved);
       setSaveState("idle");
+      window.dispatchEvent(new Event("reference-studio:settings"));
       onClose();
     } catch (error) {
       setSaveState("error");
@@ -115,7 +116,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
         </>
       }
     >
-      <section className="studio-settings-section">
+      <section className="studio-settings-section" data-settings-ready={loadState === "ready" ? "true" : undefined}>
         <h3>Storage</h3>
         <StudioParameter
           label="Max upload size"
