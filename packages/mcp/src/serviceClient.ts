@@ -17,8 +17,19 @@ export type ServiceClientOptions = {
   timeoutMs?: number;
 };
 
+export type ImageBytes = {
+  bytes: Buffer;
+  mimeType: string;
+  width: number;
+  height: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  fallback: "none" | "requality" | "downscale" | "thumbnail";
+};
+
 export type ServiceConnection = WorkspaceStatus & {
   getJson<T>(path: string, schema: ZodType<T>): Promise<T>;
+  getBytes(path: string): Promise<ImageBytes>;
 };
 
 export async function checkWorkspace(options: ServiceClientOptions = {}): Promise<WorkspaceStatus> {
@@ -84,6 +95,7 @@ export async function connect(options: ServiceClientOptions = {}): Promise<Servi
     contractVersion: reported,
     authenticated: true,
     getJson: (path, schema) => getJson(baseUrl, token, timeoutMs, path, schema),
+    getBytes: (path) => getBytes(baseUrl, token, timeoutMs, path),
   };
 }
 
@@ -109,6 +121,56 @@ async function getJson<T>(
   throw mapServiceFailure(response.status, response.body, path);
 }
 
+async function getBytes(baseUrl: string, token: string, timeoutMs: number, path: string): Promise<ImageBytes> {
+  const url = `${baseUrl}${path}`;
+  let response: Response;
+  let bytes: Buffer;
+  try {
+    response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: "error",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    bytes = Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    const reason = error instanceof Error && error.name === "TimeoutError" ? "timed out" : "refused the connection";
+    throw new AdapterError("service_unavailable", `Studio at ${new URL(url).origin} ${reason}.`, START_STUDIO);
+  }
+  if (response.status < 200 || response.status >= 300) {
+    let body: unknown;
+    try {
+      body = JSON.parse(bytes.toString("utf8"));
+    } catch {
+      body = undefined;
+    }
+    throw mapServiceFailure(response.status, body, path);
+  }
+  const header = (name: string) => Number(response.headers.get(name));
+  const fallback = response.headers.get("x-image-fallback");
+  const mimeType = response.headers.get("content-type") ?? "";
+  const parsed = {
+    bytes,
+    mimeType,
+    width: header("x-image-width"),
+    height: header("x-image-height"),
+    sourceWidth: header("x-source-width"),
+    sourceHeight: header("x-source-height"),
+    fallback,
+  };
+  if (
+    !mimeType.startsWith("image/") ||
+    ![parsed.width, parsed.height, parsed.sourceWidth, parsed.sourceHeight].every((value) => Number.isInteger(value) && value > 0) ||
+    (fallback !== "none" && fallback !== "requality" && fallback !== "downscale" && fallback !== "thumbnail")
+  ) {
+    throw new AdapterError(
+      "service_unavailable",
+      `Studio returned an unexpected response for ${routeLabel(path)}.`,
+      "Rebuild and restart Studio and the MCP adapter from the same checkout (`npm run build`, then `npm run dev`).",
+    );
+  }
+  return { ...parsed, fallback };
+}
+
 function routeLabel(path: string): string {
   return path.split("?")[0] ?? path;
 }
@@ -121,6 +183,13 @@ function mapServiceFailure(status: number, body: unknown, path: string): Adapter
       "validation",
       message ?? "Studio rejected the request as invalid.",
       "Correct the input named in the message and call the tool again.",
+    );
+  }
+  if (status === 404 && hasAssetMissingReason(body)) {
+    return new AdapterError(
+      "asset_missing",
+      message ?? "The stored image file is missing.",
+      "The reference's metadata is still readable. Ask the user to re-import the image, or continue from metadata alone.",
     );
   }
   if (status === 404) {
@@ -149,6 +218,13 @@ function mapServiceFailure(status: number, body: unknown, path: string): Adapter
     `Studio answered ${routeLabel(path)} with HTTP ${status}.`,
     "Check the Studio terminal output, then retry.",
   );
+}
+
+function hasAssetMissingReason(body: unknown): boolean {
+  const reported = serviceErrorBodySchema.safeParse(body);
+  if (!reported.success) return false;
+  const details = reported.data.error.details;
+  return typeof details === "object" && details !== null && "reason" in details && details.reason === "asset_missing";
 }
 
 function processIsAlive(pid: number): boolean {

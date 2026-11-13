@@ -12,6 +12,7 @@ export const ADAPTER_ERROR_CODES = [
   "validation",
   "not_found",
   "revision_conflict",
+  "asset_missing",
 ] as const;
 
 export type AdapterErrorCode = (typeof ADAPTER_ERROR_CODES)[number];

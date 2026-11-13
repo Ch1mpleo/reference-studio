@@ -311,10 +311,11 @@ afterEach(async () => {
 });
 
 describe("read tools over stdio", () => {
-  it("serves exactly the four tools and no resources or prompts", async () => {
+  it("serves exactly the five tools and no resources or prompts", async () => {
     const client = await connectClient();
     expect((await client.listTools()).tools.map((tool) => tool.name).sort()).toEqual([
       "get_project_context",
+      "get_reference",
       "get_workspace_status",
       "list_projects",
       "search_references",
