@@ -75,6 +75,7 @@ export const projectContextSchema = z.object({
     revision: z.number(),
     revisionKind: z.enum(["board", "direction"]),
   }),
+  consistency: z.enum(["consistent", "changed_during_read"]),
   revisionChanged: z.object({ known: z.number(), current: z.number() }).optional(),
   targetDirection: directionDetail.nullable(),
   alternatives: section(alternative),
@@ -186,6 +187,7 @@ export function buildProjectContext(input: ContextInput): ProjectContext {
       constraints: excerptOf(project.constraints),
     },
     board: { revision: board.revision },
+    consistency: "consistent",
     scope: { directionId: target?.id ?? null, revision: current, revisionKind },
     ...(knownRevision !== undefined && knownRevision < current
       ? { revisionChanged: { known: knownRevision, current } }

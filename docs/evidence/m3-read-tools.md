@@ -18,7 +18,8 @@ Checkpoint: 2026-11-13 on `feat/m3.2-read-context` (base `54b75d7`). M3.2a of [a
 ## Decisions within the brief
 
 - Placements come from the existing project-references route because the board stores only placement geometry; the builder takes them as a third input beside project and board.
-- With `directionId`, placements, annotations (project-level, the direction's, and its placements'), and systems are scoped to that direction; without it they cover the whole project. When annotations exceed 20, the 20 most recent are kept (board order is chronological) with `total` and `truncated`. Alternatives and systems are also capped at 50 with flags, which the brief did not list.
+- With `directionId`, placements, annotations (project-level, the direction's, and its placements'), and systems are scoped to that direction; without it they cover the whole project. Annotations keep the last 20 in board order (not sorted by timestamp), with `total` and `truncated`. Placements keep the first 50; alternatives and systems are capped at 50 with `total` and `truncated`, which the brief did not list. Unit tests cover each cap.
+- Snapshot consistency: after reading project, board, and references, the adapter re-reads the project and board revisions. If either moved, it re-reads everything once; if they still differ, the result carries `consistency: "changed_during_read"` (otherwise `"consistent"`). A stub test bumps the revision mid-read for the recover and flagged cases.
 - Agent-authored notes without a decision are excluded; agent-authored decisions are included.
 
 ## Environment and versions
@@ -31,7 +32,7 @@ Checkpoint: 2026-11-13 on `feat/m3.2-read-context` (base `54b75d7`). M3.2a of [a
 | Command | Result |
 | --- | --- |
 | `npm run check` | pass (no type errors) |
-| `npm test` | 49 files, 217 tests passed, 0 failed, 0 skipped (186 before this change; adds 13 context, 8 service-client, 4 summary, and 6 stdio tests; the M3.1 service-client and stdio tests pass, with the stdio tool-list assertion relaxed to `toContain` because the list grew) |
+| `npm test` | 49 files, 222 tests passed, 0 failed, 0 skipped (186 before this change; adds 15 context, 8 service-client, 7 read-tool unit (4 summary, 3 snapshot), and 6 stdio tests; the M3.1 service-client and stdio tests pass, with the stdio tool-list assertion relaxed to `toContain` because the list grew) |
 | `npm run build` | pass |
 | `npm run test:e2e` (default `msedge` channel) | not run: Microsoft Edge is not installed (1 passed, 1 did not run, 64 failed to launch) |
 | `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` after `npx playwright install chromium` | 66 passed, 0 failed, 0 skipped |
@@ -193,6 +194,6 @@ The run used a temporary data directory, not the personal `.reference-studio/`.
 ## Limits
 
 - No image or crop retrieval yet; `hasImage` and source URLs are not visual evidence. Cursor and other clients were not live-tested (M3.5).
-- The three context reads are separate requests, so a concurrent edit can make the project, board, and placements slightly inconsistent within one result; the revisions reported are those read.
+- The context reads are not a database snapshot; the revision re-check narrows the window and `consistency` flags a result whose project or board revision kept changing, but references are not revision-checked.
 - Context is a bounded summary: excerpts end at 2,000 characters, and excess annotations and placements are omitted with `total`/`truncated`. Intentional exceptions and the approved-snapshot summary are not available (no store before M5).
 - Each tool call re-reads discovery and re-checks health and auth, so a restarted Studio is picked up without restarting the adapter.

@@ -8,7 +8,7 @@ import type { LibraryReference, Project } from "@reference-studio/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../../apps/web/src/server/config.js";
 import { startService, type RunningService } from "../../../apps/web/src/server/run.js";
-import { MAX_LISTED_PROJECTS, summarizeProjects, summarizeReference } from "./readTools.js";
+import { MAX_LISTED_PROJECTS, readContextSnapshot, summarizeProjects, summarizeReference } from "./readTools.js";
 
 function project(index: number): Project {
   return {
@@ -86,6 +86,47 @@ describe("summarizeReference", () => {
 
   it("reports hasImage false for references without an asset", () => {
     expect(summarizeReference({ ...base, kind: "note", asset: null }).hasImage).toBe(false);
+  });
+});
+
+describe("readContextSnapshot", () => {
+  function stub(bumps: number) {
+    let boardRevision = 1;
+    let bumpsLeft = bumps;
+    const calls: string[] = [];
+    const getJson = (async (path: string) => {
+      calls.push(path);
+      if (path.endsWith("/references")) {
+        if (bumpsLeft > 0) {
+          bumpsLeft -= 1;
+          boardRevision += 1;
+        }
+        return { references: [] };
+      }
+      if (path.endsWith("/board")) return { revision: boardRevision };
+      return { revision: 1 };
+    }) as never;
+    return { getJson, calls };
+  }
+
+  it("is consistent when nothing changes", async () => {
+    const { getJson, calls } = stub(0);
+    expect((await readContextSnapshot({ getJson }, "p")).consistent).toBe(true);
+    expect(calls).toHaveLength(5);
+  });
+
+  it("re-reads once when the revision changes mid-read and recovers", async () => {
+    const { getJson, calls } = stub(1);
+    const snapshot = await readContextSnapshot({ getJson }, "p");
+    expect(snapshot.consistent).toBe(true);
+    expect(snapshot.board.revision).toBe(2);
+    expect(calls).toHaveLength(10);
+  });
+
+  it("flags changed_during_read when it keeps changing", async () => {
+    const { getJson, calls } = stub(2);
+    expect((await readContextSnapshot({ getJson }, "p")).consistent).toBe(false);
+    expect(calls).toHaveLength(10);
   });
 });
 

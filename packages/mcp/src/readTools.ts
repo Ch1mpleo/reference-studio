@@ -14,7 +14,7 @@ import {
 import { z } from "zod";
 import { buildProjectContext, projectContextSchema } from "./context.js";
 import { failureResult } from "./failure.js";
-import { connect, type ServiceClientOptions } from "./serviceClient.js";
+import { connect, type ServiceClientOptions, type ServiceConnection } from "./serviceClient.js";
 
 export const MAX_LISTED_PROJECTS = 100;
 
@@ -68,6 +68,32 @@ export function summarizeReference(reference: LibraryReference): z.infer<typeof 
     revision: reference.revision,
     hasImage: reference.asset !== null,
   };
+}
+
+type Reader = { getJson: ServiceConnection["getJson"] };
+
+/**
+ * Reads project, board, and references, then re-reads the project and board
+ * revisions. A change in between triggers one full re-read; if the revisions
+ * still moved, the snapshot is returned flagged inconsistent.
+ */
+export async function readContextSnapshot(service: Reader, projectId: string) {
+  const base = `/api/projects/${encodeURIComponent(projectId)}`;
+  const readAll = async () => {
+    const project = await service.getJson(base, projectSchema);
+    const board = await service.getJson(`${base}/board`, boardSchema);
+    const { references } = await service.getJson(`${base}/references`, projectReferenceListSchema);
+    return { project, board, references };
+  };
+  const stable = async (read: Awaited<ReturnType<typeof readAll>>) => {
+    const project = await service.getJson(base, projectSchema);
+    const board = await service.getJson(`${base}/board`, boardSchema);
+    return project.revision === read.project.revision && board.revision === read.board.revision;
+  };
+  let read = await readAll();
+  if (await stable(read)) return { ...read, consistent: true };
+  read = await readAll();
+  return { ...read, consistent: await stable(read) };
 }
 
 export function registerReadTools(server: McpServer, options: ServiceClientOptions): void {
@@ -150,7 +176,7 @@ export function registerReadTools(server: McpServer, options: ServiceClientOptio
     {
       title: "Get project context",
       description:
-        "Fetch bounded, explicit context for one project: purpose, audience, constraints, the target direction's concept, feeling, decisions and questions, other directions as alternatives, saved reference interpretations (placement, reference, role, usage notes), human feedback and decision annotations, and a systems summary, each with stable IDs. Text is excerpted to 2,000 characters and lists are capped, with truncated flags. intentionalExceptions is notRecorded because Studio has no store for them. Pass directionId to focus on one direction. Pass knownRevision (that direction's revision, or the board revision without directionId) to learn whether context changed: a stale value returns fresh context with revisionChanged and no diff, a value above the current revision is revision_conflict. Always reports the project revision. The adapter remembers nothing between calls.",
+        "Fetch bounded, explicit context for one project: purpose, audience, constraints, the target direction's concept, feeling, decisions and questions, other directions as alternatives, saved reference interpretations (placement, reference, role, usage notes), human feedback and decision annotations, and a systems summary, each with stable IDs. Text is excerpted to 2,000 characters and lists are capped, with truncated flags. intentionalExceptions is notRecorded because Studio has no store for them. Pass directionId to focus on one direction. Pass knownRevision (that direction's revision, or the board revision without directionId) to learn whether context changed: a stale value returns fresh context with revisionChanged and no diff, a value above the current revision is revision_conflict. Always reports the project revision. consistency is changed_during_read if the project or board revision kept changing while it was read. The adapter remembers nothing between calls.",
       inputSchema: z.object({
         projectId: z.uuid().describe("Project ID from list_projects."),
         directionId: z.uuid().optional().describe("Direction to focus on."),
@@ -166,17 +192,15 @@ export function registerReadTools(server: McpServer, options: ServiceClientOptio
     async (input) => {
       try {
         const service = await connect(options);
-        const base = `/api/projects/${encodeURIComponent(input.projectId)}`;
-        const project = await service.getJson(base, projectSchema);
-        const board = await service.getJson(`${base}/board`, boardSchema);
-        const { references } = await service.getJson(`${base}/references`, projectReferenceListSchema);
-        const context = buildProjectContext({
-          project,
-          board,
-          placements: references,
+        const snapshot = await readContextSnapshot(service, input.projectId);
+        const built = buildProjectContext({
+          project: snapshot.project,
+          board: snapshot.board,
+          placements: snapshot.references,
           directionId: input.directionId,
           knownRevision: input.knownRevision,
         });
+        const context = snapshot.consistent ? built : { ...built, consistency: "changed_during_read" as const };
         const changed =
           context.revisionChanged === undefined
             ? ""

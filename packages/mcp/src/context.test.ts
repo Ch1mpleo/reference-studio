@@ -2,6 +2,7 @@ import type { Board, BoardAnnotation, BoardFrame, Project, ProjectReference } fr
 import { describe, expect, it } from "vitest";
 import {
   MAX_ANNOTATIONS,
+  MAX_LISTED_RECORDS,
   MAX_EXCERPT_CHARS,
   MAX_PLACEMENTS,
   buildProjectContext,
@@ -109,6 +110,7 @@ describe("buildProjectContext content", () => {
     expect(context.alternatives.items.map((entry) => entry.id)).toEqual([first.id]);
     expect(context.intentionalExceptions).toBe("notRecorded");
     expect(context.revisionChanged).toBeUndefined();
+    expect(context.consistency).toBe("consistent");
   });
 
   it("focuses a direction and lists the others, including archived ones, as alternatives", () => {
@@ -274,6 +276,34 @@ describe("buildProjectContext bounds", () => {
     expect(context.savedInterpretations.items[0]?.usageNotes.truncated).toBe(true);
     const exact = buildProjectContext({ project, board: board(), placements: many.slice(0, MAX_PLACEMENTS) });
     expect(exact.savedInterpretations.truncated).toBe(false);
+  });
+});
+
+describe("buildProjectContext record caps", () => {
+  it("caps alternatives at 50 with total and truncated", () => {
+    const frames = Array.from({ length: MAX_LISTED_RECORDS + 3 }, () => frame());
+    const context = buildProjectContext({ project, board: board({ frames }), placements: [] });
+    expect(context.alternatives.items).toHaveLength(MAX_LISTED_RECORDS);
+    expect(context.alternatives).toMatchObject({ total: MAX_LISTED_RECORDS + 3, truncated: true });
+    const exact = buildProjectContext({ project, board: board({ frames: frames.slice(0, MAX_LISTED_RECORDS) }), placements: [] });
+    expect(exact.alternatives.truncated).toBe(false);
+  });
+
+  it("caps systems at 50 with total and truncated", () => {
+    const frames = Array.from({ length: MAX_LISTED_RECORDS + 3 }, () => frame());
+    const systems = frames.map((entry) => ({
+      id: id(),
+      directionId: entry.id,
+      revision: 1,
+      schemaVersion: 1 as const,
+      name: "Design",
+      archived: false,
+      kind: "design" as const,
+      content: {} as never,
+    }));
+    const context = buildProjectContext({ project, board: board({ frames, systems }), placements: [] });
+    expect(context.systems.items).toHaveLength(MAX_LISTED_RECORDS);
+    expect(context.systems).toMatchObject({ total: MAX_LISTED_RECORDS + 3, truncated: true });
   });
 });
 
