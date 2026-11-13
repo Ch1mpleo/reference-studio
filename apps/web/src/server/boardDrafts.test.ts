@@ -31,7 +31,8 @@ async function setup() {
   const send = (method: "POST" | "PUT" | "PATCH", url: string, payload: unknown, key = createId(), headers: Record<string, string> = agent) =>
     app.inject({ method, url, headers: { ...headers, ...json, "idempotency-key": key }, payload: payload as object });
 
-  const project = projectSchema.parse((await send("POST", "/api/projects", { name: "Drafts" })).json());
+  const createProject = async (name: string) => projectSchema.parse((await send("POST", "/api/projects", { name })).json());
+  const project = await createProject("Drafts");
   const base = `/api/projects/${project.id}`;
   const form = (bytes: Buffer) => {
     const boundary = "draftBoundary";
@@ -53,7 +54,7 @@ async function setup() {
   };
   events.length = 0;
   const annotate = (payload: unknown, key = createId(), headers: Record<string, string> = agent) => send("POST", `${base}/annotations`, payload, key, headers);
-  return { app, database, agent, browser, send, project, base, image, link, inbox, frameId, readBoard, events, annotate };
+  return { app, database, agent, browser, send, project, createProject, base, image, link, inbox, frameId, readBoard, events, annotate };
 }
 
 describe("POST /annotations", () => {
@@ -139,5 +140,85 @@ describe("POST /annotations", () => {
     expect(mismatch.statusCode).toBe(409);
     expect(mismatch.json().error.details).toEqual({ reason: "idempotency_mismatch" });
     expect((await ctx.annotate(request, "")).statusCode).toBe(400);
+  });
+});
+
+describe("POST /directions", () => {
+  const proposal = (revision: number, extra: Record<string, unknown> = {}) => ({ expectedRevision: revision, name: "Paper grid", concept: "Warm paper, tight grid", feeling: "Calm", questions: "Is it too quiet?", rationale: "The references share a quiet rhythm.", authorName: "Scout", ...extra });
+
+  it("creates the frame and its rationale note in one board revision", async () => {
+    const ctx = await setup();
+    const before = ctx.readBoard();
+    const response = await ctx.send("POST", `${ctx.base}/directions`, proposal(before.revision));
+    expect(response.statusCode).toBe(201);
+    const { directionId, directionRevision, boardRevision, annotationId } = response.json();
+    expect(directionRevision).toBe(1);
+    expect(boardRevision).toBe(before.revision + 1);
+    const board = ctx.readBoard();
+    const frame = board.layout.frames.find((entry) => entry.id === directionId)!;
+    expect(frame).toMatchObject({ revision: 1, name: "Paper grid", decisions: "", archived: false, questions: "Is it too quiet?" });
+    expect(board.layout.items.filter((item) => item.frameId === directionId)).toHaveLength(0);
+    const existing = before.layout.frames[0]!.rect;
+    expect(frame.rect.x).toBeGreaterThanOrEqual(existing.x + existing.width);
+    expect(board.layout.annotations!.find((entry) => entry.id === annotationId)).toMatchObject({ target: { type: "direction", directionId }, body: "The references share a quiet rhythm.", provenance: { author: "agent", name: "Scout" } });
+    expect(board.layout.annotations!.every((entry) => entry.decision === undefined)).toBe(true);
+    expect(ctx.events).toEqual([expect.objectContaining({ entity: "board", revision: boardRevision })]);
+
+    const second = await ctx.send("POST", `${ctx.base}/directions`, proposal(boardRevision, { name: "Second" }));
+    const next = ctx.readBoard().layout.frames.find((entry) => entry.id === second.json().directionId)!;
+    expect(next.rect.x).toBeGreaterThanOrEqual(frame.rect.x + frame.rect.width);
+  });
+
+  it("starts at the origin on an empty board and marks browser callers human", async () => {
+    const ctx = await setup();
+    const empty = await ctx.createProject("Empty");
+    const response = await ctx.send("POST", `/api/projects/${empty.id}/directions`, proposal(1), createId(), ctx.browser);
+    expect(response.statusCode).toBe(201);
+    const row = ctx.database.prepare("SELECT layout_json FROM project_boards WHERE project_id = ?").get(empty.id) as { layout_json: string };
+    const layout = JSON.parse(row.layout_json);
+    expect(layout.frames[0].rect).toMatchObject({ x: 0, y: 0 });
+    expect(layout.annotations[0].provenance).toEqual({ author: "human", name: "Scout" });
+  });
+
+  it("is atomic: invalid input and stale revisions leave no frame, note or event", async () => {
+    const ctx = await setup();
+    const board = ctx.readBoard();
+    const snapshot = JSON.stringify(ctx.database.prepare("SELECT * FROM project_boards WHERE project_id = ?").get(ctx.project.id));
+    expect((await ctx.send("POST", `${ctx.base}/directions`, proposal(board.revision, { rationale: "  " }))).statusCode).toBe(400);
+    for (const extra of [{ provenance: { author: "human" } }, { decision: { rationale: "ok" } }, { archived: true }]) {
+      expect((await ctx.send("POST", `${ctx.base}/directions`, proposal(board.revision, extra))).statusCode).toBe(400);
+    }
+    const stale = await ctx.send("POST", `${ctx.base}/directions`, proposal(board.revision + 5));
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.details).toMatchObject({ currentRevision: board.revision, recordType: "board", recordId: ctx.project.id });
+    expect(JSON.stringify(ctx.database.prepare("SELECT * FROM project_boards WHERE project_id = ?").get(ctx.project.id))).toBe(snapshot);
+    expect(ctx.events).toHaveLength(0);
+  });
+
+  it("rolls back when the board cannot take another direction", async () => {
+    const ctx = await setup();
+    const board = ctx.readBoard();
+    const frames = Array.from({ length: 99 }, (_, index) => ({ ...board.layout.frames[0]!, id: createId(), name: `F${index}`, revision: undefined, rect: { x: index * 800, y: 0, width: 700, height: 600 } }));
+    const filled = await ctx.send("PUT", `${ctx.base}/board`, { expectedRevision: board.revision, layout: { ...board.layout, frames: [...board.layout.frames, ...frames] } });
+    expect(filled.statusCode).toBe(200);
+    const snapshot = JSON.stringify(ctx.database.prepare("SELECT * FROM project_boards WHERE project_id = ?").get(ctx.project.id));
+    const over = await ctx.send("POST", `${ctx.base}/directions`, proposal(ctx.readBoard().revision));
+    expect(over.statusCode).toBe(400);
+    expect(JSON.stringify(ctx.database.prepare("SELECT * FROM project_boards WHERE project_id = ?").get(ctx.project.id))).toBe(snapshot);
+  });
+
+  it("replays one key without a second frame or event and rejects a different body", async () => {
+    const ctx = await setup();
+    const request = proposal(ctx.readBoard().revision);
+    const key = createId();
+    const first = await ctx.send("POST", `${ctx.base}/directions`, request, key);
+    const second = await ctx.send("POST", `${ctx.base}/directions`, request, key);
+    expect(second.json()).toEqual(first.json());
+    expect(second.headers["idempotency-replayed"]).toBe("true");
+    expect(ctx.readBoard().layout.frames).toHaveLength(2);
+    expect(ctx.events).toHaveLength(1);
+    const mismatch = await ctx.send("POST", `${ctx.base}/directions`, { ...request, name: "Other" }, key);
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json().error.details).toEqual({ reason: "idempotency_mismatch" });
   });
 });
