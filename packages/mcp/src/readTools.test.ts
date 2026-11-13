@@ -311,13 +311,15 @@ afterEach(async () => {
 });
 
 describe("read tools over stdio", () => {
-  it("serves exactly the five tools and no resources or prompts", async () => {
+  it("serves exactly the read, status and draft write tools and no resources or prompts", async () => {
     const client = await connectClient();
     expect((await client.listTools()).tools.map((tool) => tool.name).sort()).toEqual([
+      "add_annotation",
       "get_project_context",
       "get_reference",
       "get_workspace_status",
       "list_projects",
+      "propose_direction",
       "search_references",
     ]);
     expect(client.getNegotiatedProtocolVersion()).toBe("2025-11-25");

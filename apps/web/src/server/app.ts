@@ -28,6 +28,7 @@ import { EventHub } from "./events.js";
 import { defaultMigrationsDir, migrate } from "./migrate.js";
 import { registerBackupRoutes } from "./backup.js";
 import { registerBoardRoutes } from "./boards.js";
+import { registerBoardDraftRoutes } from "./boardDrafts.js";
 import { registerSystemRoutes } from "./systems.js";
 import { registerVariantRoutes } from "./variants.js";
 import { registerProjectRoutes } from "./projects.js";
@@ -107,6 +108,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   registerReferenceImageRoutes(app, dependencies.database, dependencies.config.dataDir);
   registerBackupRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
   registerBoardRoutes(app, dependencies.database, hub);
+  registerBoardDraftRoutes(app, dependencies.database, hub);
   registerSystemRoutes(app, dependencies.database, hub);
   registerVariantRoutes(app, dependencies.database, hub);
 

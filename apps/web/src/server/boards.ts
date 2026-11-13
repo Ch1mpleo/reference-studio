@@ -118,7 +118,7 @@ function layoutHasVariants(body: unknown): boolean {
   return typeof layout === "object" && layout !== null && "variants" in layout;
 }
 
-function requireJson(request: FastifyRequest): void {
+export function requireJson(request: FastifyRequest): void {
   if (headerValue(request.headers["content-type"])?.split(";")[0]?.trim() !== "application/json") throw new ServiceError("unsupported_media", "Send board changes as application/json.");
 }
 
