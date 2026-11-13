@@ -9,6 +9,9 @@ export const ADAPTER_ERROR_CODES = [
   "service_unavailable",
   "unauthorized",
   "version_mismatch",
+  "validation",
+  "not_found",
+  "revision_conflict",
 ] as const;
 
 export type AdapterErrorCode = (typeof ADAPTER_ERROR_CODES)[number];

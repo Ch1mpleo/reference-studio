@@ -6,7 +6,8 @@ import path from "node:path";
 import { CONTRACT_VERSION } from "@reference-studio/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { AdapterError, resolveDataDir } from "./discovery.js";
-import { checkWorkspace } from "./serviceClient.js";
+import { z } from "zod";
+import { checkWorkspace, connect } from "./serviceClient.js";
 
 const TOKEN = "super-secret-token-value";
 const directories: string[] = [];
@@ -215,5 +216,92 @@ describe("resolveDataDir", () => {
     expect(fromCwdElsewhere).toBe(
       path.join(path.resolve(import.meta.dirname, "../../.."), ".reference-studio"),
     );
+  });
+});
+
+describe("connect().getJson", () => {
+  const thing = z.object({ id: z.string() });
+
+  function serving(route: (url: string) => { status: number; body: unknown } | "raw"): Handler {
+    const base = healthy();
+    return (request, response) => {
+      if (request.url === "/api/health" || request.url === "/api/projects") {
+        base(request, response);
+        return;
+      }
+      if (request.headers.authorization !== `Bearer ${TOKEN}`) {
+        json(response, 401, { error: { code: "unauthorized", message: "no" } });
+        return;
+      }
+      const outcome = route(request.url ?? "");
+      if (outcome === "raw") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end("not json");
+        return;
+      }
+      json(response, outcome.status, outcome.body);
+    };
+  }
+
+  async function client(handler: Handler) {
+    const dir = tempDir();
+    writeDiscovery(dir, await stub(handler));
+    return connect({ env: { REFERENCE_STUDIO_DATA_DIR: dir }, timeoutMs: 1000 });
+  }
+
+  async function failureOf(promise: Promise<unknown>): Promise<AdapterError> {
+    const error = await promise.then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(AdapterError);
+    const adapterError = error as AdapterError;
+    expect(adapterError.nextStep.length).toBeGreaterThan(0);
+    expect(`${adapterError.message} ${adapterError.nextStep}`).not.toContain(TOKEN);
+    return adapterError;
+  }
+
+  it("returns parsed data with the bearer token", async () => {
+    const service = await client(serving(() => ({ status: 200, body: { id: "a", extra: 1 } })));
+    expect(service.authenticated).toBe(true);
+    await expect(service.getJson("/api/thing", thing)).resolves.toEqual({ id: "a" });
+  });
+
+  it.each([
+    [400, "validation"],
+    [404, "not_found"],
+    [409, "revision_conflict"],
+  ] as const)("maps service %i error bodies to %s with the service message", async (status, code) => {
+    const service = await client(
+      serving(() => ({ status, body: { error: { code: "whatever", message: "Service said no." } } })),
+    );
+    const error = await failureOf(service.getJson("/api/thing", thing));
+    expect(error.code).toBe(code);
+    expect(error.message).toBe("Service said no.");
+  });
+
+  it("maps error statuses without a service error body", async () => {
+    const service = await client(serving(() => ({ status: 404, body: "oops" })));
+    expect((await failureOf(service.getJson("/api/thing", thing))).code).toBe("not_found");
+  });
+
+  it("maps 401 to unauthorized and 5xx to service_unavailable", async () => {
+    const denied = await client(serving(() => ({ status: 401, body: {} })));
+    expect((await failureOf(denied.getJson("/api/thing", thing))).code).toBe("unauthorized");
+    const broken = await client(serving(() => ({ status: 500, body: {} })));
+    expect((await failureOf(broken.getJson("/api/thing", thing))).code).toBe("service_unavailable");
+  });
+
+  it("maps malformed 200 bodies to service_unavailable", async () => {
+    const wrongShape = await client(serving(() => ({ status: 200, body: { nope: true } })));
+    expect((await failureOf(wrongShape.getJson("/api/thing", thing))).code).toBe("service_unavailable");
+    const notJson = await client(serving(() => "raw"));
+    expect((await failureOf(notJson.getJson("/api/thing", thing))).code).toBe("service_unavailable");
+  });
+
+  it("maps a service that stopped after connecting to service_unavailable", async () => {
+    const service = await client(serving(() => ({ status: 200, body: { id: "a" } })));
+    await Promise.all(servers.splice(0).map((server) => new Promise((resolve) => server.close(resolve))));
+    expect((await failureOf(service.getJson("/api/thing", thing))).code).toBe("service_unavailable");
   });
 });

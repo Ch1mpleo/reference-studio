@@ -1,4 +1,5 @@
-import { CONTRACT_VERSION } from "@reference-studio/core";
+import { CONTRACT_VERSION, serviceErrorBodySchema } from "@reference-studio/core";
+import type { ZodType } from "zod";
 import { AdapterError, readDiscovery, resolveDataDir } from "./discovery.js";
 
 const REQUEST_TIMEOUT_MS = 5000;
@@ -16,7 +17,16 @@ export type ServiceClientOptions = {
   timeoutMs?: number;
 };
 
+export type ServiceConnection = WorkspaceStatus & {
+  getJson<T>(path: string, schema: ZodType<T>): Promise<T>;
+};
+
 export async function checkWorkspace(options: ServiceClientOptions = {}): Promise<WorkspaceStatus> {
+  const { baseUrl, contractVersion, authenticated } = await connect(options);
+  return { baseUrl, contractVersion, authenticated };
+}
+
+export async function connect(options: ServiceClientOptions = {}): Promise<ServiceConnection> {
   const dataDir = resolveDataDir(options.env, options.start);
   const { connection, token } = readDiscovery(dataDir);
   const baseUrl = connection.baseUrl.replace(/\/+$/, "");
@@ -69,7 +79,76 @@ export async function checkWorkspace(options: ServiceClientOptions = {}): Promis
       "Check the Studio terminal output, then retry.",
     );
   }
-  return { baseUrl, contractVersion: reported, authenticated: true };
+  return {
+    baseUrl,
+    contractVersion: reported,
+    authenticated: true,
+    getJson: (path, schema) => getJson(baseUrl, token, timeoutMs, path, schema),
+  };
+}
+
+async function getJson<T>(
+  baseUrl: string,
+  token: string,
+  timeoutMs: number,
+  path: string,
+  schema: ZodType<T>,
+): Promise<T> {
+  const response = await request(`${baseUrl}${path}`, token, timeoutMs);
+  if (response.status >= 200 && response.status < 300) {
+    const parsed = schema.safeParse(response.body);
+    if (!parsed.success) {
+      throw new AdapterError(
+        "service_unavailable",
+        `Studio returned an unexpected response for ${routeLabel(path)}.`,
+        "Rebuild and restart Studio and the MCP adapter from the same checkout (`npm run build`, then `npm run dev`).",
+      );
+    }
+    return parsed.data;
+  }
+  throw mapServiceFailure(response.status, response.body, path);
+}
+
+function routeLabel(path: string): string {
+  return path.split("?")[0] ?? path;
+}
+
+function mapServiceFailure(status: number, body: unknown, path: string): AdapterError {
+  const reported = serviceErrorBodySchema.safeParse(body);
+  const message = reported.success ? reported.data.error.message : undefined;
+  if (status === 400) {
+    return new AdapterError(
+      "validation",
+      message ?? "Studio rejected the request as invalid.",
+      "Correct the input named in the message and call the tool again.",
+    );
+  }
+  if (status === 404) {
+    return new AdapterError(
+      "not_found",
+      message ?? `Studio has no record at ${routeLabel(path)}.`,
+      "Call list_projects to find current project IDs, then retry with an ID from this project.",
+    );
+  }
+  if (status === 409) {
+    return new AdapterError(
+      "revision_conflict",
+      message ?? "The record changed since the revision the caller knew.",
+      "Refetch the context without knownRevision (or with the current revision) and continue from it.",
+    );
+  }
+  if (status === 401 || status === 403) {
+    return new AdapterError(
+      "unauthorized",
+      "Studio rejected the token in auth-token.",
+      "Restart Studio so connection.json and auth-token belong to the same running service, or check REFERENCE_STUDIO_DATA_DIR.",
+    );
+  }
+  return new AdapterError(
+    "service_unavailable",
+    `Studio answered ${routeLabel(path)} with HTTP ${status}.`,
+    "Check the Studio terminal output, then retry.",
+  );
 }
 
 function processIsAlive(pid: number): boolean {
