@@ -107,9 +107,13 @@ export function excerptOf(value: string, max: number = MAX_EXCERPT_CHARS): z.inf
   return { text: value.slice(0, end), truncated: true };
 }
 
-function bounded<T>(all: T[], max: number, fromEnd = false) {
+export function bounded<T>(all: T[], max: number, fromEnd = false) {
   const items = fromEnd ? all.slice(Math.max(0, all.length - max)) : all.slice(0, max);
   return { items, total: all.length, truncated: all.length > items.length };
+}
+
+export function isHumanOrDecision(annotation: BoardAnnotation): boolean {
+  return annotation.provenance.author === "human" || annotation.decision !== undefined;
 }
 
 function frameRevision(frame: BoardFrame): number {
@@ -151,7 +155,7 @@ export function buildProjectContext(input: ContextInput): ProjectContext {
   const scopedPlacementIds = new Set(scopedPlacements.map((entry) => entry.placementId));
 
   const annotations = (board.layout.annotations ?? [])
-    .filter((annotation) => annotation.provenance.author === "human" || annotation.decision !== undefined)
+    .filter(isHumanOrDecision)
     .filter((annotation) => {
       if (target === undefined) return true;
       const link = annotation.target;

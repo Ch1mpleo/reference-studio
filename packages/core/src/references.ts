@@ -153,6 +153,47 @@ export const libraryReferenceSchema = z.object({
 
 export type LibraryReference = z.infer<typeof libraryReferenceSchema>;
 
+/** Longest edge and encoded size of images sent to external agents. */
+export const AGENT_IMAGE_MAX_EDGE = 1568;
+export const AGENT_IMAGE_MAX_BYTES = 1_000_000;
+export const AGENT_IMAGE_MIN_EDGE = 64;
+export const AGENT_IMAGE_FALLBACKS = ["none", "requality", "downscale", "thumbnail"] as const;
+
+export const referenceImageQuerySchema = z
+  .object({
+    x: z.coerce.number().optional(),
+    y: z.coerce.number().optional(),
+    width: z.coerce.number().optional(),
+    height: z.coerce.number().optional(),
+    maxEdge: z.coerce.number().int().min(AGENT_IMAGE_MIN_EDGE).max(AGENT_IMAGE_MAX_EDGE).default(AGENT_IMAGE_MAX_EDGE),
+  })
+  .strict()
+  .superRefine((query, context) => {
+    const given = [query.x, query.y, query.width, query.height].filter((value) => value !== undefined).length;
+    if (given !== 0 && given !== 4) {
+      context.addIssue({ code: "custom", message: "Send x, y, width, and height together, or none of them." });
+    }
+  })
+  .transform((query, context) => {
+    const { maxEdge, ...rest } = query;
+    if (rest.x === undefined || rest.y === undefined || rest.width === undefined || rest.height === undefined) {
+      return { crop: null, maxEdge };
+    }
+    const crop = imageCropSchema.safeParse({ x: rest.x, y: rest.y, width: rest.width, height: rest.height });
+    if (!crop.success) {
+      for (const issue of crop.error.issues) context.addIssue({ code: "custom", message: issue.message, path: issue.path });
+      return z.NEVER;
+    }
+    return { crop: crop.data, maxEdge };
+  });
+
+export const referenceDetailSchema = z.object({
+  reference: libraryReferenceSchema,
+  projectIds: z.array(z.uuid()),
+});
+
+export type ReferenceDetail = z.infer<typeof referenceDetailSchema>;
+
 export const projectReferenceSchema = z.object({
   placementId: z.uuid(),
   role: z.enum(PLACEMENT_ROLES),

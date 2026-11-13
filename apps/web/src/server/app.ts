@@ -32,6 +32,7 @@ import { registerSystemRoutes } from "./systems.js";
 import { registerVariantRoutes } from "./variants.js";
 import { registerProjectRoutes } from "./projects.js";
 import { registerReferenceRoutes } from "./references.js";
+import { registerReferenceImageRoutes } from "./referenceImages.js";
 import { issueSessionCookie } from "./session.js";
 
 export { publishChange } from "./changes.js";
@@ -103,6 +104,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
 
   registerProjectRoutes(app, dependencies.database, hub);
   registerReferenceRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
+  registerReferenceImageRoutes(app, dependencies.database, dependencies.config.dataDir);
   registerBackupRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
   registerBoardRoutes(app, dependencies.database, hub);
   registerSystemRoutes(app, dependencies.database, hub);
