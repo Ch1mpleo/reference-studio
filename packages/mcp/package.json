@@ -4,12 +4,17 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@reference-studio/core": "*"
+    "@modelcontextprotocol/server": "2.4.0",
+    "@reference-studio/core": "*",
+    "zod": "^4.6.7"
   },
   "bin": {
     "reference-studio-mcp": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc -b tsconfig.json"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0"
   }
 }
