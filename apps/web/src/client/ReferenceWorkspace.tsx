@@ -181,7 +181,6 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
           const needsPrepare = file.size > NATIVE_SHA256_MAX_BYTES;
           if (needsPrepare) {
             setPreparingImage(true);
-            setMessage("Preparing image…");
           }
           try {
             const item = await onAddImage(file, emptyFields);

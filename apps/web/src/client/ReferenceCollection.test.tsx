@@ -134,13 +134,14 @@ describe("ReferenceCollection", () => {
       document.dispatchEvent(pasteEvent(file));
     });
     const status = view.container.querySelector(".canvas-status");
-    expect(status?.textContent).toContain("Preparing image…");
+    const preparing = status?.textContent?.match(/Preparing image…/g) ?? [];
+    expect(preparing).toEqual(["Preparing image…"]);
     expect(onAddImage).toHaveBeenCalledTimes(1);
     await act(async () => {
       resolveUpload(created);
       await Promise.resolve();
     });
-    expect(status?.textContent).not.toContain("Preparing image…");
+    expect(status?.textContent?.includes("Preparing image…")).toBe(false);
     await act(async () => {
       view.root.unmount();
     });
