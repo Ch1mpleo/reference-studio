@@ -22,9 +22,9 @@ Owning specification for Studio storage settings, upload size limits, streamed i
 
 - Pasted image URLs are fetched once by the service under these rules and stored as normal images; the service never fetches on display.
 - Browser sessions only: `POST /api/projects/:projectId/references/url-image` with JSON `{ url, title?, creator?, observations? }` and an Idempotency-Key. Agent bearer callers receive 403 and the service does not fetch.
-- The service resolves and pins a public address per redirect hop (max 3), rejects private/link-local/metadata ranges and userinfo URLs, bounds connect/idle/total time, accepts only JPEG/PNG/WebP magic bytes within the configured upload limit, then publishes through the same streamed temp → original/thumbnail path as uploads.
-- `sourceUrl` is the pasted URL. The default title is the final URL's last path segment without extension (URL-decoded), else the hostname.
-- When the bytes are not a storable image (blocked address, timeout, non-image, too large, fetch failure), Studio falls back to today's link reference and shows why. `storage_full` creates nothing.
+- The service resolves and pins a public address per redirect hop (max 3), rejects private/link-local/metadata ranges (including RFC 9637 `3fff::/20`), userinfo URLs, and non-public addresses; bounds connect/idle/total time; accepts only JPEG/PNG/WebP magic bytes within the configured upload limit; then publishes through the same streamed temp → original/thumbnail path as uploads. Idle stalls and remote resets map to `url_timeout` / `url_fetch_failed` (not 500). A client disconnect mid-fetch aborts the outbound request and leaves no temp or reference.
+- `sourceUrl` is the pasted URL. The default title is the final URL's last path segment without extension (URL-decoded in isolation; malformed encoding falls back to the hostname).
+- Studio falls back to a link only when the service returns `validation` with a known URL-image reason (`url_not_allowed`, `url_blocked_address`, `url_too_many_redirects`, `not_an_image`, `url_fetch_failed`, `url_timeout`, `image_too_large`, `image_too_large_pixels`, `image_unreadable`). Every other error (`storage_full`, `internal`, `forbidden`, `unauthorized`, idempotency conflict, validation without a reason, network failure) shows the error and creates nothing.
 - There is no off switch for the address rules. Hotlink mode and `urlImageMode` are U2.
 
 ## Backups (S1 scope)
