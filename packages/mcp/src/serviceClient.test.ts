@@ -376,6 +376,18 @@ describe("connect().sendJson", () => {
     expect(seen[0]).toMatchObject({ method: "POST", url: "/api/x", key: "key-1", auth: `Bearer ${TOKEN}`, body: '{"a":1}' });
   });
 
+  it("patches JSON with the bearer token and mutation key, and maps a direction conflict without leaking the token", async () => {
+    const details = { currentRevision: 4, expectedRevision: 2, recordType: "direction", recordId: "d-9" };
+    const { service, seen } = await client((entry) => entry.key === "ok" ? { status: 200, body: { id: "a" } } : { status: 409, body: { error: { code: "conflict", message: "The record changed since it was loaded.", details } } });
+    await expect(service.sendJson("PATCH", "/api/projects/p/directions/d", { concept: "x", reason: "y" }, result, "ok")).resolves.toEqual({ data: { id: "a" }, replayed: false });
+    expect(seen[0]).toMatchObject({ method: "PATCH", url: "/api/projects/p/directions/d", key: "ok", auth: `Bearer ${TOKEN}` });
+    const error = await failureOf(service.sendJson("PATCH", "/api/projects/p/directions/d", {}, result, "stale"));
+    expect(error.code).toBe("revision_conflict");
+    expect(error.conflict).toEqual({ currentRevision: 4, recordType: "direction", recordId: "d-9" });
+    expect(error.nextStep).toContain("get_project_context (with directionId)");
+    expect(seen).toHaveLength(2);
+  });
+
   it("maps a revision 409 to revision_conflict with the current revision and a write next step", async () => {
     const details = { currentRevision: 7, expectedRevision: 3, recordType: "direction", recordId: "d-1" };
     const { service, seen } = await client(() => ({ status: 409, body: { error: { code: "conflict", message: "The record changed since it was loaded.", details } } }));

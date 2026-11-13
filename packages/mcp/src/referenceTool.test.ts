@@ -7,7 +7,9 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../../apps/web/src/server/config.js";
+import { openDatabase } from "../../../apps/web/src/server/db.js";
 import { startService, type RunningService } from "../../../apps/web/src/server/run.js";
+import { browserFetch } from "../../../apps/web/src/server/test/browserSession.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const cliPath = path.join(import.meta.dirname, "cli.ts");
@@ -47,6 +49,18 @@ async function api(method: string, route: string, body?: unknown | FormData): Pr
       ...(body === undefined || form ? {} : { "content-type": "application/json" }),
     },
     ...(body === undefined ? {} : { body: form ? body : JSON.stringify(body) }),
+  });
+  const parsed = (await response.json()) as Json;
+  if (!response.ok) throw new Error(`${method} ${route} -> ${response.status} ${JSON.stringify(parsed)}`);
+  return parsed;
+}
+
+async function browserApi(method: string, route: string, body?: unknown): Promise<Json> {
+  const send = await browserFetch(base);
+  const response = await send(route, {
+    method,
+    headers: { "idempotency-key": crypto.randomUUID(), ...(body === undefined ? {} : { "content-type": "application/json" }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const parsed = (await response.json()) as Json;
   if (!response.ok) throw new Error(`${method} ${route} -> ${response.status} ${JSON.stringify(parsed)}`);
@@ -185,7 +199,7 @@ async function seed(): Promise<Seed> {
   });
   const current = await api("GET", `/api/projects/${projectId}/board`);
   const annotationId = crypto.randomUUID();
-  await api("PUT", `/api/projects/${projectId}/board`, {
+  await browserApi("PUT", `/api/projects/${projectId}/board`, {
     expectedRevision: current.revision,
     layout: {
       ...current.layout,
@@ -246,7 +260,7 @@ describe("get_reference over stdio", () => {
     expect(tools).toEqual(
       expect.arrayContaining(["get_reference", "get_workspace_status", "list_projects", "search_references", "get_project_context"]),
     );
-    expect(tools).toHaveLength(7);
+    expect(tools).toHaveLength(8);
     expect(client.getNegotiatedProtocolVersion()).toBe("2025-11-25");
 
     const events: string[] = [];
@@ -419,16 +433,20 @@ describe("get_reference over stdio", () => {
       provenance: { author: "human" },
     }));
     const agentNote = { ...base, id: crypto.randomUUID(), body: "agent note", provenance: { author: "agent", name: "bot" } };
-    const agentDecision = {
+    const decisionNote = {
       ...base,
       id: crypto.randomUUID(),
-      body: "agent decision",
-      provenance: { author: "agent", name: "bot" },
+      body: "decision note",
+      provenance: { author: "human" },
       decision: { rationale: "Fits." },
     };
-    await api("PUT", `/api/projects/${ids.projectId}/board`, {
+    const withAgent = await api("PUT", `/api/projects/${ids.projectId}/board`, {
       expectedRevision: board.revision,
-      layout: { ...board.layout, annotations: [agentNote, ...human, agentDecision] },
+      layout: { ...board.layout, annotations: [...(board.layout.annotations ?? []), agentNote] },
+    });
+    await browserApi("PUT", `/api/projects/${ids.projectId}/board`, {
+      expectedRevision: withAgent.revision,
+      layout: { ...withAgent.layout, annotations: [agentNote, ...human, decisionNote] },
     });
     const client = await connectClient();
     const result = await call(client, { referenceId: ids.quadId, projectId: ids.projectId, includeImage: false });
@@ -438,8 +456,44 @@ describe("get_reference over stdio", () => {
     const bodies = annotations.items.map((entry: Json) => entry.body.text);
     expect(bodies).toHaveLength(20);
     expect(bodies).not.toContain("agent note");
-    expect(bodies.at(-1)).toBe("agent decision");
+    expect(bodies.at(-1)).toBe("decision note");
     expect(bodies.at(0)).toBe("human 3");
     expect(annotations.items.at(-1).decision).toEqual({ rationale: { text: "Fits.", truncated: false } });
+  }, 30_000);
+
+  it("still includes a legacy agent-authored decision note from storage", async () => {
+    const ids = await seed();
+    const board = await api("GET", `/api/projects/${ids.projectId}/board`);
+    const legacy = {
+      id: crypto.randomUUID(),
+      target: { type: "placement", placementId: ids.placementId },
+      body: "Legacy agent decision",
+      borrowedQuality: "",
+      translation: "",
+      limitations: "",
+      provenance: { author: "agent", name: "old-bot" },
+      decision: { rationale: "Fits the brief." },
+    };
+    const layout = { ...board.layout, annotations: [...(board.layout.annotations ?? []), legacy] };
+    const database = openDatabase(dataDir);
+    try {
+      database.prepare("UPDATE project_boards SET revision = ?, layout_json = ? WHERE project_id = ?").run(
+        board.revision + 1,
+        JSON.stringify(layout),
+        ids.projectId,
+      );
+    } finally {
+      database.close();
+    }
+    const client = await connectClient();
+    const result = await call(client, { referenceId: ids.quadId, projectId: ids.projectId, includeImage: false });
+    const annotations = (result.structuredContent?.project as Json).annotations;
+    expect(annotations.total).toBeGreaterThanOrEqual(1);
+    const entry = annotations.items.find((item: Json) => item.id === legacy.id);
+    expect(entry).toMatchObject({
+      author: "agent",
+      body: { text: "Legacy agent decision", truncated: false },
+      decision: { rationale: { text: "Fits the brief.", truncated: false } },
+    });
   }, 30_000);
 });

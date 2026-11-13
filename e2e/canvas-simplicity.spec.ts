@@ -64,8 +64,15 @@ test("zoom stays bare, vertical, and bottom-right", async ({ page }) => {
   await slider.press("Home");
   await expect(zoom.getByLabel("Canvas scale", { exact: true })).toHaveText("10%");
   await page.getByRole("toolbar", { name: "Canvas tools" }).getByRole("button", { name: "Note", exact: true }).click();
-  await page.getByRole("textbox", { name: "Note text", exact: true }).fill("A small thought.");
-  await page.getByRole("textbox", { name: "Note text", exact: true }).press("Control+Enter");
+  const note = page.getByRole("textbox", { name: "Note text", exact: true });
+  await note.fill("A small thought.");
+  await note.press("Control+Enter");
+  // Fit selection needs the new note selected; wait for the saved display text, then select it.
+  const savedNote = page.getByRole("textbox", { name: "Note text", exact: true });
+  await expect(savedNote).toHaveText("A small thought.", { timeout: 5_000 });
+  const node = page.locator(".react-flow__node").filter({ has: savedNote });
+  await node.click({ position: { x: 8, y: 8 } });
+  await expect(node).toHaveClass(/selected/, { timeout: 5_000 });
   await zoom.getByRole("button", { name: "Fit selection", exact: true }).click();
   await expect.poll(async () => Number(await zoom.getByLabel("Canvas scale", { exact: true }).innerText().then((value) => value.replace("%", "")))).toBeGreaterThan(10);
   expect(projectReferenceListSchema.parse(await json(page, `/api/projects/${created.id}/references`)).references).toHaveLength(1);

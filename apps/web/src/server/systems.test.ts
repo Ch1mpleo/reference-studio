@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { boardSchema, createId, designContentSchema, projectSchema, projectReferenceSchema, systemRecordSchema, type Board, type StudioEvent } from "@reference-studio/core";
 import { createApp } from "./app.js";
+import { browserHeaders } from "./test/browserSession.js";
 import { loadConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { EventHub } from "./events.js";
@@ -21,6 +22,8 @@ async function setup() {
   const headers = { host: "127.0.0.1:4317", authorization: `Bearer ${config.token}` };
   const events: StudioEvent[] = []; hub.subscribe((event) => events.push(event));
   async function request(url: string, payload?: object, method: "GET" | "POST" | "PUT" | "PATCH" = "POST", key = createId()) { return app.inject({ method, url, headers: { ...headers, "idempotency-key": key }, ...(payload === undefined ? {} : { payload }) }); }
+  const browser = await browserHeaders(app);
+  const browserPut = (url: string, payload: object) => app.inject({ method: "PUT", url, headers: { ...browser, "content-type": "application/json", "idempotency-key": createId() }, payload });
   const project = projectSchema.parse((await request("/api/projects", { name: "Systems" })).json());
   const base = `/api/projects/${project.id}`, directionId = createId();
   const board = boardSchema.parse((await request(`${base}/board`, { expectedRevision: 1, layout: { frames: [{ id: directionId, name: "Mixed rhythm", rect: { x: 0, y: 0, width: 700, height: 600 } }], items: [] } }, "PUT")).json());
@@ -30,7 +33,7 @@ async function setup() {
     const boundary = "systemUpload";
     return app.inject({ method: "POST", url, headers: { ...headers, "idempotency-key": createId(), "content-type": `multipart/form-data; boundary=${boundary}` }, payload: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mediaType}\r\n\r\n`), bytes, Buffer.from(`\r\n--${boundary}--\r\n`)]) });
   };
-  return { app, database, dataDir, headers, events, project, directionId, board, base, url, request, read, upload };
+  return { app, database, dataDir, headers, browserPut, events, project, directionId, board, base, url, request, read, upload };
 }
 function first(board: Board) { return systemRecordSchema.parse(board.layout.systems?.[0]); }
 
@@ -177,10 +180,10 @@ describe("direction systems", () => {
   it("copies system entries and rationale links independently and restores the whole graph", async () => {
     const ctx = await setup();
     const feedbackId = createId(), decisionId = createId();
-    let board = boardSchema.parse((await ctx.request(`${ctx.base}/board`, { expectedRevision: ctx.board.revision, layout: { ...ctx.board.layout, annotations: [
+    let board = boardSchema.parse((await ctx.browserPut(`${ctx.base}/board`, { expectedRevision: ctx.board.revision, layout: { ...ctx.board.layout, annotations: [
       { id: feedbackId, target: { type: "project", projectId: ctx.project.id }, body: "Mix quiet and graphic sections", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" } },
-      { id: decisionId, target: { type: "direction", directionId: ctx.directionId }, body: "Quiet ending", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "agent" }, decision: { rationale: "Follow correction", annotationId: feedbackId } },
-    ] } }, "PUT")).json());
+      { id: decisionId, target: { type: "direction", directionId: ctx.directionId }, body: "Quiet ending", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" }, decision: { rationale: "Follow correction", annotationId: feedbackId } },
+    ] } })).json());
     const content = designContentSchema.parse({ intent: "Mixed rhythm", tokens: [{ id: createId(), name: "space.section", category: "spacing", value: "48", unit: "px", context: { feedbackAnnotationIds: [feedbackId], decisionAnnotationIds: [decisionId] } }] });
     const result = await ctx.request(ctx.url, { kind: "design", name: "Design", expectedDirectionRevision: board.layout.frames[0]!.revision, content });
     expect(result.statusCode).toBe(201); board = boardSchema.parse(result.json());

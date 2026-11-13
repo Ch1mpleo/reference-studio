@@ -111,6 +111,14 @@ export const updateBoardSchema = z.object({
   layout: boardLayoutSchema,
 }).strict();
 
+const authorNameSchema = z.string().trim().min(1).max(200);
+
+export const DIRECTION_FIELDS = ["name", "concept", "feeling", "decisions", "questions", "archived"] as const;
+/** Direction wording an agent may replace; decisions and archiving stay with a person. */
+export const AGENT_DIRECTION_FIELDS = ["name", "concept", "feeling", "questions"] as const;
+export type AgentDirectionField = (typeof AGENT_DIRECTION_FIELDS)[number];
+
+/** `reason` and `authorName` belong to agent callers, which the service enforces. */
 export const updateDirectionSchema = z.object({
   expectedRevision: z.number().int().positive(),
   name: z.string().trim().min(1).max(200).optional(),
@@ -119,10 +127,21 @@ export const updateDirectionSchema = z.object({
   decisions: z.string().max(20_000).optional(),
   questions: z.string().max(20_000).optional(),
   archived: z.boolean().optional(),
-}).strict().refine((input) => Object.keys(input).length > 1, { message: "Change at least one direction field." });
-export const duplicateDirectionSchema = z.object({ expectedRevision: z.number().int().positive(), name: z.string().trim().min(1).max(200).optional() }).strict();
+  reason: z.string().trim().min(1).max(20_000).optional(),
+  authorName: authorNameSchema.optional(),
+}).strict().refine((input) => DIRECTION_FIELDS.some((field) => input[field] !== undefined), { message: "Change at least one direction field." });
+export type UpdateDirectionRequest = z.infer<typeof updateDirectionSchema>;
 
-const authorNameSchema = z.string().trim().min(1).max(200);
+export const updateDirectionResultSchema = z.object({
+  directionId: z.uuid(),
+  directionRevision: z.number().int().positive(),
+  boardRevision: z.number().int().positive(),
+  annotationId: z.uuid(),
+  changedFields: z.array(z.enum(AGENT_DIRECTION_FIELDS)).min(1),
+}).strict();
+export type UpdateDirectionResult = z.infer<typeof updateDirectionResultSchema>;
+
+export const duplicateDirectionSchema = z.object({ expectedRevision: z.number().int().positive(), name: z.string().trim().min(1).max(200).optional() }).strict();
 
 /** Provenance and decisions are never caller-supplied; the service derives them. */
 export const createAnnotationRequestSchema = z.object({

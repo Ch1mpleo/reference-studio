@@ -1,8 +1,8 @@
 import {
-  assertExpectedRevision, boardLayoutSchema, boardSchema, createId, duplicateDirectionSchema, mutationScope, parseContract, ServiceError, updateBoardSchema, updateDirectionSchema,
-  systemContexts, systemChildren, remapSystem, type Board, type BoardAnnotation, type BoardLayout,
+  AGENT_DIRECTION_FIELDS, assertExpectedRevision, boardLayoutSchema, boardSchema, createId, duplicateDirectionSchema, IDEMPOTENCY_REPLAYED_HEADER, mutationScope, parseContract, ServiceError, updateBoardSchema, updateDirectionSchema,
+  systemContexts, systemChildren, remapSystem, type Board, type BoardAnnotation, type BoardLayout, type UpdateDirectionRequest, type UpdateDirectionResult,
 } from "@reference-studio/core";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
 import { requireCaller, headerValue } from "./access.js";
 import { getProject } from "./projects.js";
@@ -10,6 +10,9 @@ import { commitMutation, hashCanonicalRequest, readIdempotencyKey } from "./idem
 import { publishChange } from "./changes.js";
 import type { EventHub } from "./events.js";
 import { copyDirectionVariants } from "./variants.js";
+import { assertAgentBoardChange, assertNewAnnotationAuthors } from "./boardProvenance.js";
+
+const MAX_ANNOTATION_BODY = 20_000;
 
 export function readBoard(database: DatabaseSync, projectId: string): Board {
   getProject(database, projectId);
@@ -145,6 +148,8 @@ export function registerBoardRoutes(app: FastifyInstance, database: DatabaseSync
         const current = readBoard(database, projectId);
         assertExpectedRevision(current.revision, input.expectedRevision, { type: "board", id: projectId });
         if (input.layout.systems !== undefined && hashCanonicalRequest(input.layout.systems) !== hashCanonicalRequest(current.layout.systems ?? [])) throw new ServiceError("validation", "Change system records through the direction system operations.");
+        assertNewAnnotationAuthors(caller, current.layout, input.layout);
+        if (caller === "agent") assertAgentBoardChange(current.layout, { ...input.layout, annotations: input.layout.annotations ?? current.layout.annotations });
         const board = saveBoardLayout(database, current, input.layout);
         return { statusCode: 200, body: board, revision: board.revision, changed: board.revision !== current.revision };
       },
@@ -156,11 +161,45 @@ export function registerBoardRoutes(app: FastifyInstance, database: DatabaseSync
     return reply.code(result.statusCode).send(result.body);
   });
   type DirectionParams = { projectId: string; directionId: string };
+  function updateDirectionAsAgent(request: FastifyRequest<{ Params: DirectionParams }>, reply: FastifyReply, caller: "agent", input: UpdateDirectionRequest) {
+    const { projectId, directionId } = request.params;
+    if (input.reason === undefined) throw new ServiceError("validation", "Say why the direction wording changes (reason).");
+    if (input.decisions !== undefined || input.archived !== undefined) throw new ServiceError("validation", "Agents change only name, concept, feeling and questions; decisions and archiving belong to a person.");
+    const { reason, authorName } = input;
+    const outcome = commitMutation(database, {
+      scope: mutationScope(caller, "direction.update", `${projectId}:${directionId}`), key: readIdempotencyKey(request.headers["idempotency-key"]), requestHash: hashCanonicalRequest(input),
+      execute: () => {
+        const current = readBoard(database, projectId);
+        const layout = structuredClone(current.layout);
+        const frame = layout.frames.find((entry) => entry.id === directionId);
+        if (frame === undefined) throw new ServiceError("not_found", "Direction was not found in this project.");
+        assertExpectedRevision(frame.revision ?? 1, input.expectedRevision, { type: "direction", id: directionId });
+        const changedFields = AGENT_DIRECTION_FIELDS.filter((field) => input[field] !== undefined && input[field] !== frame[field]);
+        if (changedFields.length === 0) throw new ServiceError("validation", "The direction already has this wording.");
+        const replaced = changedFields.map((field) => `${field}:\n${frame[field]}`).join("\n\n");
+        const body = `Reason: ${reason}\n\nReplaced wording:\n\n${replaced}`;
+        if (body.length > MAX_ANNOTATION_BODY) throw new ServiceError("validation", `The note keeping the replaced wording would exceed ${MAX_ANNOTATION_BODY} characters; shorten the change.`);
+        for (const field of changedFields) Object.assign(frame, { [field]: input[field] });
+        const annotation: BoardAnnotation = { id: createId(), target: { type: "direction", directionId }, body, borrowedQuality: "", translation: "", limitations: "",
+          provenance: { author: "agent", ...(authorName === undefined ? {} : { name: authorName }) } };
+        layout.annotations = [...(layout.annotations ?? []), annotation];
+        const board = saveBoardLayout(database, current, layout);
+        const result: UpdateDirectionResult = { directionId, directionRevision: board.layout.frames.find((entry) => entry.id === directionId)?.revision ?? 1, boardRevision: board.revision, annotationId: annotation.id, changedFields };
+        return { statusCode: 200, body: result, revision: board.revision, changed: true };
+      },
+    });
+    if (outcome.replayed) reply.header(IDEMPOTENCY_REPLAYED_HEADER, "true");
+    else publishChange(hub, { entity: "board", entityId: projectId, projectId, revision: (outcome.body as UpdateDirectionResult).boardRevision });
+    return reply.code(outcome.statusCode).send(outcome.body);
+  }
+
   app.patch<{ Params: DirectionParams }>("/api/projects/:projectId/directions/:directionId", async (request, reply) => {
     requireJson(request);
     const caller = requireCaller(request);
     const { projectId, directionId } = request.params;
     const input = parseContract(updateDirectionSchema, request.body, "The direction changes are invalid.");
+    if (caller === "agent") return updateDirectionAsAgent(request, reply, caller, input);
+    if (input.reason !== undefined || input.authorName !== undefined) throw new ServiceError("validation", "reason and authorName are for agent updates.");
     const result = commitMutation(database, {
       scope: mutationScope(caller, "direction.update", `${projectId}:${directionId}`), key: readIdempotencyKey(request.headers["idempotency-key"]), requestHash: hashCanonicalRequest(input),
       execute: () => {
@@ -169,7 +208,7 @@ export function registerBoardRoutes(app: FastifyInstance, database: DatabaseSync
         const frame = layout.frames.find((entry) => entry.id === directionId);
         if (frame === undefined) throw new ServiceError("not_found", "Direction was not found in this project.");
         assertExpectedRevision(frame.revision ?? 1, input.expectedRevision, { type: "direction", id: directionId });
-        const { expectedRevision: _, ...metadata } = input;
+        const { expectedRevision: _, reason: _reason, authorName: _authorName, ...metadata } = input;
         Object.assign(frame, metadata);
         if (input.archived === true) {
           for (const item of layout.items.filter((entry) => entry.frameId === directionId)) {

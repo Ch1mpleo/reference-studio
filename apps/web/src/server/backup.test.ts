@@ -18,6 +18,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
 import { createApp } from "./app.js";
+import { browserHeaders } from "./test/browserSession.js";
 import type { AppConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { EventHub } from "./events.js";
@@ -130,7 +131,7 @@ describe("backup and restore", () => {
     const projectId = await createProject(app, "Long annotations", "large-notes");
     const text = "a".repeat(20_000);
     const annotations = Array.from({ length: 27 }, () => ({ id: createId(), target: { type: "project", projectId }, body: text, borrowedQuality: text, translation: text, limitations: text, provenance: { author: "human" } }));
-    const saved = await app.inject({ method: "PUT", url: `/api/projects/${projectId}/board`, headers: agentHeaders("large-board"), payload: { expectedRevision: 1, layout: { frames: [], items: [], annotations } } });
+    const saved = await app.inject({ method: "PUT", url: `/api/projects/${projectId}/board`, headers: { ...(await browserHeaders(app)), "content-type": "application/json", "idempotency-key": "large-board" }, payload: { expectedRevision: 1, layout: { frames: [], items: [], annotations } } });
     expect(saved.statusCode).toBe(200);
     const exported = await app.inject({ url: `/api/projects/${projectId}/backup`, headers: agentHeaders() });
     expect(exported.statusCode).toBe(200);

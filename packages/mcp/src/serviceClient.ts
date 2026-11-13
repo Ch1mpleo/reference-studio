@@ -30,7 +30,7 @@ export type ImageBytes = {
 export type ServiceConnection = WorkspaceStatus & {
   getJson<T>(path: string, schema: ZodType<T>): Promise<T>;
   getBytes(path: string): Promise<ImageBytes>;
-  sendJson<T>(method: "POST", path: string, body: unknown, schema: ZodType<T>, mutationKey: string): Promise<{ data: T; replayed: boolean }>;
+  sendJson<T>(method: "POST" | "PATCH", path: string, body: unknown, schema: ZodType<T>, mutationKey: string): Promise<{ data: T; replayed: boolean }>;
 };
 
 export async function checkWorkspace(options: ServiceClientOptions = {}): Promise<WorkspaceStatus> {

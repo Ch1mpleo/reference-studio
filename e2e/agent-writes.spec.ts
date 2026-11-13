@@ -79,3 +79,63 @@ test("agent annotation and direction proposal appear in the open Studio without 
   expect(after.layout.frames.map((frame) => frame.name)).toEqual(["North", "Paper grid"]);
   expect(after.layout.annotations!.map((entry) => entry.provenance)).toEqual([{ author: "agent", name: "Scout" }, { author: "agent", name: "Scout" }]);
 });
+
+async function updateDirection(client: Client, projectId: string, directionId: string, expectedRevision: number, fields: Record<string, string>): Promise<ToolResult> {
+  return (await client.callTool({ name: "update_direction", arguments: { projectId, directionId, expectedRevision, reason: "The references point somewhere else.", authorName: "Scout", mutationKey: `e2e-${crypto.randomUUID()}`, ...fields } })) as ToolResult;
+}
+
+test("agent direction rename appears in the open Studio without a reload", async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const loads = { count: 0 };
+  const project = await openSeededProject(page, "Agent rename", loads);
+  const url = `/api/projects/${project.id}/board`;
+  const direction = boardSchema.parse(await json(page, url)).layout.frames[0]!;
+  const groupName = page.getByRole("textbox", { name: "Group name", exact: true });
+  await expect(groupName).toHaveText("North", { timeout: 5_000 });
+
+  const client = await connectAdapter();
+  try {
+    const result = await updateDirection(client, project.id, direction.id, direction.revision ?? 1, { name: "Paper grid", concept: "Warm paper" });
+    expect(result.isError).toBeUndefined();
+    await expect(groupName).toHaveText("Paper grid", { timeout: 10_000 });
+  } finally {
+    await client.close();
+  }
+  expect(loads.count).toBe(1);
+  const after = boardSchema.parse(await json(page, url));
+  expect(after.layout.frames[0]).toMatchObject({ name: "Paper grid", concept: "Warm paper" });
+  expect(after.layout.annotations).toHaveLength(1);
+  expect(after.layout.annotations![0]).toMatchObject({ provenance: { author: "agent", name: "Scout" }, target: { type: "direction", directionId: direction.id } });
+  expect(after.layout.annotations![0]!.body).toContain("name:\nNorth");
+});
+
+test("an agent direction update does not replace a person's uncommitted group name", async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const loads = { count: 0 };
+  const project = await openSeededProject(page, "Agent beside human", loads);
+  const url = `/api/projects/${project.id}/board`;
+  const direction = boardSchema.parse(await json(page, url)).layout.frames[0]!;
+  const groupName = page.getByRole("textbox", { name: "Group name", exact: true });
+  // Display mode is a contenteditable role=textbox div; enter edit to type without saving.
+  await groupName.dblclick();
+  const editor = page.locator("input[aria-label='Group name']");
+  await expect(editor).toBeVisible({ timeout: 5_000 });
+  await editor.fill("Human draft name");
+  await expect(editor).toHaveValue("Human draft name", { timeout: 5_000 });
+
+  const client = await connectAdapter();
+  try {
+    const result = await updateDirection(client, project.id, direction.id, direction.revision ?? 1, { name: "Agent renamed" });
+    expect(result.isError).toBeUndefined();
+    await expect.poll(async () => boardSchema.parse(await json(page, url)).layout.frames[0]!.name, { timeout: 10_000 }).toBe("Agent renamed");
+  } finally {
+    await client.close();
+  }
+  // Uncommitted draft must stay in the open editor; if Studio replaces it, stop and report.
+  await expect(editor).toHaveValue("Human draft name", { timeout: 5_000 });
+  await editor.press("Escape");
+  await expect(page.getByRole("textbox", { name: "Group name", exact: true })).toHaveText("Agent renamed", { timeout: 5_000 });
+  expect(loads.count).toBe(1);
+});

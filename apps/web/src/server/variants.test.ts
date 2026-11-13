@@ -8,6 +8,7 @@ import {
 } from "@reference-studio/core";
 import type { FastifyInstance } from "fastify";
 import { createApp } from "./app.js";
+import { browserHeaders } from "./test/browserSession.js";
 import { exportProjectBackup } from "./backup.js";
 import { loadConfig } from "./config.js";
 import { openDatabase } from "./db.js";
@@ -57,20 +58,10 @@ function variantInput(directionRevision: number, patch?: Record<string, unknown>
   return { expectedDirectionRevision: directionRevision, name: "Quick ease-out", fixture: { id: "dropdown", version: 1 }, motion, engine, ...patch };
 }
 
-async function browserCookie(app: FastifyInstance): Promise<string> {
-  const response = await app.inject({ method: "GET", url: "/api/session", headers: { host: "127.0.0.1:4317", origin: "http://127.0.0.1:4317", "sec-fetch-site": "same-origin" } });
-  expect(response.statusCode).toBe(200);
-  const header = response.headers["set-cookie"];
-  const value = Array.isArray(header) ? header[0] : header;
-  const pair = value?.split(";")[0];
-  if (pair === undefined || !pair.startsWith("rs_session=")) throw new Error("Expected a browser session cookie.");
-  return pair;
-}
-
 async function browserSelect(app: FastifyInstance, url: string, revision: number, directionRevision: number, selected = true) {
   return app.inject({
     method: "POST", url, headers: {
-      host: "127.0.0.1:4317", origin: "http://127.0.0.1:4317", "sec-fetch-site": "same-origin", cookie: await browserCookie(app),
+      ...(await browserHeaders(app)),
       "content-type": "application/json", "idempotency-key": createId(),
     }, payload: { expectedRevision: revision, expectedDirectionRevision: directionRevision, selected },
   });
@@ -145,7 +136,7 @@ describe("motion variants", () => {
     const restoredSystem = await ctx.request(`${ctx.base}/directions/${ctx.directionId}/systems/${motion.system.id}`, { expectedRevision: motion.system.revision + 1, expectedDirectionRevision: archivedBoard.layout.frames[0]!.revision, archived: false }, "PATCH");
     expect(restoredSystem.statusCode).toBe(200);
     const openBoard = boardSchema.parse(restoredSystem.json());
-    const archivedDirection = await ctx.request(`${ctx.base}/directions/${ctx.directionId}`, { expectedRevision: openBoard.layout.frames[0]!.revision, archived: true }, "PATCH");
+    const archivedDirection = await ctx.app.inject({ method: "PATCH", url: `${ctx.base}/directions/${ctx.directionId}`, headers: { ...(await browserHeaders(ctx.app)), "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: openBoard.layout.frames[0]!.revision, archived: true } });
     expect(archivedDirection.statusCode).toBe(200);
     const closed = boardSchema.parse(archivedDirection.json());
     const denied = await ctx.request(motion.variantsUrl, variantInput(closed.layout.frames[0]!.revision ?? 1, { name: "Closed" }));
@@ -190,10 +181,15 @@ describe("motion variants", () => {
     const placementAnnotation = createId();
     const otherAnnotation = createId();
     const projectAnnotation = createId();
-    const arranged = boardSchema.parse((await ctx.request(`${ctx.base}/board`, { expectedRevision: ctx.board.revision, layout: { frames: [...ctx.board.layout.frames, { id: otherDirectionId, name: "Other", rect: { x: 800, y: 0, width: 700, height: 600 } }], items: [{ placementId, frameId: ctx.directionId, rect: { x: 24, y: 32, width: 200, height: 160 } }], annotations: [
+    const humanLayout = { frames: ctx.board.layout.frames, items: [], annotations: [
+      { id: projectAnnotation, target: { type: "project", projectId: ctx.project.id }, body: "Shared project evidence", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" } },
+    ] };
+    const human = await ctx.app.inject({ method: "PUT", url: `${ctx.base}/board`, headers: { ...(await browserHeaders(ctx.app)), "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: ctx.board.revision, layout: humanLayout } });
+    expect(human.statusCode).toBe(200);
+    const arranged = boardSchema.parse((await ctx.request(`${ctx.base}/board`, { expectedRevision: boardSchema.parse(human.json()).revision, layout: { frames: [...ctx.board.layout.frames, { id: otherDirectionId, name: "Other", rect: { x: 800, y: 0, width: 700, height: 600 } }], items: [{ placementId, frameId: ctx.directionId, rect: { x: 24, y: 32, width: 200, height: 160 } }], annotations: [
+      { id: projectAnnotation, target: { type: "project", projectId: ctx.project.id }, body: "Shared project evidence", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" } },
       { id: placementAnnotation, target: { type: "placement", placementId }, body: "Quiet edge", borrowedQuality: "Space", translation: "Keep the margin", limitations: "No timing", provenance: { author: "agent" } },
       { id: otherAnnotation, target: { type: "direction", directionId: otherDirectionId }, body: "Other direction evidence", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "agent" } },
-      { id: projectAnnotation, target: { type: "project", projectId: ctx.project.id }, body: "Shared project evidence", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" } },
     ] } }, "PUT")).json());
     const presetId = createId();
     const settings = { model: "physics-spring" as const, mass: 1.2, stiffness: 180, damping: 24, initialVelocity: 0, units: "engine-defined" as const, engine: { name: "Example engine", version: "2.1" } };

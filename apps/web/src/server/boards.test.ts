@@ -2,8 +2,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { boardSchema, createId, projectReferenceSchema, projectSchema, type BoardLayout, type StudioEvent } from "@reference-studio/core";
+import { boardSchema, createId, IDEMPOTENCY_REPLAYED_HEADER, updateDirectionResultSchema, projectReferenceSchema, projectSchema, type BoardAnnotation, type BoardLayout, type StudioEvent } from "@reference-studio/core";
 import { createApp } from "./app.js";
+import { browserHeaders } from "./test/browserSession.js";
 import { loadConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { EventHub } from "./events.js";
@@ -33,7 +34,9 @@ async function setup() {
     items: [{ placementId: note.placementId, frameId, rect: { x: 32, y: 64, width: 260, height: 180 } }] };
   const url = `/api/projects/${created.id}/board`;
   const put = (revision: number, next = layout, key = createId()) => app.inject({ method: "PUT", url, headers: { ...headers, "idempotency-key": key }, payload: { expectedRevision: revision, layout: next } });
-  return { app, database, dataDir, headers, created, note, layout, put, project, url, events };
+  const browser = await browserHeaders(app);
+  const putBrowser = (revision: number, next = layout, key = createId()) => app.inject({ method: "PUT", url, headers: { ...browser, "content-type": "application/json", "idempotency-key": key }, payload: { expectedRevision: revision, layout: next } });
+  return { app, database, dataDir, headers, browser, created, note, layout, put, putBrowser, project, url, events };
 }
 
 describe("project boards", () => {
@@ -62,7 +65,7 @@ describe("project boards", () => {
     const regroup = structuredClone(board.layout); regroup.items[0]!.frameId = second.id;
     board = boardSchema.parse((await ctx.put(board.revision, regroup)).json());
     expect(readPlacement().revision).toBe(5);
-    const archive = await ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/directions/${second.id}`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: board.layout.frames[1]!.revision, archived: true } });
+    const archive = await ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/directions/${second.id}`, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: board.layout.frames[1]!.revision, archived: true } });
     expect(archive.statusCode).toBe(200);
     expect(readPlacement().revision).toBe(6);
   });
@@ -75,7 +78,7 @@ describe("project boards", () => {
     changed.items[0]!.rect.x += 20;
     board = boardSchema.parse((await ctx.put(board.revision, changed)).json());
     expect(board.layout.frames.map((frame) => frame.revision)).toEqual([2, 1]);
-    const metadata = (revision: number) => ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/directions/${second.id}`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: revision, name: "Updated" } });
+    const metadata = (revision: number) => ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/directions/${second.id}`, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: revision, name: "Updated" } });
     expect((await metadata(1)).statusCode).toBe(200);
     expect((await metadata(1)).statusCode).toBe(409);
     const placement = await ctx.app.inject({ method: "PATCH", url: `/api/projects/${ctx.created.id}/placements/${ctx.note.placementId}`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 2, usageNotes: "Borrow spacing" } });
@@ -94,7 +97,7 @@ describe("project boards", () => {
     const decisionId = createId();
     const annotation = { id: annotationId, target: { type: "placement", placementId: ctx.note.placementId }, body: "User prefers quiet", borrowedQuality: "Spacing", translation: "Room for text", limitations: "No image claims", provenance: { author: "human", name: "Owner" } };
     const decision = { ...annotation, id: decisionId, target: { type: "direction", directionId: ctx.layout.frames[0]!.id }, decision: { rationale: "Keep space", annotationId } };
-    const first = await ctx.put(1, { ...ctx.layout, annotations: [annotation, decision] } as BoardLayout);
+    const first = await ctx.putBrowser(1, { ...ctx.layout, annotations: [annotation, decision] } as BoardLayout);
     expect(first.statusCode).toBe(200);
     const key = createId();
     const duplicate = () => ctx.app.inject({ method: "POST", url: `/api/projects/${ctx.created.id}/directions/${ctx.layout.frames[0]!.id}/duplicate`, headers: { ...ctx.headers, "idempotency-key": key }, payload: { expectedRevision: 1 } });
@@ -133,15 +136,19 @@ describe("project boards", () => {
     expect((await ctx.put(1, { ...ctx.layout, annotations: [annotation] } as BoardLayout)).statusCode).toBe(200);
     let board = boardSchema.parse((await ctx.app.inject({ url: ctx.url, headers: ctx.headers })).json());
     const old = structuredClone(ctx.layout); old.frames[0]!.name = "Renamed";
-    expect((await ctx.put(board.revision, old)).statusCode).toBe(200);
+    expect((await ctx.putBrowser(board.revision, old)).statusCode).toBe(200);
     board = boardSchema.parse((await ctx.app.inject({ url: ctx.url, headers: ctx.headers })).json());
     expect(board.layout.annotations).toHaveLength(1);
     for (const invalid of [
-      { ...annotation, target: { type: "project", projectId: createId() } },
-      { ...annotation, target: { type: "placement", placementId: createId() } },
-      { ...annotation, target: { type: "placement", placementId: ctx.note.placementId }, region: { x: 0, y: 0, width: 1, height: 1 } },
-      { ...annotation, decision: { rationale: "Broken link", annotationId: createId() } },
-    ]) expect((await ctx.put(board.revision, { ...board.layout, annotations: [invalid] } as BoardLayout)).statusCode).toBe(400);
+      { ...annotation, id: createId(), target: { type: "project", projectId: createId() } },
+      { ...annotation, id: createId(), target: { type: "placement", placementId: createId() } },
+      { ...annotation, id: createId(), target: { type: "placement", placementId: ctx.note.placementId }, region: { x: 0, y: 0, width: 1, height: 1 } },
+    ]) expect((await ctx.put(board.revision, { ...board.layout, annotations: [...(board.layout.annotations ?? []), invalid] } as BoardLayout)).statusCode).toBe(400);
+    const broken = { ...annotation, id: createId(), provenance: { author: "human" as const }, decision: { rationale: "Broken link", annotationId: createId() } };
+    const linked = await ctx.putBrowser(board.revision, { ...board.layout, annotations: [...(board.layout.annotations ?? []), broken] } as BoardLayout);
+    expect(linked.statusCode).toBe(400);
+    expect(linked.json().error.message).toBe("The board arrangement is invalid.");
+    expect(linked.json().error.details.issues).toEqual(expect.arrayContaining([expect.objectContaining({ message: "A decision links to a missing annotation." })]));
   });
 
   it("branches direction reasoning without copying shared evidence or changing the source", async () => {
@@ -153,9 +160,10 @@ describe("project boards", () => {
     const annotations: NonNullable<BoardLayout["annotations"]> = [
       { id: evidenceId, target: { type: "project", projectId: ctx.created.id }, body: "Reference discussion: compare readable editorial and dense technical layouts.", borrowedQuality: "Clear hierarchy", translation: "Keep readable long-form content", limitations: "Motion remains unobserved", provenance: { author: "agent", name: "Researcher" } },
       { id: feedbackId, target: { type: "placement", placementId: ctx.note.placementId }, body: "Reject dense technical layout: too busy for this audience. Keep occasional large typography as an intentional exception.", borrowedQuality: "Typographic contrast", translation: "Quiet body, expressive headings", limitations: "Check mobile wrapping", provenance: { author: "human", name: "Owner" }, decision: { rationale: "Readability matters more than visual density", annotationId: evidenceId } },
-      { id: decisionId, target: { type: "direction", directionId }, body: "Use the editorial alternative; revisit the small-screen headings.", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "agent", name: "Researcher" }, decision: { rationale: "Follow the user's feedback", annotationId: feedbackId } },
+      { id: decisionId, target: { type: "direction", directionId }, body: "Use the editorial alternative; revisit the small-screen headings.", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human", name: "Owner" }, decision: { rationale: "Follow the user's feedback", annotationId: feedbackId } },
     ];
-    const initial = boardSchema.parse((await ctx.put(1, { ...ctx.layout, annotations })).json());
+    const seeded = boardSchema.parse((await ctx.put(1, { frames: [], items: [], annotations: [annotations[0]!] })).json());
+    const initial = boardSchema.parse((await ctx.putBrowser(seeded.revision, { ...ctx.layout, annotations })).json());
     const response = await ctx.app.inject({ method: "POST", url: `/api/projects/${ctx.created.id}/directions/${directionId}/duplicate`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 1, name: "Expressive editorial" } });
     expect(response.statusCode).toBe(201);
     let board = boardSchema.parse(response.json());
@@ -173,13 +181,13 @@ describe("project boards", () => {
 
     const changed = structuredClone(board.layout);
     changed.annotations!.find((entry) => entry.id === copiedDecision.id)!.body = "Try larger headings in this branch only.";
-    board = boardSchema.parse((await ctx.put(board.revision, changed)).json());
+    board = boardSchema.parse((await ctx.putBrowser(board.revision, changed)).json());
     expect(board.layout.frames.find((frame) => frame.id === directionId)?.revision).toBe(1);
     expect(board.layout.frames.find((frame) => frame.id === copy.id)?.revision).toBe(2);
     expect(board.layout.annotations!.find((entry) => entry.id === decisionId)).toEqual(annotations[2]);
 
     const directionUrl = `/api/projects/${ctx.created.id}/directions/${copy.id}`;
-    const archive = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 2, archived: true } });
+    const archive = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: 2, archived: true } });
     expect(archive.statusCode).toBe(200);
     board = boardSchema.parse(archive.json());
     expect(board.layout.annotations).toEqual(changed.annotations);
@@ -253,17 +261,17 @@ describe("project boards", () => {
     expect((await patch(2)).statusCode).toBe(200);
     expect(ctx.database.prepare("SELECT usage_notes FROM placements WHERE id = ?").get(ctx.note.placementId)?.usage_notes).toBe("");
     const directionUrl = `/api/projects/${ctx.created.id}/directions/${directionId}`;
-    const archive = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 3, archived: true } });
+    const archive = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: 3, archived: true } });
     expect(archive.statusCode).toBe(200);
     board = boardSchema.parse(archive.json());
     expect(board.layout.frames[0]).toMatchObject({ archived: true, revision: 4, concept: "Editorial" });
     expect(board.layout.items.every((item) => item.frameId === null)).toBe(true);
     expect(board.layout.items[0]!.rect.x).toBe(ctx.layout.items[0]!.rect.x + ctx.layout.frames[0]!.rect.x);
-    const restore = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 4, archived: false } });
+    const restore = await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: 4, archived: false } });
     expect(restore.statusCode).toBe(200);
     expect(boardSchema.parse(restore.json()).layout.frames[0]).toMatchObject({ archived: false, revision: 5 });
     const other = await ctx.project("Other");
-    expect((await ctx.app.inject({ method: "PATCH", url: `/api/projects/${other.id}/directions/${directionId}`, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: 5, name: "Wrong project" } })).statusCode).toBe(404);
+    expect((await ctx.app.inject({ method: "PATCH", url: `/api/projects/${other.id}/directions/${directionId}`, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: 5, name: "Wrong project" } })).statusCode).toBe(404);
     expect((await ctx.app.inject({ method: "PATCH", url: directionUrl, headers: { host: ctx.headers.host, "idempotency-key": createId() }, payload: { expectedRevision: 5, name: "No auth" } })).statusCode).toBe(401);
   });
 
@@ -376,7 +384,7 @@ describe("project boards", () => {
     const editedLayout = structuredClone(version2Board.layout);
     editedLayout.frames[0]!.concept = "Editorial with generous margins";
     editedLayout.items[0]!.rect.x += 16;
-    const edited = await ctx.app.inject({ method: "PUT", url: version2Url, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: version2Board.revision, layout: editedLayout } });
+    const edited = await ctx.app.inject({ method: "PUT", url: version2Url, headers: { ...ctx.browser, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: version2Board.revision, layout: editedLayout } });
     expect(edited.statusCode).toBe(200);
     const editedBoard = boardSchema.parse(edited.json());
     expect(editedBoard.revision).toBe(version2Board.revision + 1);
@@ -390,5 +398,191 @@ describe("project boards", () => {
     expect(legacy.statusCode).toBe(201);
     const legacyProject = projectSchema.parse(legacy.json());
     expect(boardSchema.parse((await ctx.app.inject({ url: `/api/projects/${legacyProject.id}/board`, headers: ctx.headers })).json()).layout).toEqual({ frames: [], items: [] });
+  });
+
+  describe("PUT /board provenance", () => {
+    async function seeded() {
+      const ctx = await setup();
+      const directionId = ctx.layout.frames[0]!.id;
+      const note = (body: string, author: "human" | "agent", extra: object = {}): BoardAnnotation => ({ id: createId(), target: { type: "direction" as const, directionId }, body, borrowedQuality: "", translation: "", limitations: "", provenance: { author }, ...extra });
+      const human = note("Human note", "human");
+      const decided = note("Decided", "human", { decision: { rationale: "Because" } });
+      const first = await ctx.putBrowser(1, { ...ctx.layout, annotations: [human, decided] } as BoardLayout);
+      expect(first.statusCode).toBe(200);
+      const agent = note("Agent note", "agent");
+      const second = await ctx.app.inject({ method: "PUT", url: ctx.url, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: boardSchema.parse(first.json()).revision, layout: { ...boardSchema.parse(first.json()).layout, annotations: [human, decided, agent] } } });
+      expect(second.statusCode).toBe(200);
+      const board = boardSchema.parse(second.json());
+      const stored = () => ctx.database.prepare("SELECT revision, layout_json FROM project_boards WHERE project_id = ?").get(ctx.created.id) as { revision: number; layout_json: string };
+      const send = (headers: Record<string, string>, layout: unknown, revision = board.revision) => ctx.app.inject({ method: "PUT", url: ctx.url, headers: { ...headers, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: revision, layout } });
+      const bearer = (layout: unknown) => send(ctx.headers, layout);
+      const browser = (layout: unknown) => send(ctx.browser, layout);
+      const boardEvents = () => ctx.events.filter((event) => event.type === "changed" && event.entity === "board").length;
+      const edit = (change: (layout: BoardLayout) => void) => { const layout = structuredClone(board.layout); change(layout); return layout; };
+      async function rejected(response: Promise<Awaited<ReturnType<typeof bearer>>>, status: number, reason?: string) {
+        const before = stored(); const events = boardEvents();
+        const result = await response;
+        expect(result.statusCode).toBe(status);
+        if (reason !== undefined) expect(result.json().error.details.reason).toBe(reason);
+        expect(stored()).toEqual(before);
+        expect(boardEvents()).toBe(events);
+      }
+      return { ctx, board, directionId, human, decided, agent, note, bearer, browser, edit, rejected, stored, boardEvents };
+    }
+
+    it("rejects bearer-created human and decision annotations", async () => {
+      const t = await seeded();
+      await t.rejected(t.bearer(t.edit((layout) => { layout.annotations!.push(t.note("Forged", "human")); })), 400);
+      await t.rejected(t.bearer(t.edit((layout) => { layout.annotations!.push(t.note("Forged decision", "agent", { decision: { rationale: "Approved" } })); })), 400);
+    });
+
+    it("protects human notes and decisions from bearer edits and deletes", async () => {
+      const t = await seeded();
+      await t.rejected(t.bearer(t.edit((layout) => { layout.annotations!.find((entry) => entry.id === t.human.id)!.body = "Rewritten"; })), 409, "protected_annotation");
+      await t.rejected(t.bearer(t.edit((layout) => { layout.annotations = layout.annotations!.filter((entry) => entry.id !== t.human.id); })), 409, "protected_annotation");
+      await t.rejected(t.bearer(t.edit((layout) => { delete layout.annotations!.find((entry) => entry.id === t.decided.id)!.decision; })), 409, "protected_annotation");
+    });
+
+    it("keeps direction wording behind update_direction for bearer callers, allows geometry, and treats all existing notes as append-only", async () => {
+      const t = await seeded();
+      await t.rejected(t.bearer(t.edit((layout) => { layout.frames[0]!.concept = "Louder"; })), 409, "use_update_direction");
+      await t.rejected(t.bearer(t.edit((layout) => { layout.frames[0]!.archived = true; layout.items[0]!.frameId = null; })), 409, "use_update_direction");
+      const moved = await t.bearer(t.edit((layout) => { layout.frames[0]!.rect.x += 40; layout.items[0]!.rect.x += 8; }));
+      expect(moved.statusCode).toBe(200);
+      const current = boardSchema.parse(moved.json());
+      const own = structuredClone(current.layout);
+      own.annotations!.find((entry) => entry.id === t.agent.id)!.body = "Agent revised";
+      await t.rejected(t.ctx.app.inject({ method: "PUT", url: t.ctx.url, headers: { ...t.ctx.headers, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: current.revision, layout: own } }), 409, "protected_annotation");
+      const deleted = structuredClone(current.layout);
+      deleted.annotations = deleted.annotations!.filter((entry) => entry.id !== t.agent.id);
+      await t.rejected(t.ctx.app.inject({ method: "PUT", url: t.ctx.url, headers: { ...t.ctx.headers, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: current.revision, layout: deleted } }), 409, "protected_annotation");
+      const appended = structuredClone(current.layout);
+      appended.annotations = [...(appended.annotations ?? []), t.note("Fresh agent note", "agent")];
+      const added = await t.ctx.app.inject({ method: "PUT", url: t.ctx.url, headers: { ...t.ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: current.revision, layout: appended } });
+      expect(added.statusCode).toBe(200);
+      expect(boardSchema.parse(added.json()).layout.annotations).toHaveLength(current.layout.annotations!.length + 1);
+    });
+
+    it("lets browsers create human notes but not agent-authored ones", async () => {
+      const t = await seeded();
+      await t.rejected(t.browser(t.edit((layout) => { layout.annotations!.push(t.note("Impersonated", "agent")); })), 400);
+      const created = await t.browser(t.edit((layout) => { layout.annotations!.push(t.note("Browser note", "human")); }));
+      expect(created.statusCode).toBe(200);
+    });
+
+
+    it("rejects a bearer-created frame that carries decisions or is archived", async () => {
+      const t = await seeded();
+      const frame = { id: createId(), name: "South", concept: "", feeling: "", decisions: "Approved already", questions: "", archived: false, rect: { x: 800, y: 0, width: 700, height: 600 } };
+      await t.rejected(t.bearer(t.edit((layout) => { layout.frames.push(frame); })), 409, "use_update_direction");
+      await t.rejected(t.bearer(t.edit((layout) => { layout.frames.push({ ...frame, decisions: "", archived: true }); })), 409, "use_update_direction");
+      const allowed = await t.bearer(t.edit((layout) => { layout.frames.push({ ...frame, decisions: "", archived: false }); }));
+      expect(allowed.statusCode).toBe(200);
+    });
+  });
+
+  describe("agent direction updates", () => {
+    async function direction() {
+      const ctx = await setup();
+      const directionId = ctx.layout.frames[0]!.id;
+      const url = `/api/projects/${ctx.created.id}/directions/${directionId}`;
+      const stored = () => ctx.database.prepare("SELECT revision, layout_json FROM project_boards WHERE project_id = ?").get(ctx.created.id) as { revision: number; layout_json: string };
+      const boardEvents = () => ctx.events.filter((event) => event.type === "changed" && event.entity === "board").length;
+      const patch = (payload: object, headers: Record<string, string> = ctx.headers, key = createId()) => ctx.app.inject({ method: "PATCH", url, headers: { ...headers, "content-type": "application/json", "idempotency-key": key }, payload });
+      const board = boardSchema.parse((await ctx.put(1)).json());
+      const revision = board.layout.frames[0]!.revision ?? 1;
+      const read = () => boardSchema.parse({ projectId: ctx.created.id, revision: stored().revision, layout: JSON.parse(stored().layout_json) });
+      async function rejected(response: ReturnType<typeof patch>, status: number) {
+        const before = stored(); const events = boardEvents();
+        const result = await response;
+        expect(result.statusCode).toBe(status);
+        expect(stored()).toEqual(before);
+        expect(boardEvents()).toBe(events);
+        return result;
+      }
+      return { ctx, directionId, patch, revision, stored, boardEvents, read, rejected, board };
+    }
+
+    it("replaces wording with one revision, one event and a note holding the previous wording", async () => {
+      const t = await direction();
+      const events = t.boardEvents();
+      const response = await t.patch({ expectedRevision: t.revision, concept: "Louder editorial", name: "North", reason: "Brief asked for contrast", authorName: "Scout" });
+      expect(response.statusCode).toBe(200);
+      const result = updateDirectionResultSchema.parse(response.json());
+      expect(result).toMatchObject({ directionId: t.directionId, directionRevision: t.revision + 1, changedFields: ["concept"] });
+      const board = t.read();
+      expect(board.revision).toBe(result.boardRevision);
+      expect(board.layout.frames[0]).toMatchObject({ concept: "Louder editorial", name: "North", revision: t.revision + 1 });
+      expect(board.layout.annotations).toHaveLength(1);
+      expect(board.layout.annotations![0]).toMatchObject({ id: result.annotationId, target: { type: "direction", directionId: t.directionId }, provenance: { author: "agent", name: "Scout" },
+        body: "Reason: Brief asked for contrast\n\nReplaced wording:\n\nconcept:\nEditorial" });
+      expect(t.boardEvents()).toBe(events + 1);
+    });
+
+    it("lists each changed field with its full previous value", async () => {
+      const t = await direction();
+      const response = await t.patch({ expectedRevision: t.revision, name: "South", feeling: "Loud", questions: "Who?", reason: "Reframe" });
+      expect(updateDirectionResultSchema.parse(response.json()).changedFields).toEqual(["name", "feeling", "questions"]);
+      expect(t.read().layout.annotations![0]!.body).toBe("Reason: Reframe\n\nReplaced wording:\n\nname:\nNorth\n\nfeeling:\nQuiet\n\nquestions:\n");
+    });
+
+    it("rejects stale revisions with the current revision and writes nothing", async () => {
+      const t = await direction();
+      expect((await t.patch({ expectedRevision: t.revision, name: "Renamed" }, t.ctx.browser)).statusCode).toBe(200);
+      const stale = await t.rejected(t.patch({ expectedRevision: t.revision, concept: "Late", reason: "Stale" }), 409);
+      expect(stale.json().error.details).toMatchObject({ currentRevision: t.revision + 1, expectedRevision: t.revision });
+    });
+
+    it("rejects missing reasons, decisions, archiving and no-ops", async () => {
+      const t = await direction();
+      await t.rejected(t.patch({ expectedRevision: t.revision, concept: "Louder" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, decisions: "Approved", reason: "x" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, archived: true, reason: "x" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, concept: "Editorial", reason: "Same" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, reason: "No fields" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, concept: "Louder", reason: "x" }, t.ctx.browser), 400);
+    });
+
+    it("rolls back when the board is full or the kept wording would not fit", async () => {
+      const t = await direction();
+      const text = "a".repeat(20_000);
+      const long = await t.patch({ expectedRevision: t.revision, concept: text }, t.ctx.browser);
+      expect(long.statusCode).toBe(200);
+      const revision = t.revision + 1;
+      const tooLong = await t.rejected(t.patch({ expectedRevision: revision, concept: "Short", reason: "Trim" }), 400);
+      expect(tooLong.json().error.message).toContain("20000");
+      expect(t.read().layout.frames[0]!.concept).toBe(text);
+
+      const fresh = await direction();
+      const notes = Array.from({ length: 1_000 }, (_, index) => ({ id: createId(), target: { type: "project" as const, projectId: fresh.ctx.created.id }, body: `note ${index}`, borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" as const } }));
+      const full = await fresh.ctx.putBrowser(fresh.board.revision, { ...fresh.board.layout, annotations: notes });
+      expect(full.statusCode).toBe(200);
+      const board = boardSchema.parse(full.json());
+      const before = fresh.read();
+      const refused = await fresh.rejected(fresh.patch({ expectedRevision: board.layout.frames[0]!.revision ?? 1, concept: "Louder", reason: "Full" }), 400);
+      expect(refused.json().error.code).toBe("validation");
+      expect(fresh.read().layout.frames[0]).toEqual(before.layout.frames[0]);
+      expect(fresh.read().layout.annotations).toHaveLength(1_000);
+    });
+
+    it("replays the stored result without a second event and rejects a changed payload", async () => {
+      const t = await direction();
+      const key = createId();
+      const payload = { expectedRevision: t.revision, concept: "Louder", reason: "Replay" };
+      const first = await t.patch(payload, t.ctx.headers, key);
+      expect(first.statusCode).toBe(200);
+      const events = t.boardEvents();
+      const again = await t.patch(payload, t.ctx.headers, key);
+      expect(again.statusCode).toBe(200);
+      expect(again.json()).toEqual(first.json());
+      expect(again.headers[IDEMPOTENCY_REPLAYED_HEADER]).toBe("true");
+      expect(first.headers[IDEMPOTENCY_REPLAYED_HEADER]).toBeUndefined();
+      expect(t.boardEvents()).toBe(events);
+      expect(t.read().layout.annotations).toHaveLength(1);
+      const mismatch = await t.patch({ ...payload, concept: "Different" }, t.ctx.headers, key);
+      expect(mismatch.statusCode).toBe(409);
+      expect(mismatch.json().error.details.reason).toBe("idempotency_mismatch");
+      expect(t.boardEvents()).toBe(events);
+    });
   });
 });
