@@ -292,10 +292,8 @@ export function sweepIncomingUploads(dataDir: string, now = Date.now()): string[
         unlinkSync(absolute);
         removed.push(name);
       }
-    } catch (error) {
-      if (!(typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")) {
-        // Ignore per-entry failures so startup never crashes on a stale .part.
-      }
+    } catch {
+      // Ignore per-entry failures (including ENOENT races) so startup never crashes.
     }
   }
   return removed;

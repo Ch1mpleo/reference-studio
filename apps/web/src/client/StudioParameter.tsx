@@ -17,7 +17,9 @@ export function StudioParameter({
   max,
   step = 1,
   disabled = false,
+  wholeSteps = false,
   onChange,
+  onValidityChange,
 }: {
   label: string;
   unit: string;
@@ -26,7 +28,10 @@ export function StudioParameter({
   max: number;
   step?: number;
   disabled?: boolean;
+  /** When true, require values that land on min + n*step (Settings upload limit). */
+  wholeSteps?: boolean;
   onChange: (value: number) => void;
+  onValidityChange?: (valid: boolean) => void;
 }) {
   const id = useId();
   const [text, setText] = useState(String(value));
@@ -38,16 +43,19 @@ export function StudioParameter({
     }
   }, [value]);
   const parsed = text.trim() === "" ? NaN : Number(text);
+  const stepOk = !wholeSteps || alignsWithStep(parsed, min, step);
   const valid =
-    Number.isFinite(parsed) &&
-    parsed >= min &&
-    parsed <= max &&
-    alignsWithStep(parsed, min, step);
+    Number.isFinite(parsed) && parsed >= min && parsed <= max && stepOk;
   const error = valid
     ? undefined
-    : step === 1 && Number.isInteger(min) && Number.isInteger(max)
+    : wholeSteps && step === 1 && Number.isInteger(min) && Number.isInteger(max)
       ? `Use whole ${unit} from ${min} to ${max}.`
       : `Enter ${min}–${max} ${unit}.`;
+
+  useEffect(() => {
+    onValidityChange?.(valid);
+  }, [valid, onValidityChange]);
+
   return (
     <div className="studio-field studio-parameter">
       <label id={`${id}-label`} htmlFor={id}>
@@ -88,7 +96,7 @@ export function StudioParameter({
               Number.isFinite(number) &&
               number >= min &&
               number <= max &&
-              alignsWithStep(number, min, step)
+              (!wholeSteps || alignsWithStep(number, min, step))
             ) {
               accepted.current = number;
               onChange(number);

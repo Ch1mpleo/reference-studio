@@ -31,6 +31,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [openToken, setOpenToken] = useState(0);
   const [wasOpen, setWasOpen] = useState(open);
+  const [textValid, setTextValid] = useState(true);
   const dirtyRef = useRef(false);
   const loadGen = useRef(0);
 
@@ -43,6 +44,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
       setLoadState("loading");
       setSaveState("idle");
       setMessage(null);
+      setTextValid(true);
     }
   }
 
@@ -82,7 +84,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
   }
 
   async function save(): Promise<void> {
-    if (saveState === "saving" || loadState !== "ready" || !limitValid) {
+    if (saveState === "saving" || loadState !== "ready" || !limitValid || !textValid) {
       return;
     }
     setSaveState("saving");
@@ -135,7 +137,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
           <StudioButton
             variant="primary"
             busy={saveState === "saving"}
-            disabled={!fieldsReady || !dirty || !limitValid}
+            disabled={!fieldsReady || !dirty || !limitValid || !textValid}
             onClick={() => {
               void save();
             }}
@@ -158,8 +160,10 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
           min={minMib}
           max={maxMib}
           step={stepMib}
+          wholeSteps
           disabled={!fieldsReady}
           onChange={editLimit}
+          onValidityChange={setTextValid}
         />
         <p className="studio-help">
           {maxUploadMib} MiB. Applies to new uploads from Studio and agents.

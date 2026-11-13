@@ -1,10 +1,12 @@
 import { createHash, randomFillSync } from "node:crypto";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { request as httpRequest } from "node:http";
@@ -654,6 +656,77 @@ describe("reference ingestion", () => {
     expect(existsSync(originalPath)).toBe(true);
     expect(countRows(database, "assets")).toBe(1);
     expect(readdirSync(incomingUploadsDir(config.dataDir))).toEqual([]);
+  });
+
+  it("rolls back a published original when thumbnail publish fails", async () => {
+    const { app, config, database } = await startApp();
+    const projectId = await createProject(app);
+    const bytes = await paddedPng(16 * 1024);
+    const sha = createHash("sha256").update(bytes).digest("hex");
+    const originalPath = path.join(config.dataDir, "assets", "originals", `${sha}.png`);
+    const thumbnailsDir = path.join(config.dataDir, "assets", "thumbnails");
+    mkdirSync(path.dirname(thumbnailsDir), { recursive: true });
+    writeFileSync(thumbnailsDir, "not-a-directory");
+    const form = multipart(bytes, "orphan.png");
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/images`,
+      headers: agentHeaders("thumb-fail", { "content-type": form.contentType }),
+      payload: form.payload,
+    });
+    expect(response.statusCode).toBe(500);
+    expect(existsSync(originalPath)).toBe(false);
+    expect(countRows(database, "assets")).toBe(0);
+    expect(readdirSync(incomingUploadsDir(config.dataDir))).toEqual([]);
+  });
+
+  it("sets Content-Length on original and returns 404 when the file is missing", async () => {
+    const { app, config } = await startApp();
+    const projectId = await createProject(app);
+    const bytes = await paddedPng(8 * 1024);
+    const form = multipart(bytes, "sized.png");
+    const uploaded = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/images`,
+      headers: agentHeaders("sized-asset", { "content-type": form.contentType }),
+      payload: form.payload,
+    });
+    expect(uploaded.statusCode).toBe(201);
+    const body = uploaded.json() as {
+      reference: { asset: { id: string; byteSize: number; sha256: string } };
+    };
+    const assetId = body.reference.asset.id;
+    const original = await app.inject({
+      method: "GET",
+      url: `/api/assets/${assetId}/original`,
+      headers: agentHeaders(),
+    });
+    expect(original.statusCode).toBe(200);
+    expect(original.headers["content-length"]).toBe(String(body.reference.asset.byteSize));
+    expect(original.rawPayload.byteLength).toBe(body.reference.asset.byteSize);
+
+    const head = await app.inject({
+      method: "HEAD",
+      url: `/api/assets/${assetId}/original`,
+      headers: agentHeaders(),
+    });
+    expect(head.statusCode).toBe(200);
+    expect(head.headers["content-length"]).toBe(String(body.reference.asset.byteSize));
+
+    const absolute = path.join(
+      config.dataDir,
+      "assets",
+      "originals",
+      `${body.reference.asset.sha256}.png`,
+    );
+    unlinkSync(absolute);
+    const missing = await app.inject({
+      method: "GET",
+      url: `/api/assets/${assetId}/original`,
+      headers: agentHeaders(),
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(JSON.stringify(missing.json())).toContain("Image was not found.");
   });
 
   it("rejects oversized JSON bodies with a non-image message", async () => {

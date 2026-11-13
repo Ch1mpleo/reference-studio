@@ -1,4 +1,6 @@
-/** Incremental SHA-256 over a Blob/File stream without buffering the whole payload. */
+/** SHA-256 for browser uploads: native SubtleCrypto up to 64 MiB, incremental above. */
+
+export const NATIVE_SHA256_MAX_BYTES = 64 * 1024 * 1024;
 
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -15,7 +17,16 @@ function rotr(value: number, bits: number): number {
   return (value >>> bits) | (value << (32 - bits));
 }
 
-class Sha256 {
+function toHex(bytes: Uint8Array): string {
+  let out = "";
+  for (const byte of bytes) {
+    out += byte.toString(16).padStart(2, "0");
+  }
+  return out;
+}
+
+/** Incremental SHA-256; exported for unit tests against node:crypto. */
+export class Sha256 {
   private readonly state = new Uint32Array([
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
   ]);
@@ -40,27 +51,24 @@ class Sha256 {
 
   hex(): string {
     const bitLength = this.bytes * 8n;
-    const tail = new Uint8Array(this.blockLength + 1);
-    tail.set(this.block.subarray(0, this.blockLength));
-    tail[this.blockLength] = 0x80;
-    this.blockLength = 0;
-    this.update(tail);
+    // Append 0x80, then zero-pad. If there is no room for the 8-byte length, compress first.
+    this.block[this.blockLength] = 0x80;
+    this.blockLength += 1;
+    this.block.fill(0, this.blockLength);
     if (this.blockLength > 56) {
       this.compress(this.block);
       this.block.fill(0);
-      this.blockLength = 0;
-    } else {
-      this.block.fill(0, this.blockLength);
     }
     const view = new DataView(this.block.buffer);
     view.setUint32(56, Number((bitLength >> 32n) & 0xffffffffn), false);
     view.setUint32(60, Number(bitLength & 0xffffffffn), false);
     this.compress(this.block);
-    let out = "";
-    for (const word of this.state) {
-      out += word.toString(16).padStart(8, "0");
+    const out = new Uint8Array(32);
+    const outView = new DataView(out.buffer);
+    for (let i = 0; i < 8; i += 1) {
+      outView.setUint32(i * 4, this.state[i]!, false);
     }
-    return out;
+    return toHex(out);
   }
 
   private compress(block: Uint8Array): void {
@@ -102,7 +110,31 @@ class Sha256 {
   }
 }
 
-export async function sha256HexFromBlob(blob: Blob): Promise<string> {
+/** Hash bytes through the incremental implementation (chunked). */
+export function sha256HexIncrementalBytes(bytes: Uint8Array, chunkSizes?: number[]): string {
+  const hash = new Sha256();
+  if (chunkSizes === undefined || chunkSizes.length === 0) {
+    hash.update(bytes);
+    return hash.hex();
+  }
+  let offset = 0;
+  let index = 0;
+  while (offset < bytes.byteLength) {
+    const size = Math.max(1, chunkSizes[index % chunkSizes.length]!);
+    const end = Math.min(bytes.byteLength, offset + size);
+    hash.update(bytes.subarray(offset, end));
+    offset = end;
+    index += 1;
+  }
+  return hash.hex();
+}
+
+async function sha256HexNative(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return toHex(new Uint8Array(digest));
+}
+
+async function sha256HexIncrementalBlob(blob: Blob): Promise<string> {
   const hash = new Sha256();
   const reader = blob.stream().getReader();
   for (;;) {
@@ -113,4 +145,22 @@ export async function sha256HexFromBlob(blob: Blob): Promise<string> {
     hash.update(value);
   }
   return hash.hex();
+}
+
+/** Prefer native digest for files up to 64 MiB; stream the incremental hasher above that. */
+export async function sha256HexFromBlob(blob: Blob): Promise<string> {
+  if (blob.size <= NATIVE_SHA256_MAX_BYTES) {
+    return sha256HexNative(blob);
+  }
+  return sha256HexIncrementalBlob(blob);
+}
+
+/** Test helper: force the incremental path regardless of size. */
+export async function sha256HexFromBlobIncremental(blob: Blob): Promise<string> {
+  return sha256HexIncrementalBlob(blob);
+}
+
+/** Test helper: force the native SubtleCrypto path regardless of size. */
+export async function sha256HexFromBlobNative(blob: Blob): Promise<string> {
+  return sha256HexNative(blob);
 }

@@ -199,4 +199,25 @@ describe("StudioSettings", () => {
       view.root.unmount();
     });
   });
+
+  it("keeps Save disabled while the field shows invalid text over a prior valid draft", async () => {
+    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 });
+    const view = await render(true);
+    const number = document.body.querySelector<HTMLInputElement>('input[type="number"]');
+    if (number === null) throw new Error("Expected number field");
+    await act(async () => {
+      setControlValue(number, "5");
+    });
+    const save = [...document.body.querySelectorAll("button")].find((button) => button.textContent === "Save");
+    expect(save?.disabled).toBe(false);
+    for (const invalid of ["2.5", "600", "0", ""]) {
+      await act(async () => {
+        setControlValue(number, invalid);
+      });
+      expect(save?.disabled, `invalid ${JSON.stringify(invalid)}`).toBe(true);
+    }
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
 });

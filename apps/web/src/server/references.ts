@@ -30,7 +30,8 @@ import {
   type UpdateReferenceRequest,
   type CreatePlacementRequest,
 } from "@reference-studio/core";
-import { createReadStream, existsSync, unlinkSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
+import { open as openFile } from "node:fs/promises";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
 import {
@@ -430,14 +431,25 @@ function publishImageFiles(
 ): { originalPath: string; thumbnailPath: string } {
   const originalPath = `assets/originals/${image.sha256}${image.extension}`;
   const thumbnailPath = `assets/thumbnails/${image.sha256}.webp`;
+  try {
+    if (publishFile(tempPath, managedPath(dataDir, originalPath))) {
+      created.push(originalPath);
+    }
+    if (writeNewFile(managedPath(dataDir, thumbnailPath), image.thumbnail)) {
+      created.push(thumbnailPath);
+    }
+  } catch (error) {
+    for (const relativePath of created.splice(0)) {
+      try {
+        unlinkSync(managedPath(dataDir, relativePath));
+      } catch {
+        // Best-effort rollback when a later publish step fails.
+      }
+    }
+    throw error;
+  }
   retainPublishedPath(originalPath);
   retainPublishedPath(thumbnailPath);
-  if (publishFile(tempPath, managedPath(dataDir, originalPath))) {
-    created.push(originalPath);
-  }
-  if (writeNewFile(managedPath(dataDir, thumbnailPath), image.thumbnail)) {
-    created.push(thumbnailPath);
-  }
   return { originalPath, thumbnailPath };
 }
 
@@ -693,13 +705,13 @@ function projectReferenceFromRow(row: unknown): ProjectReference {
   });
 }
 
-function sendAsset(
+async function sendAsset(
   database: DatabaseSync,
   dataDir: string,
   assetId: string | undefined,
   variant: "original" | "thumbnail",
   reply: FastifyReply,
-): FastifyReply {
+): Promise<FastifyReply> {
   const id = parseRecordId(assetId);
   if (id === undefined) {
     throw new ServiceError("not_found", "Image was not found.");
@@ -718,16 +730,32 @@ function sendAsset(
   try {
     absolute = managedPath(dataDir, relativePath);
   } catch {
-    throw new Error("Stored image is missing.");
+    throw new ServiceError("not_found", "Image was not found.");
   }
-  if (!existsSync(absolute)) {
-    throw new Error("Stored image is missing.");
+  let handle;
+  try {
+    handle = await openFile(absolute, "r");
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+      throw new ServiceError("not_found", "Image was not found.");
+    }
+    throw error;
   }
+  const stats = await handle.stat();
+  const stream = handle.createReadStream();
+  stream.on("close", () => {
+    void handle.close().catch(() => undefined);
+  });
+  stream.on("error", () => {
+    void handle.close().catch(() => undefined);
+  });
   const mediaType = variant === "thumbnail" ? "image/webp" : row.media_type;
+  const byteLength = variant === "original" ? readInteger(row.byte_size) : stats.size;
   return reply
     .header("cache-control", "private, max-age=86400")
+    .header("content-length", String(byteLength))
     .type(mediaType)
-    .send(createReadStream(absolute));
+    .send(stream);
 }
 
 const PLACEMENT_COLUMNS = `
