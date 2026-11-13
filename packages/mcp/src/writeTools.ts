@@ -5,6 +5,7 @@ import {
   idempotencyKeySchema,
   imageCropSchema,
   proposeDirectionResultSchema,
+  updateDirectionResultSchema,
 } from "@reference-studio/core";
 import { z } from "zod";
 import { failureResult } from "./failure.js";
@@ -67,6 +68,32 @@ const proposeDirectionOutput = z.object({
   directionRevision: z.number(),
   boardRevision: z.number(),
   annotationId: z.string(),
+  draft: z.literal(true),
+  replayed: z.boolean(),
+});
+
+const updateDirectionInput = z
+  .object({
+    projectId: z.uuid().describe("Project ID from list_projects."),
+    directionId: z.uuid().describe("Direction ID from get_project_context."),
+    expectedRevision: z.number().int().positive().describe("The direction's revision from get_project_context (with directionId)."),
+    reason: z.string().trim().min(1).max(20_000).describe("Why the wording changes; stored in the note that keeps the previous wording."),
+    name: z.string().trim().min(1).max(200).optional().describe("New direction name."),
+    concept: z.string().max(20_000).optional().describe("New concept."),
+    feeling: z.string().max(4_000).optional().describe("New intended feeling."),
+    questions: z.string().max(20_000).optional().describe("New open questions for the human."),
+    authorName,
+    mutationKey,
+  })
+  .strict();
+
+const updateDirectionOutput = z.object({
+  projectId: z.string(),
+  directionId: z.string(),
+  directionRevision: z.number(),
+  boardRevision: z.number(),
+  annotationId: z.string(),
+  changedFields: z.array(z.enum(["name", "concept", "feeling", "questions"])),
   draft: z.literal(true),
   replayed: z.boolean(),
 });
@@ -152,6 +179,41 @@ export function registerWriteTools(server: McpServer, options: ServiceClientOpti
         };
       } catch (error) {
         return failureResult("propose_direction", error);
+      }
+    },
+  );
+  server.registerTool(
+    "update_direction",
+    {
+      title: "Update direction",
+      description:
+        "Revise the name, concept, feeling or questions of an existing direction as a draft. The previous wording of every changed field is kept in a new agent note on that direction, so nothing is lost; decisions and archiving are not available and the result is not an approval. Requires the direction's expectedRevision, a reason and a caller-supplied mutationKey. At least one field must actually change. A stale revision returns revision_conflict with currentRevision and writes nothing. Replaying a mutationKey with the same request returns the original result with replayed true; the same key with a different request is idempotency_mismatch. The adapter never retries a write.",
+      inputSchema: updateDirectionInput,
+      outputSchema: updateDirectionOutput,
+      annotations: WRITE_ANNOTATIONS,
+    },
+    async (input) => {
+      try {
+        const service = await connect(options);
+        const { projectId, directionId, mutationKey: key, ...body } = input;
+        const { data, replayed } = await service.sendJson(
+          "PATCH",
+          `/api/projects/${encodeURIComponent(projectId)}/directions/${encodeURIComponent(directionId)}`,
+          body,
+          updateDirectionResultSchema,
+          key,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `${replayed ? "Replayed: " : ""}Draft revision of direction ${data.directionId} ${replayed ? "was already applied" : "applied"} (${data.changedFields.join(", ")}). The previous wording is kept in note ${data.annotationId}. Direction revision is now ${data.directionRevision}; board revision is ${data.boardRevision}. This is a draft revision, not an approval; the human decides.`,
+            },
+          ],
+          structuredContent: { projectId, ...data, draft: true as const, replayed },
+        };
+      } catch (error) {
+        return failureResult("update_direction", error);
       }
     },
   );

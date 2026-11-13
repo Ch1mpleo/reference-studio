@@ -175,7 +175,7 @@ describe("draft write tools over stdio", () => {
   it("advertises write tools as non-destructive and idempotent", async () => {
     const client = await connectClient();
     const tools = (await client.listTools()).tools;
-    for (const name of ["add_annotation", "propose_direction"]) {
+    for (const name of ["add_annotation", "propose_direction", "update_direction"]) {
       expect(tools.find((tool) => tool.name === name)?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     }
     expect(client.getNegotiatedProtocolVersion()).toBe("2025-11-25");

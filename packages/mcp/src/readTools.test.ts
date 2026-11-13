@@ -334,6 +334,7 @@ describe("read tools over stdio", () => {
       "list_projects",
       "propose_direction",
       "search_references",
+      "update_direction",
     ]);
     expect(client.getNegotiatedProtocolVersion()).toBe("2025-11-25");
     expect(client.getServerCapabilities()?.resources).toBeUndefined();

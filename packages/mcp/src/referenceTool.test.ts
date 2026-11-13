@@ -259,7 +259,7 @@ describe("get_reference over stdio", () => {
     expect(tools).toEqual(
       expect.arrayContaining(["get_reference", "get_workspace_status", "list_projects", "search_references", "get_project_context"]),
     );
-    expect(tools).toHaveLength(7);
+    expect(tools).toHaveLength(8);
     expect(client.getNegotiatedProtocolVersion()).toBe("2025-11-25");
 
     const events: string[] = [];
