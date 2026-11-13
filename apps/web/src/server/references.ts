@@ -20,6 +20,7 @@ import {
   referenceSearchResultSchema,
   ServiceError,
   mutationScope,
+  UPLOAD_LIMIT_MAX,
   updatePlacementRequestSchema,
   updateReferenceRequestSchema,
   type ImageCrop,
@@ -44,6 +45,7 @@ import {
 } from "./idempotency.js";
 import { getProject } from "./projects.js";
 import { assertPlacementDirectionRevision, bumpPlacementDirection, readBoard, saveBoardLayout } from "./boards.js";
+import { readSettings } from "./settings.js";
 
 const IMAGE_FIELDS = new Set(["title", "sourceUrl", "creator", "observations"]);
 const PATH_FIELDS = new Set(["path", "filePath", "filepath", "localPath"]);
@@ -99,35 +101,40 @@ export function registerReferenceRoutes(
     return { references: listProjectReferences(database, projectId) };
   });
 
-  app.post("/api/projects/:projectId/references/images", { bodyLimit: 21 * 1024 * 1024 }, async (request, reply) => {
-    const caller = requireCaller(request);
-    const projectId = requireProject(database, routeParam(request, "projectId"));
-    const key = readIdempotencyKey(request.headers["idempotency-key"]);
-    const upload = await readImageUpload(request);
-    const inspected = await inspectImage(upload.bytes);
-    const fields = parseContract(imageFieldSchema, {
-      title: upload.fields.title ?? "",
-      sourceUrl: upload.fields.sourceUrl ?? "",
-      creator: upload.fields.creator ?? "",
-      observations: upload.fields.observations ?? "",
-    }, "Image details are invalid.");
-    const canonical = imageRequestForStorage(fields, upload.filename, inspected.sha256);
-    const requestHash = hashCanonicalRequest(canonical);
-    const scope = mutationScope(caller, "reference.image", projectId);
-    rejectIdempotencyMismatch(database, scope, key, requestHash);
-    const paths = storeImageFiles(dataDir, inspected, upload.bytes);
-    const outcome = commitMutation(database, {
-      scope,
-      key,
-      requestHash,
-      execute: () => {
-        const reference = insertImageReference(database, projectId, canonical, inspected, paths);
-        return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
-      },
-    });
-    publishReference(hub, projectId, outcome);
-    return reply.code(outcome.statusCode).send(outcome.body);
-  });
+  app.post(
+    "/api/projects/:projectId/references/images",
+    { bodyLimit: UPLOAD_LIMIT_MAX + 1024 * 1024 },
+    async (request, reply) => {
+      const caller = requireCaller(request);
+      const projectId = requireProject(database, routeParam(request, "projectId"));
+      const key = readIdempotencyKey(request.headers["idempotency-key"]);
+      const maxUploadBytes = readSettings(database).maxUploadBytes;
+      const upload = await readImageUpload(request, maxUploadBytes);
+      const inspected = await inspectImage(upload.bytes, { maxBytes: maxUploadBytes });
+      const fields = parseContract(imageFieldSchema, {
+        title: upload.fields.title ?? "",
+        sourceUrl: upload.fields.sourceUrl ?? "",
+        creator: upload.fields.creator ?? "",
+        observations: upload.fields.observations ?? "",
+      }, "Image details are invalid.");
+      const canonical = imageRequestForStorage(fields, upload.filename, inspected.sha256);
+      const requestHash = hashCanonicalRequest(canonical);
+      const scope = mutationScope(caller, "reference.image", projectId);
+      rejectIdempotencyMismatch(database, scope, key, requestHash);
+      const paths = storeImageFiles(dataDir, inspected, upload.bytes);
+      const outcome = commitMutation(database, {
+        scope,
+        key,
+        requestHash,
+        execute: () => {
+          const reference = insertImageReference(database, projectId, canonical, inspected, paths);
+          return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
+        },
+      });
+      publishReference(hub, projectId, outcome);
+      return reply.code(outcome.statusCode).send(outcome.body);
+    },
+  );
 
   app.post("/api/projects/:projectId/references/links", async (request, reply) => {
     return createTextReference(request, reply, database, hub, "link");
@@ -283,7 +290,10 @@ function requireJson(
   }
 }
 
-async function readImageUpload(request: FastifyRequest): Promise<{
+async function readImageUpload(
+  request: FastifyRequest,
+  maxUploadBytes: number,
+): Promise<{
   filename: string;
   bytes: Buffer;
   fields: Record<string, string>;
@@ -295,7 +305,7 @@ async function readImageUpload(request: FastifyRequest): Promise<{
   const fields: Record<string, string> = {};
   let filename = "image";
   let bytes: Buffer | undefined;
-  for await (const part of request.parts()) {
+  for await (const part of request.parts({ limits: { fileSize: maxUploadBytes } })) {
     if (PATH_FIELDS.has(part.fieldname)) {
       if (part.type === "file") {
         await part.toBuffer().catch(() => undefined);
@@ -312,7 +322,7 @@ async function readImageUpload(request: FastifyRequest): Promise<{
         bytes = await part.toBuffer();
       } catch (error) {
         if (isOversizedUpload(error)) {
-          throw new ServiceError("validation", imageTooLargeMessage());
+          throw new ServiceError("validation", imageTooLargeMessage(maxUploadBytes));
         }
         throw error;
       }

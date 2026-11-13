@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import {
   IMAGE_MEDIA_TYPES,
-  MAX_IMAGE_BYTES,
   MAX_IMAGE_EDGE,
   THUMBNAIL_EDGE,
   ServiceError,
@@ -28,12 +27,16 @@ export type InspectedImage = {
   thumbnail: Buffer;
 };
 
-export async function inspectImage(bytes: Buffer): Promise<InspectedImage> {
+export async function inspectImage(
+  source: Buffer,
+  options: { maxBytes: number },
+): Promise<InspectedImage> {
+  const bytes = source;
   if (bytes.byteLength === 0) {
     throw new ServiceError("validation", "Send a JPEG, PNG, or WebP image.");
   }
-  if (bytes.byteLength > MAX_IMAGE_BYTES) {
-    throw new ServiceError("validation", imageTooLargeMessage());
+  if (bytes.byteLength > options.maxBytes) {
+    throw new ServiceError("validation", imageTooLargeMessage(options.maxBytes));
   }
 
   const metadata = await readMetadata(bytes);

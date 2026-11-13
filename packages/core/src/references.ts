@@ -5,14 +5,14 @@ export const PLACEMENT_ROLES = ["inspiration", "candidate", "approved"] as const
 export const IMAGE_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export const REFERENCE_AVAILABILITY = ["available", "unknown"] as const;
 
-/** 20 MiB. The service rejects larger uploads before decoding them. */
+/** Historical default upload cap (20 MiB). Live enforcement uses Studio settings. */
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 export const MAX_IMAGE_EDGE = 12_000;
 export const THUMBNAIL_EDGE = 480;
 export const MAX_MOTION_SECONDS = 360_000;
 
-export function imageTooLargeMessage(): string {
-  return "Image is larger than 20 MB.";
+export function imageTooLargeMessage(maxBytes: number): string {
+  return `Image is larger than ${maxBytes / (1024 * 1024)} MiB.`;
 }
 
 export function imageEdgeMessage(): string {

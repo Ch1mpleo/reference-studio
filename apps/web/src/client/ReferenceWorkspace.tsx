@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type DragEvent } from "react";
-import { MAX_IMAGE_BYTES, imageTooLargeMessage, isHttpUrl, titleFromNote,
+import { UPLOAD_LIMIT_DEFAULT, imageTooLargeMessage, isHttpUrl, titleFromNote,
   type Board, type BoardFrame, type CreateLinkReference, type CreateNoteReference, type ImageFields,
   type LibraryReference, type ProjectReference, type SystemRecord } from "@reference-studio/core";
 import type { BoardView } from "./BoardCanvas.js";
@@ -23,6 +23,7 @@ import type { SystemSaveResult } from "./SystemEditor.js";
 import { BoardRequestError, duplicateDirection, patchDirection, type DirectionPatch } from "./boardApi.js";
 import type { PlacementOptions, PlacementUseInput, ReferenceDetailsInput } from "./referenceApi.js";
 import type { ReferenceLoadStatus } from "./useProjectReferences.js";
+import { getSettings } from "./settingsApi.js";
 
 const emptyFields: ImageFields = { title: "", sourceUrl: null, creator: null, observations: "" };
 type Point = { x: number; y: number };
@@ -60,12 +61,22 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   const [dropping, setDropping] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
   const [viewerScale, setViewerScale] = useState(1);
+  const [maxUploadBytes, setMaxUploadBytes] = useState(UPLOAD_LIMIT_DEFAULT);
   const retryKeys = useRef(new Map<string, string>());
   const canvas = useRef<BoardView | null>(null);
   const root = useRef<HTMLElement>(null);
   const locked = useRef(false);
   const groupWrite = useRef(false);
   const latest = useRef(board); latest.current = board;
+  useEffect(() => {
+    let cancelled = false;
+    void getSettings().then((settings) => {
+      if (!cancelled) setMaxUploadBytes(settings.maxUploadBytes);
+    }).catch(() => {
+      if (!cancelled) setMaxUploadBytes(UPLOAD_LIMIT_DEFAULT);
+    });
+    return () => { cancelled = true; };
+  }, [projectId, refreshKey]);
   const selected = references.find((item) => item.placementId === inspectedId) ?? null;
   const viewed = references.find((item) => item.placementId === viewer) ?? null;
   const ready = board.loaded && status === "ready";
@@ -157,7 +168,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       for (const [index, file] of files.entries()) {
         try {
           if (!isCanvasImage(file)) throw new Error("Only JPEG, PNG, or WebP images can be added. Documents are not supported.");
-          if (file.size > MAX_IMAGE_BYTES) throw new Error(imageTooLargeMessage());
+          if (file.size > maxUploadBytes) throw new Error(imageTooLargeMessage(maxUploadBytes));
           const item = await onAddImage(file, emptyFields);
           placeOnBoard(item, { x: point.x + index % 3 * 290, y: point.y + Math.floor(index / 3) * 340 }); added++;
         } catch (error) { errors.push(`${file.name}: ${error instanceof Error ? error.message : "Could not add this image."}`); }

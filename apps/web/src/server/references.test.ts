@@ -1,8 +1,14 @@
+import { randomFillSync } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_IMAGE_BYTES, type StudioEvent } from "@reference-studio/core";
+import {
+  MAX_IMAGE_BYTES,
+  UPLOAD_LIMIT_MIN,
+  imageTooLargeMessage,
+  type StudioEvent,
+} from "@reference-studio/core";
 import type { FastifyInstance } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
 import sharp from "sharp";
@@ -10,6 +16,7 @@ import { createApp } from "./app.js";
 import type { AppConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { EventHub } from "./events.js";
+import { browserHeaders } from "./test/browserSession.js";
 
 const PNG_1X1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -112,6 +119,28 @@ function multipart(
 function countRows(database: DatabaseSync, table: string): number {
   const row = database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number | bigint };
   return Number(row.count);
+}
+
+async function paddedPng(targetBytes: number): Promise<Buffer> {
+  const base = await sharp({
+    create: { width: 32, height: 32, channels: 3, background: { r: 12, g: 34, b: 56 } },
+  })
+    .png()
+    .toBuffer();
+  if (base.byteLength > targetBytes) {
+    throw new Error(`Base PNG is larger than ${targetBytes} bytes.`);
+  }
+  return Buffer.concat([base, Buffer.alloc(targetBytes - base.byteLength)]);
+}
+
+async function noisePngNear(targetBytes: number): Promise<Buffer> {
+  // Uncompressed noise PNG ~ targetBytes; 5000² ≈ 25 MiB under the 12_000 edge cap.
+  const edge = Math.min(11_000, Math.max(64, Math.round(Math.sqrt(targetBytes / 1.002))));
+  const pixels = Buffer.alloc(edge * edge * 3);
+  randomFillSync(pixels);
+  return sharp(pixels, { raw: { width: edge, height: edge, channels: 3 } })
+    .png({ compressionLevel: 0, effort: 1 })
+    .toBuffer();
 }
 
 describe("reference ingestion", () => {
@@ -282,8 +311,75 @@ describe("reference ingestion", () => {
       payload: huge.payload,
     });
     expect(hugeResponse.statusCode).toBe(400);
-    expect(JSON.stringify(hugeResponse.json())).toContain("20 MB");
+    expect(JSON.stringify(hugeResponse.json())).toContain(imageTooLargeMessage(MAX_IMAGE_BYTES));
     expect(countRows(database, "assets")).toBe(0);
+  });
+
+  it("enforces the configured upload limit without a restart", { timeout: 120_000 }, async () => {
+    const { app } = await startApp();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const setLimit = async (maxUploadBytes: number, expectedRevision: number, key: string) => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/settings",
+        headers: { ...browser, "content-type": "application/json", "idempotency-key": key },
+        payload: { expectedRevision, maxUploadBytes },
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json() as { revision: number };
+    };
+
+    let settings = await setLimit(UPLOAD_LIMIT_MIN, 1, "limit-1mib");
+    const over = multipart(Buffer.alloc(UPLOAD_LIMIT_MIN + 1), "over.bin");
+    const overResponse = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/images`,
+      headers: agentHeaders("over-1mib", { "content-type": over.contentType }),
+      payload: over.payload,
+    });
+    expect(overResponse.statusCode).toBe(400);
+    expect(JSON.stringify(overResponse.json())).toContain(imageTooLargeMessage(UPLOAD_LIMIT_MIN));
+
+    const exactBytes = await paddedPng(UPLOAD_LIMIT_MIN);
+    const exact = multipart(exactBytes, "exact.png");
+    const exactResponse = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/images`,
+      headers: agentHeaders("exact-1mib", { "content-type": exact.contentType }),
+      payload: exact.payload,
+    });
+    expect(exactResponse.statusCode).toBe(201);
+
+    settings = await setLimit(30 * 1024 * 1024, settings.revision, "limit-30mib");
+    const largeBytes = await noisePngNear(25 * 1024 * 1024);
+    expect(largeBytes.byteLength).toBeGreaterThan(20 * 1024 * 1024);
+    expect(largeBytes.byteLength).toBeLessThanOrEqual(30 * 1024 * 1024);
+    const large = multipart(largeBytes, "large.png");
+    const largeResponse = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/images`,
+      headers: agentHeaders("large-25mib", { "content-type": large.contentType }),
+      payload: large.payload,
+    });
+    expect(largeResponse.statusCode).toBe(201);
+
+    const exported = await app.inject({
+      method: "GET",
+      url: `/api/projects/${projectId}/backup`,
+      headers: agentHeaders(),
+    });
+    expect(exported.statusCode).toBe(200);
+    expect(exported.rawPayload.byteLength).toBeLessThanOrEqual(80 * 1024 * 1024);
+    const restoreForm = multipart(exported.rawPayload, "project-backup.zip");
+    const restored = await app.inject({
+      method: "POST",
+      url: "/api/projects/restore",
+      headers: agentHeaders("restore-large", { "content-type": restoreForm.contentType }),
+      payload: restoreForm.payload,
+    });
+    expect(restored.statusCode).toBe(201);
+    expect(settings.revision).toBeGreaterThan(1);
   });
 
   it("does not read a local path and keeps a url as a bookmark", async () => {
