@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createWriteStream, mkdirSync, statfsSync, unlinkSync, type StatsFs } from "node:fs";
+import { createWriteStream, mkdirSync, statfsSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { Transform, type Readable } from "node:stream";
 import { finished, pipeline } from "node:stream/promises";
@@ -19,7 +19,10 @@ export type StreamedUpload = {
   byteSize: number;
 };
 
-export type DiskStatsReader = (dir: string) => Pick<StatsFs, "bavail" | "bsize">;
+export type DiskStatsReader = (dir: string) => {
+  bavail: number | bigint;
+  bsize: number | bigint;
+};
 
 /** Test seam for free-space checks; production uses fs.statfsSync. */
 export let readDiskStats: DiskStatsReader = (dir) => statfsSync(dir);

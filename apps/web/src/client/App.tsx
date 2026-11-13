@@ -3,6 +3,7 @@ import type { UpdateProjectRequest } from "@reference-studio/core";
 import { downloadProjectBackup } from "./projectApi.js";
 import { ProjectScreen } from "./ProjectScreen.js";
 import { StudioButton } from "./StudioButton.js";
+import { StudioSettings } from "./StudioSettings.js";
 import { studioMotionStyle, useStudioReducedMotion } from "./studioMotion.js";
 import { useProjectLibrary } from "./useProjectLibrary.js";
 import { useServiceConnection, type ServiceState } from "./useServiceConnection.js";
@@ -50,6 +51,7 @@ function AppContent() {
   const preview = hash === "#/studio";
   const status = copy[connection.state];
   const reducedMotion = useStudioReducedMotion();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const libraryVisible =
     connection.state === "ready" ||
     connection.state === "reconnecting" ||
@@ -77,8 +79,12 @@ function AppContent() {
     <div className="studio-ui studio-canvas-app" data-reduced-motion={reducedMotion ? "true" : "false"} style={studioMotionStyle(reducedMotion)}>
       <header className="studio-topbar">
         <p className="studio-wordmark">Reference Studio</p>
-        {import.meta.env.DEV ? <a href="#/studio">Interface preview</a> : null}
+        <div className="studio-topbar-actions" style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          {import.meta.env.DEV ? <a href="#/studio">Interface preview</a> : null}
+          <StudioButton onClick={() => setSettingsOpen(true)}>Settings</StudioButton>
+        </div>
       </header>
+      <StudioSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       {connection.state === "reconnecting" ? (
         <div className="studio-banner" role="status">Reconnecting. Current data may be stale.<StudioButton onClick={connection.retry}>Retry connection</StudioButton></div>
       ) : null}
