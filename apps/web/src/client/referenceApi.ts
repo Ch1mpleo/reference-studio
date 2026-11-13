@@ -211,8 +211,8 @@ async function send(
           : { "content-type": "application/json", "idempotency-key": key },
       body: "form" in body ? body.form : JSON.stringify(body.json),
     });
-  } catch (error) {
-    throw error;
+  } catch {
+    throw new ReferenceRequestError("Studio couldn't reach the service.", "network");
   }
   keyMemory = null;
   if (!response.ok) {

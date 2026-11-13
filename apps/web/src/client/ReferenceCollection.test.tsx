@@ -293,7 +293,7 @@ describe("ReferenceCollection", () => {
 
   it("shows a network failure without creating a link", async () => {
     const onAddUrlImage = vi.fn(async () => {
-      throw new TypeError("Failed to fetch");
+      throw new ReferenceRequestError("Studio couldn't reach the service.", "network");
     });
     const onAddLink = vi.fn();
     const view = await render(
@@ -324,6 +324,43 @@ describe("ReferenceCollection", () => {
     expect(status?.textContent).toContain("Studio couldn't reach the service.");
     expect(status?.textContent?.includes("Failed to fetch")).toBe(false);
     expect(status?.textContent?.includes("Saved as a link")).toBe(false);
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("does not treat a client TypeError as a network failure", async () => {
+    const onAddUrlImage = vi.fn(async () => {
+      throw new TypeError("Cannot read properties of undefined");
+    });
+    const onAddLink = vi.fn();
+    const view = await render(
+      createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        refreshKey: 0,
+        references: [],
+        notice: null,
+        onRetryReferences: vi.fn(),
+        onAddImage: vi.fn(),
+        onAddLink,
+        onAddUrlImage,
+        onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
+        onPlace: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { files: [], getData: () => "https://example.com/photo.png" },
+      });
+      document.dispatchEvent(event);
+    });
+    expect(onAddLink).not.toHaveBeenCalled();
+    const status = view.container.querySelector(".canvas-status");
+    expect(status?.textContent).toContain("Cannot read properties of undefined");
+    expect(status?.textContent?.includes("Studio couldn't reach the service.")).toBe(false);
     await act(async () => {
       view.root.unmount();
     });

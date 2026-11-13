@@ -243,7 +243,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
             setMessage(`Saved as a link: ${urlImageFallbackReason(error.reason, maxUploadBytes)}`);
             return;
           }
-          if (error instanceof TypeError) {
+          if (error instanceof ReferenceRequestError && error.code === "network") {
             setMessage("Studio couldn't reach the service.");
             return;
           }

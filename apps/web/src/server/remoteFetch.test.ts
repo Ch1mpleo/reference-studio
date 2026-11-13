@@ -487,6 +487,44 @@ describe("fetchRemoteImageToTemp", () => {
     expectIncomingEmpty(dataDir);
   });
 
+  it("maps 4 clean-ended body bytes to not_an_image", async () => {
+    const dataDir = tempDir();
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "content-length": 4,
+      });
+      response.end(PNG_1X1.subarray(0, 4));
+    });
+    await expect(
+      fetchRemoteImageToTemp(`${origin}/short-clean`, {
+        dataDir,
+        maxBytes: 1024 * 1024,
+        isBlocked: allowLoopback,
+      }),
+    ).rejects.toMatchObject({ details: { reason: "not_an_image" } });
+    expectIncomingEmpty(dataDir);
+  });
+
+  it("maps an empty 200 to not_an_image", async () => {
+    const dataDir = tempDir();
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "content-length": 0,
+      });
+      response.end();
+    });
+    await expect(
+      fetchRemoteImageToTemp(`${origin}/empty`, {
+        dataDir,
+        maxBytes: 1024 * 1024,
+        isBlocked: allowLoopback,
+      }),
+    ).rejects.toMatchObject({ details: { reason: "not_an_image" } });
+    expectIncomingEmpty(dataDir);
+  });
+
   it.each([1, 4, 11])(
     "maps %s body bytes then a reset to url_fetch_failed without starving the loop",
     async (byteCount) => {

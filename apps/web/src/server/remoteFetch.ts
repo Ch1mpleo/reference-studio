@@ -518,11 +518,6 @@ async function readExact(
     if (state.timedOut || signal.aborted) {
       throw timeoutError();
     }
-    // A destroyed/errored response can leave readableEnded false while read()
-    // returns null forever; bail before waiting so the event loop stays live.
-    if (response.destroyed || response.errored) {
-      throw fetchFailedError();
-    }
     const chunk = response.read(size - total);
     if (chunk !== null) {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
@@ -530,8 +525,14 @@ async function readExact(
       total += buffer.byteLength;
       continue;
     }
-    if (response.readableEnded) {
+    // Clean EOF (short body / empty 200) before treating destroy as a fetch failure.
+    if (response.readableEnded || response.complete) {
       break;
+    }
+    // A destroyed/errored response can leave readableEnded false while read()
+    // returns null forever; bail before waiting so the event loop stays live.
+    if (response.destroyed || response.errored) {
+      throw fetchFailedError();
     }
     await new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -539,7 +540,7 @@ async function readExact(
         response.off("readable", onReadable);
         response.off("end", onEnd);
         response.off("error", onFailed);
-        response.off("close", onFailed);
+        response.off("close", onClose);
         response.off("aborted", onFailed);
         signal.removeEventListener("abort", onAbort);
       };
@@ -563,12 +564,27 @@ async function readExact(
           setImmediate(resolve);
         });
       };
+      const onClose = (): void => {
+        if (response.complete) {
+          finish(() => {
+            setImmediate(resolve);
+          });
+          return;
+        }
+        finish(() => reject(fetchFailedError()));
+      };
       const onFailed = (): void => {
         finish(() => reject(fetchFailedError()));
       };
       const onAbort = (): void => {
         finish(() => reject(timeoutError()));
       };
+      if (response.readableEnded || response.complete) {
+        finish(() => {
+          setImmediate(resolve);
+        });
+        return;
+      }
       if (response.destroyed || response.errored) {
         finish(() => reject(fetchFailedError()));
         return;
@@ -576,7 +592,7 @@ async function readExact(
       response.on("readable", onReadable);
       response.on("end", onEnd);
       response.on("error", onFailed);
-      response.on("close", onFailed);
+      response.on("close", onClose);
       response.on("aborted", onFailed);
       signal.addEventListener("abort", onAbort, { once: true });
     });
