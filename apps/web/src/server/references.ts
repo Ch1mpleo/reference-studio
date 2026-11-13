@@ -238,9 +238,21 @@ export function registerReferenceRoutes(
     if (remoteFetch?.isBlocked !== undefined) {
       fetchOptions.isBlocked = remoteFetch.isBlocked;
     }
+    if (remoteFetch?.allowLoopbackPort !== undefined) {
+      fetchOptions.allowLoopbackPort = remoteFetch.allowLoopbackPort;
+    }
     if (remoteFetch?.resolver !== undefined) {
       fetchOptions.resolver = remoteFetch.resolver;
     }
+
+    const disconnect = new AbortController();
+    const onClientClose = (): void => {
+      if (!reply.sent) {
+        disconnect.abort();
+      }
+    };
+    request.raw.on("close", onClientClose);
+    fetchOptions.signal = disconnect.signal;
 
     let fetched: FetchedRemoteImage | undefined;
     let paths: { originalPath: string; thumbnailPath: string } | undefined;
@@ -302,6 +314,7 @@ export function registerReferenceRoutes(
       }
       throw error;
     } finally {
+      request.raw.off("close", onClientClose);
       if (paths !== undefined && !released) {
         releasePublishedPath(paths.originalPath);
         releasePublishedPath(paths.thumbnailPath);
@@ -549,7 +562,13 @@ async function readImageUpload(
 function titleFromRemoteUrl(finalUrl: string): string {
   try {
     const url = new URL(finalUrl);
-    const segment = decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "");
+    const rawSegment = url.pathname.split("/").filter(Boolean).pop() ?? "";
+    let segment = "";
+    try {
+      segment = decodeURIComponent(rawSegment);
+    } catch {
+      segment = "";
+    }
     const withoutExtension = segment.replace(/\.[^.]+$/, "").replace(/^\.+/, "").trim();
     if (withoutExtension !== "") {
       return withoutExtension.slice(0, 200);

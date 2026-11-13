@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { createReadStream, existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,7 +8,6 @@ import type { FastifyInstance } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
-const clientDir = path.join(repoRoot, "apps/web/dist/client");
 
 export class IsolatedServer {
   private child: ChildProcess | undefined;
@@ -42,19 +41,16 @@ export class IsolatedServer {
   }
 
   /**
-   * In-process Studio with a test-only loopback allow for one URL-image fake
-   * server. Never controlled by a production env var.
-   *
-   * Serves the built client from this bootstrap (serveClient stays false) so
-   * API errors keep the ServiceError envelope; the production serveClient path
-   * still has the known Fastify default-error-shape issue.
+   * In-process Studio with a test-only loopback allow for the fake image
+   * server. Uses the real production serveClient path. Never controlled by a
+   * production env var.
    */
-  static async createAllowingLoopbackFetch(): Promise<IsolatedServer> {
+  static async createAllowingLoopbackFetch(loopbackPort?: number): Promise<IsolatedServer> {
     const dataDir = mkdtempSync(path.join(tmpdir(), "reference-studio-e2e-url-"));
     const port = await freePort();
     const server = new IsolatedServer(dataDir, port);
     try {
-      await server.startInProcessAllowingLoopback();
+      await server.startInProcessAllowingLoopback(loopbackPort);
     } catch (error) {
       await server.dispose();
       throw error;
@@ -84,7 +80,7 @@ export class IsolatedServer {
     }
   }
 
-  private async startInProcessAllowingLoopback(): Promise<void> {
+  private async startInProcessAllowingLoopback(loopbackPort?: number): Promise<void> {
     if (this.child !== undefined || this.inProcess !== undefined) {
       throw new Error("The isolated service is already running.");
     }
@@ -99,18 +95,21 @@ export class IsolatedServer {
       ...process.env,
       REFERENCE_STUDIO_DATA_DIR: this.dataDir,
       REFERENCE_STUDIO_PORT: String(this.port),
-      REFERENCE_STUDIO_SERVE_CLIENT: "0",
+      REFERENCE_STUDIO_SERVE_CLIENT: "1",
       REFERENCE_STUDIO_LOG_LEVEL: "silent",
     });
     const database = openDatabase(config.dataDir);
+    const remoteFetch =
+      loopbackPort !== undefined
+        ? { allowLoopbackPort: loopbackPort }
+        : {
+            isBlocked: (ip: string) => ip !== "127.0.0.1" && isBlockedAddress(ip),
+          };
     const app = await createApp({
       config,
       database,
-      remoteFetch: {
-        isBlocked: (ip: string) => ip !== "127.0.0.1" && isBlockedAddress(ip),
-      },
+      remoteFetch,
     });
-    registerTestClientFiles(app);
     await app.listen({ host: config.host, port: config.port });
     this.inProcess = { app, database };
     await waitForHealthUrl(this.origin);
@@ -136,36 +135,6 @@ export class IsolatedServer {
     await this.stop();
     rmSync(this.dataDir, { recursive: true, force: true });
   }
-}
-
-/** Test-only static client serving that does not use production serveClient. */
-function registerTestClientFiles(app: FastifyInstance): void {
-  app.setNotFoundHandler((request, reply) => {
-    if (request.url.startsWith("/api")) {
-      return reply.code(404).send({
-        error: { code: "not_found", message: "Not found." },
-      });
-    }
-    const urlPath = (request.url.split("?")[0] ?? "/").replace(/\\/g, "/");
-    const relative = urlPath === "/" ? "index.html" : urlPath.replace(/^\//, "");
-    const filePath = path.normalize(path.join(clientDir, relative));
-    if (!filePath.startsWith(clientDir) || !existsSync(filePath) || !statSync(filePath).isFile()) {
-      const index = path.join(clientDir, "index.html");
-      return reply.type("text/html").send(createReadStream(index));
-    }
-    const extension = path.extname(filePath).toLowerCase();
-    const type =
-      extension === ".html"
-        ? "text/html"
-        : extension === ".js"
-          ? "text/javascript"
-          : extension === ".css"
-            ? "text/css"
-            : extension === ".svg"
-              ? "image/svg+xml"
-              : "application/octet-stream";
-    return reply.type(type).send(createReadStream(filePath));
-  });
 }
 
 function freePort(): Promise<number> {

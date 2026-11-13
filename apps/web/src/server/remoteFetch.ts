@@ -41,6 +41,7 @@ const ipv6BlockedInsidePublic = new BlockList();
 ipv6BlockedInsidePublic.addSubnet("2001::", 32, "ipv6");
 ipv6BlockedInsidePublic.addSubnet("2001:db8::", 32, "ipv6");
 ipv6BlockedInsidePublic.addSubnet("2002::", 16, "ipv6");
+ipv6BlockedInsidePublic.addSubnet("3fff::", 20, "ipv6");
 
 export type AddressResolver = (
   host: string,
@@ -52,6 +53,10 @@ export type FetchRemoteImageOptions = {
   maxBytes: number;
   resolver?: AddressResolver;
   isBlocked?: (ip: string) => boolean;
+  /** Test-only: allow 127.0.0.1 only when the URL port matches. */
+  allowLoopbackPort?: number;
+  /** Combined with the total timeout via AbortSignal.any. */
+  signal?: AbortSignal;
   /** Test-only timing overrides. */
   timeouts?: { totalMs?: number; connectMs?: number; idleMs?: number };
   /** Test-only observation of the pinned connection. */
@@ -72,6 +77,7 @@ export type RemoteFetchDependencies = {
     options: FetchRemoteImageOptions,
   ) => Promise<FetchedRemoteImage>;
   isBlocked?: (ip: string) => boolean;
+  allowLoopbackPort?: number;
   resolver?: AddressResolver;
 };
 
@@ -153,18 +159,29 @@ export async function fetchRemoteImageToTemp(
   raw: string,
   options: FetchRemoteImageOptions,
 ): Promise<FetchedRemoteImage> {
-  const isBlocked = options.isBlocked ?? isBlockedAddress;
+  const baseBlocked = options.isBlocked ?? isBlockedAddress;
   const resolver = options.resolver ?? dns.lookup;
   const totalMs = options.timeouts?.totalMs ?? TOTAL_MS;
   const connectMs = options.timeouts?.connectMs ?? CONNECT_MS;
   const idleMs = options.timeouts?.idleMs ?? IDLE_MS;
-  const signal = AbortSignal.timeout(totalMs);
+  const timeoutSignal = AbortSignal.timeout(totalMs);
+  const signal =
+    options.signal !== undefined ? AbortSignal.any([timeoutSignal, options.signal]) : timeoutSignal;
 
   let url = assertFetchableUrl(raw);
   let hops = 0;
   let tempPath: string | undefined;
   let activeRequest: http.ClientRequest | undefined;
   let activeResponse: http.IncomingMessage | undefined;
+  const state = { timedOut: false };
+
+  const isBlockedForUrl = (ip: string): boolean => {
+    if (options.allowLoopbackPort !== undefined && ip === "127.0.0.1") {
+      const port = url.port === "" ? (url.protocol === "https:" ? 443 : 80) : Number(url.port);
+      return port !== options.allowLoopbackPort;
+    }
+    return baseBlocked(ip);
+  };
 
   const cleanupNetwork = (): void => {
     if (activeResponse !== undefined && !activeResponse.destroyed) {
@@ -180,13 +197,14 @@ export async function fetchRemoteImageToTemp(
       if (signal.aborted) {
         throw timeoutError();
       }
-      const { address, family } = await resolvePublicAddress(url.hostname, resolver, isBlocked);
+      const { address, family } = await resolvePublicAddress(url.hostname, resolver, isBlockedForUrl);
       const response = await openPinnedRequest(url, {
         address,
         family,
         signal,
         connectMs,
         idleMs,
+        state,
         onRequest: (request) => {
           activeRequest = request;
         },
@@ -251,7 +269,7 @@ export async function fetchRemoteImageToTemp(
         }
       }
 
-      const head = await readExact(response, MAGIC_BYTES, signal);
+      const head = await readExact(response, MAGIC_BYTES, signal, state);
       if (!isImageMagic(head)) {
         drainAndDestroy(response);
         activeResponse = undefined;
@@ -305,10 +323,15 @@ export async function fetchRemoteImageToTemp(
     if (tempPath !== undefined) {
       unlinkQuietly(tempPath);
     }
-    if (signal.aborted || isAbortError(error)) {
+    if (state.timedOut || signal.aborted || isAbortError(error)) {
       throw timeoutError();
     }
-    throw error;
+    if (error instanceof ServiceError) {
+      throw error;
+    }
+    throw new ServiceError("validation", "That URL cannot be fetched.", {
+      reason: "url_fetch_failed",
+    });
   } finally {
     cleanupNetwork();
   }
@@ -316,6 +339,12 @@ export async function fetchRemoteImageToTemp(
 
 function timeoutError(): ServiceError {
   return new ServiceError("validation", "That URL timed out.", { reason: "url_timeout" });
+}
+
+function fetchFailedError(): ServiceError {
+  return new ServiceError("validation", "That URL cannot be fetched.", {
+    reason: "url_fetch_failed",
+  });
 }
 
 function isRedirectStatus(status: number | undefined): boolean {
@@ -330,6 +359,7 @@ function openPinnedRequest(
     signal: AbortSignal;
     connectMs: number;
     idleMs: number;
+    state: { timedOut: boolean };
     onRequest: (request: http.ClientRequest) => void;
   },
 ): Promise<http.IncomingMessage> {
@@ -339,10 +369,11 @@ function openPinnedRequest(
       return;
     }
 
+    const hostLiteral = url.hostname.replace(/^\[|\]$/g, "");
     const transport = url.protocol === "https:" ? https : http;
     const requestOptions: http.RequestOptions = {
       protocol: url.protocol,
-      hostname: url.hostname.replace(/^\[|\]$/g, ""),
+      hostname: hostLiteral,
       port: url.port === "" ? undefined : Number(url.port),
       path: `${url.pathname}${url.search}`,
       method: "GET",
@@ -370,30 +401,42 @@ function openPinnedRequest(
         );
       },
     };
-    if (url.protocol === "https:") {
-      (requestOptions as https.RequestOptions).servername = url.hostname.replace(/^\[|\]$/g, "");
+    if (url.protocol === "https:" && isIP(hostLiteral) === 0) {
+      (requestOptions as https.RequestOptions).servername = hostLiteral;
     }
 
-    const request = transport.request(requestOptions, (response) => {
+    let settled = false;
+    const settleReject = (error: unknown): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(error);
+    };
+    const settleResolve = (response: http.IncomingMessage): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       resolve(response);
+    };
+
+    const request = transport.request(requestOptions, (response) => {
+      settleResolve(response);
     });
     options.onRequest(request);
 
     const fail = (error: unknown): void => {
       request.destroy();
-      if (isAbortError(error) || (error instanceof Error && error.name === "AbortError")) {
-        reject(timeoutError());
+      if (options.state.timedOut || isAbortError(error) || (error instanceof Error && error.name === "AbortError")) {
+        settleReject(timeoutError());
         return;
       }
       if (error instanceof ServiceError) {
-        reject(error);
+        settleReject(error);
         return;
       }
-      reject(
-        new ServiceError("validation", "That URL cannot be fetched.", {
-          reason: "url_fetch_failed",
-        }),
-      );
+      settleReject(fetchFailedError());
     };
 
     request.on("error", fail);
@@ -401,7 +444,7 @@ function openPinnedRequest(
       "abort",
       () => {
         request.destroy();
-        reject(timeoutError());
+        settleReject(timeoutError());
       },
       { once: true },
     );
@@ -417,8 +460,9 @@ function openPinnedRequest(
         socket.once("connect", armIdle);
       }
       socket.on("timeout", () => {
+        options.state.timedOut = true;
         request.destroy();
-        reject(timeoutError());
+        settleReject(timeoutError());
       });
     });
 
@@ -466,11 +510,12 @@ async function readExact(
   response: http.IncomingMessage,
   size: number,
   signal: AbortSignal,
+  state: { timedOut: boolean },
 ): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let total = 0;
   while (total < size) {
-    if (signal.aborted) {
+    if (state.timedOut || signal.aborted) {
       throw timeoutError();
     }
     const chunk = response.read(size - total);

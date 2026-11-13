@@ -1629,7 +1629,7 @@ describe("POST /api/projects/:projectId/references/url-image", () => {
     assetDirsEmpty(config.dataDir);
   });
 
-  it("rejects a 12,001 px PNG as validation", async () => {
+  it("rejects a 12,001 px PNG as image_too_large_pixels", async () => {
     const wide = await sharp({
       create: { width: 12_001, height: 10, channels: 3, background: { r: 1, g: 2, b: 3 } },
     })
@@ -1646,12 +1646,81 @@ describe("POST /api/projects/:projectId/references/url-image", () => {
       payload: { url: `${origin}/wide.png` },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: { code: "validation" } });
+    expect(response.json()).toMatchObject({
+      error: { code: "validation", details: { reason: "image_too_large_pixels" } },
+    });
     const count = database.prepare('SELECT COUNT(*) AS c FROM "references"').get() as {
       c: number | bigint;
     };
     expect(Number(count.c)).toBe(0);
     assetDirsEmpty(config.dataDir);
+  });
+
+  it("uses the hostname when the last path segment is a malformed percent-encoding", async () => {
+    const { origin } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "bad-percent" },
+      payload: { url: `${origin}/%E0.png` },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      reference: { title: "127.0.0.1" },
+    });
+  });
+
+  it("cancels the remote fetch when the client disconnects and leaves no temp or reference", {
+    timeout: 30_000,
+  }, async () => {
+    const { origin } = await listenPngServer(() => "hang");
+    const { app, config, database } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const incoming = incomingUploadsDir(config.dataDir);
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("Expected a TCP address.");
+    }
+    const payload = JSON.stringify({ url: `${origin}/hang.png` });
+    await new Promise<void>((resolve) => {
+      const req = httpRequest(
+        {
+          host: "127.0.0.1",
+          port: address.port,
+          method: "POST",
+          path: `/api/projects/${projectId}/references/url-image`,
+          headers: {
+            host,
+            cookie: browser.cookie,
+            "sec-fetch-site": "same-origin",
+            "content-type": "application/json",
+            "idempotency-key": "client-disconnect",
+            "content-length": String(Buffer.byteLength(payload)),
+          },
+        },
+        (response) => {
+          response.resume();
+          resolve();
+        },
+      );
+      req.on("error", () => resolve());
+      req.write(payload);
+      req.end();
+      setTimeout(() => {
+        req.destroy(new Error("aborted"));
+      }, 50);
+    });
+    await expect.poll(() => readdirSync(incoming), { timeout: 5_000 }).toEqual([]);
+    const count = database.prepare('SELECT COUNT(*) AS c FROM "references"').get() as {
+      c: number | bigint;
+    };
+    expect(Number(count.c)).toBe(0);
+    await app.close();
   });
 
   it("refuses a 2 MiB image when the limit is 1 MiB", async () => {

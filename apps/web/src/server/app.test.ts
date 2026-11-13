@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { healthResponseSchema } from "@reference-studio/core";
+import { healthResponseSchema, ServiceError } from "@reference-studio/core";
 import type { FastifyInstance } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
 import { createApp } from "./app.js";
@@ -10,6 +11,7 @@ import type { AppConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { publishChange } from "./app.js";
 import { EventHub } from "./events.js";
+import { browserHeaders } from "./test/browserSession.js";
 
 const directories: string[] = [];
 const closers: Array<() => void> = [];
@@ -81,6 +83,30 @@ afterEach(async () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+function ensureClientBundle(): void {
+  const clientDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../dist/client");
+  mkdirSync(clientDir, { recursive: true });
+  writeFileSync(path.join(clientDir, "index.html"), "<!doctype html><title>Studio</title>");
+}
+
+async function startServeClientApp(remoteFetch?: {
+  fetchRemoteImageToTemp?: () => Promise<never>;
+}): Promise<{
+  app: FastifyInstance;
+  database: DatabaseSync;
+  config: AppConfig;
+}> {
+  ensureClientBundle();
+  const dataDir = tempDir();
+  const database = openDatabase(dataDir);
+  const config = { ...testConfig(dataDir), serveClient: true };
+  const app = await createApp({ config, database, hub: new EventHub(), remoteFetch });
+  closers.push(() => {
+    database.close();
+  });
+  return { app, database, config };
+}
 
 describe("application service", () => {
   it("reports health for an allowed local host", async () => {
@@ -194,5 +220,77 @@ describe("application service", () => {
     expect(nextEvents.status).toBe(200);
     await nextEvents.body?.cancel();
     await restarted.close();
+  });
+});
+
+describe("serveClient ServiceError envelope", () => {
+  it("returns the {error:{code,message,details}} shape for validation, not-found, forbidden, and storage_full", async () => {
+    const { app } = await startServeClientApp({
+      fetchRemoteImageToTemp: async () => {
+        throw new ServiceError("storage_full", "Not enough free disk space for this upload.");
+      },
+    });
+    const browser = await browserHeaders(app);
+
+    const validation = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "bad-project" },
+      payload: { name: "" },
+    });
+    expect(validation.statusCode).toBe(400);
+    expect(validation.json()).toMatchObject({
+      error: { code: "validation", message: expect.any(String) },
+    });
+    expect(validation.json().error).toEqual(
+      expect.objectContaining({ code: "validation", message: expect.any(String) }),
+    );
+
+    const missing = await app.inject({
+      method: "GET",
+      url: "/api/assets/00000000-0000-4000-8000-000000000099/thumbnail",
+      headers: browser,
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toMatchObject({
+      error: { code: "not_found", message: expect.any(String) },
+    });
+
+    const forbidden = await app.inject({
+      method: "PUT",
+      url: "/api/settings",
+      headers: {
+        host: "127.0.0.1:4317",
+        authorization: "Bearer local-test-token",
+        "content-type": "application/json",
+        "idempotency-key": "agent-settings",
+      },
+      payload: { expectedRevision: 1, maxUploadBytes: 2 * 1024 * 1024 },
+    });
+    expect(forbidden.statusCode).toBe(403);
+    expect(forbidden.json()).toMatchObject({
+      error: { code: "forbidden", message: expect.any(String) },
+    });
+
+    const project = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "url-project" },
+      payload: { name: "Envelope" },
+    });
+    expect(project.statusCode).toBe(201);
+    const projectId = (project.json() as { id: string }).id;
+    const storage = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-image`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "storage-full" },
+      payload: { url: "https://example.com/photo.png" },
+    });
+    expect(storage.statusCode).toBe(507);
+    expect(storage.json()).toMatchObject({
+      error: { code: "storage_full", message: expect.any(String) },
+    });
+
+    await app.close();
   });
 });

@@ -129,6 +129,7 @@ describe("isBlockedAddress IPv6", () => {
     ["::ffff:10.0.0.1", "v4-mapped private"],
     ["64:ff9b::a00:1", "nat64 private"],
     ["2002:7f00:1::", "6to4"],
+    ["3fff::1", "rfc9637"],
   ])("blocks %s (%s)", (ip) => {
     expect(isBlockedAddress(ip)).toBe(true);
   });
@@ -441,6 +442,49 @@ describe("fetchRemoteImageToTemp", () => {
         timeouts: { totalMs: 100, connectMs: 50, idleMs: 50 },
       }),
     ).rejects.toMatchObject({ details: { reason: "url_timeout" } });
+  });
+
+  it("times out when headers arrive then the body stalls and leaves no temp", async () => {
+    const dataDir = tempDir();
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "content-length": 1024,
+      });
+      // Headers only; never write the body.
+    });
+    await expect(
+      fetchRemoteImageToTemp(`${origin}/stall`, {
+        dataDir,
+        maxBytes: 1024 * 1024,
+        isBlocked: allowLoopback,
+        timeouts: { totalMs: 5_000, connectMs: 500, idleMs: 80 },
+      }),
+    ).rejects.toMatchObject({ details: { reason: "url_timeout" } });
+    expectIncomingEmpty(dataDir);
+  });
+
+  it("maps a mid-body socket destroy to url_fetch_failed and leaves no temp", async () => {
+    const dataDir = tempDir();
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "transfer-encoding": "chunked",
+      });
+      response.write(PNG_1X1.subarray(0, 16));
+      setTimeout(() => {
+        response.destroy();
+      }, 20);
+    });
+    await expect(
+      fetchRemoteImageToTemp(`${origin}/reset`, {
+        dataDir,
+        maxBytes: 1024 * 1024,
+        isBlocked: allowLoopback,
+        timeouts: { totalMs: 5_000, connectMs: 500, idleMs: 2_000 },
+      }),
+    ).rejects.toMatchObject({ details: { reason: "url_fetch_failed" } });
+    expectIncomingEmpty(dataDir);
   });
 
   it("times out a drip feed past the total budget and removes the temp", async () => {

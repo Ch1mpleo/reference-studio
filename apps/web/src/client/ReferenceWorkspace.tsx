@@ -40,6 +40,8 @@ const URL_IMAGE_FALLBACK_REASONS = new Set([
   "url_fetch_failed",
   "url_timeout",
   "image_too_large",
+  "image_too_large_pixels",
+  "image_unreadable",
 ]);
 type Point = { x: number; y: number };
 type Panel = "library" | "inspect" | "systems" | null;
@@ -223,20 +225,12 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
           placeOnBoard(item, center());
           if (edit) setEditingId(item.placementId);
         } catch (error) {
-          if (error instanceof ReferenceRequestError && error.code === "storage_full") {
-            setMessage(error.message);
-            return;
-          }
-          // Fall back to a link for fetch failures. Prefer the service reason when the
-          // ServiceError envelope is intact; the production serveClient path can still
-          // omit details (pre-existing Fastify error shape), so paste still saves a link.
-          const reason =
+          if (
             error instanceof ReferenceRequestError &&
+            error.code === "validation" &&
             error.reason !== undefined &&
             URL_IMAGE_FALLBACK_REASONS.has(error.reason)
-              ? error.reason
-              : undefined;
-          try {
+          ) {
             const item = await onAddLink({
               url: trimmed,
               title: "",
@@ -246,22 +240,10 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
             });
             placeOnBoard(item, center());
             if (edit) setEditingId(item.placementId);
-            setMessage(
-              `Saved as a link: ${
-                reason !== undefined
-                  ? urlImageFallbackReason(reason, maxUploadBytes)
-                  : "the image couldn't be fetched."
-              }`,
-            );
-          } catch (linkError) {
-            setMessage(
-              linkError instanceof Error
-                ? linkError.message
-                : error instanceof Error
-                  ? error.message
-                  : "Could not add the reference.",
-            );
+            setMessage(`Saved as a link: ${urlImageFallbackReason(error.reason, maxUploadBytes)}`);
+            return;
           }
+          setMessage(error instanceof Error ? error.message : "Could not add the reference.");
         } finally {
           setFetchingImage(false);
         }
@@ -403,6 +385,12 @@ function urlImageFallbackReason(reason: string, maxUploadBytes: number): string 
   }
   if (reason === "image_too_large") {
     return imageTooLargeMessage(maxUploadBytes);
+  }
+  if (reason === "image_too_large_pixels") {
+    return "that image is larger than 12,000 px per side.";
+  }
+  if (reason === "image_unreadable") {
+    return "that file couldn't be read as an image.";
   }
   return "the image couldn't be fetched.";
 }

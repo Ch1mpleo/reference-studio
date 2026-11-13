@@ -53,7 +53,7 @@ test.beforeAll(async () => {
   }
   imageOrigin = `http://127.0.0.1:${address.port}`;
 
-  server = await IsolatedServer.createAllowingLoopbackFetch();
+  server = await IsolatedServer.createAllowingLoopbackFetch(address.port);
 });
 
 test.afterAll(async () => {
@@ -173,4 +173,21 @@ test("pastes an oversized image URL as a link with the size message", async ({ p
   await expect(page.locator(".canvas-status")).toContainText(
     `Saved as a link: ${imageTooLargeMessage(UPLOAD_LIMIT_MIN)}`,
   );
+});
+
+test("shows Image could not be read when dropping an invalid image", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.origin);
+  await createProject(page, "Invalid drop");
+  const dataTransfer = await page.evaluateHandle(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([new Uint8Array([1, 2, 3, 4])], "notes.png", { type: "image/png" }));
+    return transfer;
+  });
+  await page
+    .getByRole("region", { name: "Project canvas" })
+    .dispatchEvent("drop", { dataTransfer, clientX: 240, clientY: 240 });
+  await dataTransfer.dispose();
+  await expect(page.locator(".canvas-status")).toContainText("Image could not be read.");
 });

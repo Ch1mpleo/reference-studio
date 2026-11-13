@@ -242,6 +242,127 @@ describe("ReferenceCollection", () => {
       view.root.unmount();
     });
   });
+
+  it.each([
+    ["storage_full", "Not enough free disk space for this upload.", undefined],
+    ["internal", "The reference request failed.", undefined],
+    ["forbidden", "URL image import is available to the Studio browser only.", undefined],
+    ["unauthorized", "Authentication is required.", undefined],
+    ["conflict", "This idempotency key was already used for a different request.", "idempotency_mismatch"],
+    ["validation", "URL image details are invalid.", undefined],
+  ] as const)(
+    "shows %s without creating a link when url-image fails",
+    async (code, message, reason) => {
+      const onAddUrlImage = vi.fn(async () => {
+        throw new ReferenceRequestError(message, code, undefined, reason);
+      });
+      const onAddLink = vi.fn();
+      const view = await render(
+        createElement(ReferenceCollection, {
+          projectId: "00000000-0000-4000-8000-000000000001",
+          refreshKey: 0,
+          references: [],
+          notice: null,
+          onRetryReferences: vi.fn(),
+          onAddImage: vi.fn(),
+          onAddLink,
+          onAddUrlImage,
+          onAddNote: vi.fn(),
+          onSaveDetails: vi.fn(),
+          onSavePlacement: vi.fn(),
+          onPlace: vi.fn(),
+        }),
+      );
+      await act(async () => {
+        const event = new Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "clipboardData", {
+          value: { files: [], getData: () => "https://example.com/photo.png" },
+        });
+        document.dispatchEvent(event);
+      });
+      expect(onAddUrlImage).toHaveBeenCalled();
+      expect(onAddLink).not.toHaveBeenCalled();
+      const status = view.container.querySelector(".canvas-status");
+      expect(status?.textContent).toContain(message);
+      expect(status?.textContent?.includes("Saved as a link")).toBe(false);
+      await act(async () => {
+        view.root.unmount();
+      });
+    },
+  );
+
+  it("shows a network failure without creating a link", async () => {
+    const onAddUrlImage = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const onAddLink = vi.fn();
+    const view = await render(
+      createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        refreshKey: 0,
+        references: [],
+        notice: null,
+        onRetryReferences: vi.fn(),
+        onAddImage: vi.fn(),
+        onAddLink,
+        onAddUrlImage,
+        onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
+        onPlace: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { files: [], getData: () => "https://example.com/photo.png" },
+      });
+      document.dispatchEvent(event);
+    });
+    expect(onAddLink).not.toHaveBeenCalled();
+    const status = view.container.querySelector(".canvas-status");
+    expect(status?.textContent).toContain("Failed to fetch");
+    expect(status?.textContent?.includes("Saved as a link")).toBe(false);
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("does not create a duplicate link when a later network error follows a successful url-image", async () => {
+    // Covered by the strict fallback rule: only validation+reason creates a link.
+    // A post-commit network failure on a retry presents as internal/TypeError and must not addLink.
+    const onAddUrlImage = vi.fn(async () => {
+      throw new ReferenceRequestError("The reference request failed.", "internal");
+    });
+    const onAddLink = vi.fn();
+    const view = await render(
+      createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        refreshKey: 0,
+        references: [],
+        notice: null,
+        onRetryReferences: vi.fn(),
+        onAddImage: vi.fn(),
+        onAddLink,
+        onAddUrlImage,
+        onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
+        onPlace: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { files: [], getData: () => "https://example.com/already-stored.png" },
+      });
+      document.dispatchEvent(event);
+    });
+    expect(onAddLink).not.toHaveBeenCalled();
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
 });
 
 function pasteEvent(file: File): Event {

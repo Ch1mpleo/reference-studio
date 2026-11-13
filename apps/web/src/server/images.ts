@@ -52,13 +52,17 @@ export async function inspectImage(
   const rawWidth = metadata.width;
   const rawHeight = metadata.height;
   if (rawWidth === undefined || rawHeight === undefined || rawWidth < 1 || rawHeight < 1) {
-    throw new ServiceError("validation", "Image could not be read.");
+    throw new ServiceError("validation", "Image could not be read.", {
+      reason: "image_unreadable",
+    });
   }
   const turned = metadata.orientation !== undefined && metadata.orientation >= 5;
   const width = turned ? rawHeight : rawWidth;
   const height = turned ? rawWidth : rawHeight;
   if (width > MAX_IMAGE_EDGE || height > MAX_IMAGE_EDGE) {
-    throw new ServiceError("validation", imageEdgeMessage());
+    throw new ServiceError("validation", imageEdgeMessage(), {
+      reason: "image_too_large_pixels",
+    });
   }
 
   let thumbnail: Buffer;
@@ -121,7 +125,11 @@ function imageReadError(error: unknown): ServiceError {
   }
   const message = error instanceof Error ? error.message : "";
   if (message.includes("pixel limit")) {
-    return new ServiceError("validation", imageEdgeMessage());
+    return new ServiceError("validation", imageEdgeMessage(), {
+      reason: "image_too_large_pixels",
+    });
   }
-  return new ServiceError("validation", "Image could not be read.");
+  return new ServiceError("validation", "Image could not be read.", {
+    reason: "image_unreadable",
+  });
 }
