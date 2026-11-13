@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CONTRACT_VERSION } from "@reference-studio/core";
+import { CONTRACT_VERSION, connectionRecordSchema, type ConnectionRecord } from "@reference-studio/core";
 import { ensureSessionKey, ensureToken } from "./auth.js";
 
 export type AppConfig = {
@@ -64,20 +64,13 @@ export function writeConnectionFile(config: AppConfig): void {
   renameSync(temporary, file);
 }
 
-export type ConnectionRecord = {
-  pid: number;
-  port: number;
-  contractVersion: number;
-  baseUrl: string;
-};
+export type { ConnectionRecord };
 
 export function readConnectionFile(dataDir: string): ConnectionRecord | undefined {
   try {
     const parsed: unknown = JSON.parse(readFileSync(connectionFilePath(dataDir), "utf8"));
-    if (!isConnectionRecord(parsed)) {
-      return undefined;
-    }
-    return parsed;
+    const record = connectionRecordSchema.safeParse(parsed);
+    return record.success ? record.data : undefined;
   } catch (error) {
     if (errorCode(error) === "ENOENT" || error instanceof SyntaxError) {
       return undefined;
@@ -142,20 +135,6 @@ function splitCsv(value: string): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
-}
-
-function isConnectionRecord(value: unknown): value is ConnectionRecord {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.pid === "number" &&
-    Number.isInteger(record.pid) &&
-    typeof record.port === "number" &&
-    typeof record.contractVersion === "number" &&
-    typeof record.baseUrl === "string"
-  );
 }
 
 function errorCode(error: unknown): string | undefined {
