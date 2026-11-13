@@ -300,7 +300,7 @@ describe("fetchRemoteImageToTemp", () => {
     const dataDir = tempDir();
     const lookups: string[] = [];
     const pins: Array<{ address: string; remoteAddress: string | undefined }> = [];
-    const { origin, port } = await listen((request, response) => {
+    const { port } = await listen((request, response) => {
       if (request.url === "/start") {
         response.writeHead(302, { location: "/final.png" });
         response.end();

@@ -235,7 +235,9 @@ describe("ReferenceCollection", () => {
       expect.objectContaining({ url: "https://example.com/page", creator: "", motion: null }),
     );
     const status = view.container.querySelector(".canvas-status");
-    expect(status?.textContent).toContain("Saved as a link: that address isn't a JPEG, PNG or WebP image.");
+    expect(status?.textContent).toContain(
+      "Saved as a link: that address isn't a JPEG, PNG or WebP image.",
+    );
     await act(async () => {
       view.root.unmount();
     });

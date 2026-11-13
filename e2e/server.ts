@@ -1,13 +1,23 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { createReadStream, existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import type { FastifyInstance } from "fastify";
+import type { DatabaseSync } from "node:sqlite";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
+const clientDir = path.join(repoRoot, "apps/web/dist/client");
 
 export class IsolatedServer {
   private child: ChildProcess | undefined;
+  private inProcess:
+    | {
+        app: FastifyInstance;
+        database: DatabaseSync;
+      }
+    | undefined;
   readonly dataDir: string;
   readonly port: number;
   readonly origin: string;
@@ -31,8 +41,29 @@ export class IsolatedServer {
     return server;
   }
 
+  /**
+   * In-process Studio with a test-only loopback allow for one URL-image fake
+   * server. Never controlled by a production env var.
+   *
+   * Serves the built client from this bootstrap (serveClient stays false) so
+   * API errors keep the ServiceError envelope; the production serveClient path
+   * still has the known Fastify default-error-shape issue.
+   */
+  static async createAllowingLoopbackFetch(): Promise<IsolatedServer> {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "reference-studio-e2e-url-"));
+    const port = await freePort();
+    const server = new IsolatedServer(dataDir, port);
+    try {
+      await server.startInProcessAllowingLoopback();
+    } catch (error) {
+      await server.dispose();
+      throw error;
+    }
+    return server;
+  }
+
   async start(): Promise<void> {
-    if (this.child !== undefined) {
+    if (this.child !== undefined || this.inProcess !== undefined) {
       throw new Error("The isolated service is already running.");
     }
     this.child = spawn(process.execPath, ["apps/web/scripts/start.mjs"], {
@@ -53,20 +84,88 @@ export class IsolatedServer {
     }
   }
 
+  private async startInProcessAllowingLoopback(): Promise<void> {
+    if (this.child !== undefined || this.inProcess !== undefined) {
+      throw new Error("The isolated service is already running.");
+    }
+    const distServer = path.join(repoRoot, "apps/web/dist/server");
+    const load = async (file: string) => import(pathToFileURL(path.join(distServer, file)).href);
+    const { loadConfig } = await load("config.js");
+    const { openDatabase } = await load("db.js");
+    const { createApp } = await load("app.js");
+    const { isBlockedAddress } = await load("remoteFetch.js");
+
+    const config = loadConfig({
+      ...process.env,
+      REFERENCE_STUDIO_DATA_DIR: this.dataDir,
+      REFERENCE_STUDIO_PORT: String(this.port),
+      REFERENCE_STUDIO_SERVE_CLIENT: "0",
+      REFERENCE_STUDIO_LOG_LEVEL: "silent",
+    });
+    const database = openDatabase(config.dataDir);
+    const app = await createApp({
+      config,
+      database,
+      remoteFetch: {
+        isBlocked: (ip: string) => ip !== "127.0.0.1" && isBlockedAddress(ip),
+      },
+    });
+    registerTestClientFiles(app);
+    await app.listen({ host: config.host, port: config.port });
+    this.inProcess = { app, database };
+    await waitForHealthUrl(this.origin);
+  }
+
   async stop(): Promise<void> {
     const child = this.child;
     this.child = undefined;
-    if (child === undefined) {
-      return;
+    const inProcess = this.inProcess;
+    this.inProcess = undefined;
+    if (child !== undefined) {
+      await kill(child);
+      await waitUntilDown(this.origin);
     }
-    await kill(child);
-    await waitUntilDown(this.origin);
+    if (inProcess !== undefined) {
+      await inProcess.app.close();
+      inProcess.database.close();
+      await waitUntilDown(this.origin);
+    }
   }
 
   async dispose(): Promise<void> {
     await this.stop();
     rmSync(this.dataDir, { recursive: true, force: true });
   }
+}
+
+/** Test-only static client serving that does not use production serveClient. */
+function registerTestClientFiles(app: FastifyInstance): void {
+  app.setNotFoundHandler((request, reply) => {
+    if (request.url.startsWith("/api")) {
+      return reply.code(404).send({
+        error: { code: "not_found", message: "Not found." },
+      });
+    }
+    const urlPath = (request.url.split("?")[0] ?? "/").replace(/\\/g, "/");
+    const relative = urlPath === "/" ? "index.html" : urlPath.replace(/^\//, "");
+    const filePath = path.normalize(path.join(clientDir, relative));
+    if (!filePath.startsWith(clientDir) || !existsSync(filePath) || !statSync(filePath).isFile()) {
+      const index = path.join(clientDir, "index.html");
+      return reply.type("text/html").send(createReadStream(index));
+    }
+    const extension = path.extname(filePath).toLowerCase();
+    const type =
+      extension === ".html"
+        ? "text/html"
+        : extension === ".js"
+          ? "text/javascript"
+          : extension === ".css"
+            ? "text/css"
+            : extension === ".svg"
+              ? "image/svg+xml"
+              : "application/octet-stream";
+    return reply.type(type).send(createReadStream(filePath));
+  });
 }
 
 function freePort(): Promise<number> {
@@ -94,6 +193,24 @@ async function waitForHealth(origin: string, child: ChildProcess): Promise<void>
     if (child.exitCode !== null) {
       throw new Error(`Isolated service exited with ${child.exitCode} before it was healthy.`);
     }
+    try {
+      const response = await fetch(`${origin}/api/health`);
+      if (response.ok) {
+        return;
+      }
+      lastError = response.status;
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(50);
+  }
+  throw new Error(`Isolated service did not become healthy: ${String(lastError)}`);
+}
+
+async function waitForHealthUrl(origin: string): Promise<void> {
+  const deadline = Date.now() + 15_000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
     try {
       const response = await fetch(`${origin}/api/health`);
       if (response.ok) {

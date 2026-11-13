@@ -227,12 +227,16 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
             setMessage(error.message);
             return;
           }
-          if (
+          // Fall back to a link for fetch failures. Prefer the service reason when the
+          // ServiceError envelope is intact; the production serveClient path can still
+          // omit details (pre-existing Fastify error shape), so paste still saves a link.
+          const reason =
             error instanceof ReferenceRequestError &&
-            error.code === "validation" &&
             error.reason !== undefined &&
             URL_IMAGE_FALLBACK_REASONS.has(error.reason)
-          ) {
+              ? error.reason
+              : undefined;
+          try {
             const item = await onAddLink({
               url: trimmed,
               title: "",
@@ -242,10 +246,22 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
             });
             placeOnBoard(item, center());
             if (edit) setEditingId(item.placementId);
-            setMessage(`Saved as a link: ${urlImageFallbackReason(error.reason, maxUploadBytes)}.`);
-            return;
+            setMessage(
+              `Saved as a link: ${
+                reason !== undefined
+                  ? urlImageFallbackReason(reason, maxUploadBytes)
+                  : "the image couldn't be fetched."
+              }`,
+            );
+          } catch (linkError) {
+            setMessage(
+              linkError instanceof Error
+                ? linkError.message
+                : error instanceof Error
+                  ? error.message
+                  : "Could not add the reference.",
+            );
           }
-          setMessage(error instanceof Error ? error.message : "Could not add the reference.");
         } finally {
           setFetchingImage(false);
         }
@@ -383,12 +399,12 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
 
 function urlImageFallbackReason(reason: string, maxUploadBytes: number): string {
   if (reason === "not_an_image") {
-    return "that address isn't a JPEG, PNG or WebP image";
+    return "that address isn't a JPEG, PNG or WebP image.";
   }
   if (reason === "image_too_large") {
     return imageTooLargeMessage(maxUploadBytes);
   }
-  return "the image couldn't be fetched";
+  return "the image couldn't be fetched.";
 }
 
 function isEditing(target: EventTarget | null): boolean {

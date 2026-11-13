@@ -1,6 +1,6 @@
 # Storage settings and uploads
 
-Owning specification for Studio storage settings, upload size limits, and streamed image intake. Later slices own the storage folder / import roots (S2), URL images (U1/U2), and backup limits that follow the slider (S3).
+Owning specification for Studio storage settings, upload size limits, streamed image intake, and stored URL images (U1). Later slices own the storage folder / import roots (S2), URL hotlink mode / `urlImageMode` (U2), and backup limits that follow the slider (S3).
 
 ## Upload limit setting
 
@@ -18,6 +18,15 @@ Owning specification for Studio storage settings, upload size limits, and stream
 - Metadata and thumbnails are read from the temp path. Content-addressed originals are published with an atomic rename; thumbnails use `writeNewFile`. Failed commits after publish remove newly created files unless an assets row still references them.
 - On startup, leftover `.part` files older than one hour are removed.
 
+## Pasted image URLs (U1 store mode)
+
+- Pasted image URLs are fetched once by the service under these rules and stored as normal images; the service never fetches on display.
+- Browser sessions only: `POST /api/projects/:projectId/references/url-image` with JSON `{ url, title?, creator?, observations? }` and an Idempotency-Key. Agent bearer callers receive 403 and the service does not fetch.
+- The service resolves and pins a public address per redirect hop (max 3), rejects private/link-local/metadata ranges and userinfo URLs, bounds connect/idle/total time, accepts only JPEG/PNG/WebP magic bytes within the configured upload limit, then publishes through the same streamed temp → original/thumbnail path as uploads.
+- `sourceUrl` is the pasted URL. The default title is the final URL's last path segment without extension (URL-decoded), else the hostname.
+- When the bytes are not a storable image (blocked address, timeout, non-image, too large, fetch failure), Studio falls back to today's link reference and shows why. `storage_full` creates nothing.
+- There is no off switch for the address rules. Hotlink mode and `urlImageMode` are U2.
+
 ## Backups (S1 scope)
 
 - Each backup asset may be up to the 512 MiB ceiling (not the current slider value). The archive total remains 80 MiB until S3.
@@ -26,3 +35,4 @@ Owning specification for Studio storage settings, upload size limits, and stream
 
 - A Settings control on the top bar opens a solid Settings dialog with a Storage section.
 - Max upload size uses `StudioParameter` (MiB). Escape and Cancel discard local edits; Save uses the loaded revision and follows the shared conflict-message pattern.
+- Pasting an http(s) URL shows Fetching image… once, then places a stored image or falls back to a link with a short reason.
