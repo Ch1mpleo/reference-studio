@@ -121,3 +121,46 @@ export const updateDirectionSchema = z.object({
   archived: z.boolean().optional(),
 }).strict().refine((input) => Object.keys(input).length > 1, { message: "Change at least one direction field." });
 export const duplicateDirectionSchema = z.object({ expectedRevision: z.number().int().positive(), name: z.string().trim().min(1).max(200).optional() }).strict();
+
+const authorNameSchema = z.string().trim().min(1).max(200);
+
+/** Provenance and decisions are never caller-supplied; the service derives them. */
+export const createAnnotationRequestSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+  target: annotationTargetSchema,
+  body: z.string().trim().min(1).max(20_000),
+  borrowedQuality: z.string().max(20_000).default(""),
+  translation: z.string().max(20_000).default(""),
+  limitations: z.string().max(20_000).default(""),
+  region: imageCropSchema.optional(),
+  authorName: authorNameSchema.optional(),
+}).strict();
+export type CreateAnnotationRequest = z.infer<typeof createAnnotationRequestSchema>;
+
+export const proposeDirectionRequestSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+  name: z.string().trim().min(1).max(200),
+  concept: z.string().max(20_000),
+  feeling: z.string().max(4_000).default(""),
+  questions: z.string().max(20_000).default(""),
+  rationale: z.string().trim().min(1).max(20_000),
+  authorName: authorNameSchema.optional(),
+}).strict();
+export type ProposeDirectionRequest = z.infer<typeof proposeDirectionRequestSchema>;
+
+export const createAnnotationResultSchema = z.object({
+  annotation: boardAnnotationSchema,
+  boardRevision: z.number().int().positive(),
+  directionRevision: z.number().int().positive().nullable(),
+  location: z.enum(["inbox", "board"]).nullable(),
+  directionId: z.uuid().nullable(),
+}).strict();
+export type CreateAnnotationResult = z.infer<typeof createAnnotationResultSchema>;
+
+export const proposeDirectionResultSchema = z.object({
+  directionId: z.uuid(),
+  directionRevision: z.number().int().positive(),
+  boardRevision: z.number().int().positive(),
+  annotationId: z.uuid(),
+}).strict();
+export type ProposeDirectionResult = z.infer<typeof proposeDirectionResultSchema>;
