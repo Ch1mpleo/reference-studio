@@ -27,6 +27,11 @@ export {
 } from "./projects.js";
 export type { CreateProjectRequest, Project, ProjectList, UpdateProjectRequest } from "./projects.js";
 export {
+  AGENT_IMAGE_FALLBACKS,
+  AGENT_IMAGE_MAX_BYTES,
+  AGENT_IMAGE_MAX_EDGE,
+  AGENT_IMAGE_MIN_EDGE,
+  referenceImageQuerySchema,
   IMAGE_MEDIA_TYPES,
   MAX_IMAGE_BYTES,
   MAX_IMAGE_EDGE,
