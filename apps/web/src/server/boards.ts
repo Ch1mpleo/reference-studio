@@ -10,6 +10,7 @@ import { commitMutation, hashCanonicalRequest, readIdempotencyKey } from "./idem
 import { publishChange } from "./changes.js";
 import type { EventHub } from "./events.js";
 import { copyDirectionVariants } from "./variants.js";
+import { assertAgentBoardChange, assertNewAnnotationAuthors } from "./boardProvenance.js";
 
 export function readBoard(database: DatabaseSync, projectId: string): Board {
   getProject(database, projectId);
@@ -145,6 +146,8 @@ export function registerBoardRoutes(app: FastifyInstance, database: DatabaseSync
         const current = readBoard(database, projectId);
         assertExpectedRevision(current.revision, input.expectedRevision, { type: "board", id: projectId });
         if (input.layout.systems !== undefined && hashCanonicalRequest(input.layout.systems) !== hashCanonicalRequest(current.layout.systems ?? [])) throw new ServiceError("validation", "Change system records through the direction system operations.");
+        assertNewAnnotationAuthors(caller, current.layout, input.layout);
+        if (caller === "agent") assertAgentBoardChange(current.layout, { ...input.layout, annotations: input.layout.annotations ?? current.layout.annotations });
         const board = saveBoardLayout(database, current, input.layout);
         return { statusCode: 200, body: board, revision: board.revision, changed: board.revision !== current.revision };
       },

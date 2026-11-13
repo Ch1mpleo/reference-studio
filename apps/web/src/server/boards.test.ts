@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { boardSchema, createId, projectReferenceSchema, projectSchema, type BoardLayout, type StudioEvent } from "@reference-studio/core";
+import { boardSchema, createId, projectReferenceSchema, projectSchema, type BoardAnnotation, type BoardLayout, type StudioEvent } from "@reference-studio/core";
 import { createApp } from "./app.js";
 import { browserHeaders } from "./test/browserSession.js";
 import { loadConfig } from "./config.js";
@@ -156,7 +156,7 @@ describe("project boards", () => {
     const annotations: NonNullable<BoardLayout["annotations"]> = [
       { id: evidenceId, target: { type: "project", projectId: ctx.created.id }, body: "Reference discussion: compare readable editorial and dense technical layouts.", borrowedQuality: "Clear hierarchy", translation: "Keep readable long-form content", limitations: "Motion remains unobserved", provenance: { author: "agent", name: "Researcher" } },
       { id: feedbackId, target: { type: "placement", placementId: ctx.note.placementId }, body: "Reject dense technical layout: too busy for this audience. Keep occasional large typography as an intentional exception.", borrowedQuality: "Typographic contrast", translation: "Quiet body, expressive headings", limitations: "Check mobile wrapping", provenance: { author: "human", name: "Owner" }, decision: { rationale: "Readability matters more than visual density", annotationId: evidenceId } },
-      { id: decisionId, target: { type: "direction", directionId }, body: "Use the editorial alternative; revisit the small-screen headings.", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "agent", name: "Researcher" }, decision: { rationale: "Follow the user's feedback", annotationId: feedbackId } },
+      { id: decisionId, target: { type: "direction", directionId }, body: "Use the editorial alternative; revisit the small-screen headings.", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human", name: "Owner" }, decision: { rationale: "Follow the user's feedback", annotationId: feedbackId } },
     ];
     const seeded = boardSchema.parse((await ctx.put(1, { frames: [], items: [], annotations: [annotations[0]!] })).json());
     const initial = boardSchema.parse((await ctx.putBrowser(seeded.revision, { ...ctx.layout, annotations })).json());
@@ -394,5 +394,70 @@ describe("project boards", () => {
     expect(legacy.statusCode).toBe(201);
     const legacyProject = projectSchema.parse(legacy.json());
     expect(boardSchema.parse((await ctx.app.inject({ url: `/api/projects/${legacyProject.id}/board`, headers: ctx.headers })).json()).layout).toEqual({ frames: [], items: [] });
+  });
+
+  describe("PUT /board provenance", () => {
+    async function seeded() {
+      const ctx = await setup();
+      const directionId = ctx.layout.frames[0]!.id;
+      const note = (body: string, author: "human" | "agent", extra: object = {}): BoardAnnotation => ({ id: createId(), target: { type: "direction" as const, directionId }, body, borrowedQuality: "", translation: "", limitations: "", provenance: { author }, ...extra });
+      const human = note("Human note", "human");
+      const decided = note("Decided", "human", { decision: { rationale: "Because" } });
+      const first = await ctx.putBrowser(1, { ...ctx.layout, annotations: [human, decided] } as BoardLayout);
+      expect(first.statusCode).toBe(200);
+      const agent = note("Agent note", "agent");
+      const second = await ctx.app.inject({ method: "PUT", url: ctx.url, headers: { ...ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: boardSchema.parse(first.json()).revision, layout: { ...boardSchema.parse(first.json()).layout, annotations: [human, decided, agent] } } });
+      expect(second.statusCode).toBe(200);
+      const board = boardSchema.parse(second.json());
+      const stored = () => ctx.database.prepare("SELECT revision, layout_json FROM project_boards WHERE project_id = ?").get(ctx.created.id) as { revision: number; layout_json: string };
+      const send = (headers: Record<string, string>, layout: unknown, revision = board.revision) => ctx.app.inject({ method: "PUT", url: ctx.url, headers: { ...headers, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: revision, layout } });
+      const bearer = (layout: unknown) => send(ctx.headers, layout);
+      const browser = (layout: unknown) => send(ctx.browser, layout);
+      const boardEvents = () => ctx.events.filter((event) => event.type === "changed" && event.entity === "board").length;
+      const edit = (change: (layout: BoardLayout) => void) => { const layout = structuredClone(board.layout); change(layout); return layout; };
+      async function rejected(response: Promise<Awaited<ReturnType<typeof bearer>>>, status: number, reason?: string) {
+        const before = stored(); const events = boardEvents();
+        const result = await response;
+        expect(result.statusCode).toBe(status);
+        if (reason !== undefined) expect(result.json().error.details.reason).toBe(reason);
+        expect(stored()).toEqual(before);
+        expect(boardEvents()).toBe(events);
+      }
+      return { ctx, board, directionId, human, decided, agent, note, bearer, browser, edit, rejected, stored, boardEvents };
+    }
+
+    it("rejects bearer-created human and decision annotations", async () => {
+      const t = await seeded();
+      await t.rejected(t.bearer(t.edit((layout) => { layout.annotations!.push(t.note("Forged", "human")); })), 400);
+      await t.rejected(t.bearer(t.edit((layout) => { layout.annotations!.push(t.note("Forged decision", "agent", { decision: { rationale: "Approved" } })); })), 400);
+    });
+
+    it("protects human notes and decisions from bearer edits and deletes", async () => {
+      const t = await seeded();
+      await t.rejected(t.bearer(t.edit((layout) => { layout.annotations!.find((entry) => entry.id === t.human.id)!.body = "Rewritten"; })), 409, "protected_annotation");
+      await t.rejected(t.bearer(t.edit((layout) => { layout.annotations = layout.annotations!.filter((entry) => entry.id !== t.human.id); })), 409, "protected_annotation");
+      await t.rejected(t.bearer(t.edit((layout) => { delete layout.annotations!.find((entry) => entry.id === t.decided.id)!.decision; })), 409, "protected_annotation");
+    });
+
+    it("keeps direction wording behind update_direction for bearer callers but allows geometry and own notes", async () => {
+      const t = await seeded();
+      await t.rejected(t.bearer(t.edit((layout) => { layout.frames[0]!.concept = "Louder"; })), 409, "use_update_direction");
+      await t.rejected(t.bearer(t.edit((layout) => { layout.frames[0]!.archived = true; layout.items[0]!.frameId = null; })), 409, "use_update_direction");
+      const moved = await t.bearer(t.edit((layout) => { layout.frames[0]!.rect.x += 40; layout.items[0]!.rect.x += 8; }));
+      expect(moved.statusCode).toBe(200);
+      const current = boardSchema.parse(moved.json());
+      const own = structuredClone(current.layout);
+      own.annotations!.find((entry) => entry.id === t.agent.id)!.body = "Agent revised";
+      const edited = await t.ctx.app.inject({ method: "PUT", url: t.ctx.url, headers: { ...t.ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: current.revision, layout: own } });
+      expect(edited.statusCode).toBe(200);
+      expect(boardSchema.parse(edited.json()).layout.annotations!.find((entry) => entry.id === t.agent.id)!.body).toBe("Agent revised");
+    });
+
+    it("lets browsers create human notes but not agent-authored ones", async () => {
+      const t = await seeded();
+      await t.rejected(t.browser(t.edit((layout) => { layout.annotations!.push(t.note("Impersonated", "agent")); })), 400);
+      const created = await t.browser(t.edit((layout) => { layout.annotations!.push(t.note("Browser note", "human")); }));
+      expect(created.statusCode).toBe(200);
+    });
   });
 });
