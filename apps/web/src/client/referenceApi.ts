@@ -3,6 +3,7 @@ import {
   createLinkReferenceSchema,
   createNoteReferenceSchema,
   createPlacementRequestSchema,
+  createUrlImageSchema,
   imageFieldSchema,
   imageRequestForStorage,
   libraryReferenceSchema,
@@ -17,6 +18,7 @@ import {
   updateReferenceRequestSchema,
   type CreateLinkReference,
   type CreateNoteReference,
+  type CreateUrlImage,
   type ImageCrop,
   type ImageFields,
   type LibraryReference,
@@ -28,12 +30,14 @@ import { sha256HexFromBlob } from "./sha256Stream.js";
 export class ReferenceRequestError extends Error {
   readonly code: string;
   readonly currentRevision: number | undefined;
+  readonly reason: string | undefined;
 
-  constructor(message: string, code: string, currentRevision?: number) {
+  constructor(message: string, code: string, currentRevision?: number, reason?: string) {
     super(message);
     this.name = "ReferenceRequestError";
     this.code = code;
     this.currentRevision = currentRevision;
+    this.reason = reason;
   }
 }
 
@@ -110,6 +114,20 @@ export async function addProjectLink(projectId: string, input: CreateLinkReferen
   const parsed = parseContract(createLinkReferenceSchema, input, "Link is invalid.");
   const response = await send(`/api/projects/${projectId}/references/links`, linkRequestForStorage(parsed), {
     json: input,
+  });
+  return parseContract(projectReferenceSchema, await response.json(), "Reference was invalid.");
+}
+
+export async function addProjectUrlImage(projectId: string, input: CreateUrlImage): Promise<ProjectReference> {
+  const parsed = parseContract(createUrlImageSchema, input, "URL image details are invalid.");
+  const canonical = {
+    url: parsed.url,
+    title: parsed.title ?? "",
+    creator: parsed.creator === undefined ? null : parsed.creator,
+    observations: parsed.observations ?? "",
+  };
+  const response = await send(`/api/projects/${projectId}/references/url-image`, canonical, {
+    json: parsed,
   });
   return parseContract(projectReferenceSchema, await response.json(), "Reference was invalid.");
 }
@@ -227,7 +245,12 @@ async function readError(response: Response): Promise<ReferenceRequestError> {
   const issue = firstIssue(parsed.data.error.details);
   const message =
     parsed.data.error.code === "validation" && issue !== undefined ? issue : parsed.data.error.message;
-  return new ReferenceRequestError(message, parsed.data.error.code, readCurrentRevision(parsed.data.error.details));
+  return new ReferenceRequestError(
+    message,
+    parsed.data.error.code,
+    readCurrentRevision(parsed.data.error.details),
+    readReason(parsed.data.error.details),
+  );
 }
 
 function readCurrentRevision(details: unknown): number | undefined {
@@ -236,6 +259,13 @@ function readCurrentRevision(details: unknown): number | undefined {
   }
   const revision = details.currentRevision;
   return typeof revision === "number" && Number.isInteger(revision) && revision > 0 ? revision : undefined;
+}
+
+function readReason(details: unknown): string | undefined {
+  if (typeof details !== "object" || details === null || !("reason" in details)) {
+    return undefined;
+  }
+  return typeof details.reason === "string" ? details.reason : undefined;
 }
 
 function firstIssue(details: unknown): string | undefined {

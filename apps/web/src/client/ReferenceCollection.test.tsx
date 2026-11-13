@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UPLOAD_LIMIT_MAX, type ImageFields, type ProjectReference } from "@reference-studio/core";
 import { ReferenceCollection } from "./ReferenceCollection.js";
+import { ReferenceRequestError } from "./referenceApi.js";
 import { NATIVE_SHA256_MAX_BYTES } from "./sha256Stream.js";
 
 vi.mock("./BoardCanvas.js", () => ({ BoardCanvas: () => null }));
@@ -73,6 +74,7 @@ describe("ReferenceCollection", () => {
         onRetryReferences: vi.fn(),
         onAddImage,
         onAddLink: vi.fn(),
+        onAddUrlImage: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -119,6 +121,7 @@ describe("ReferenceCollection", () => {
         onRetryReferences: vi.fn(),
         onAddImage,
         onAddLink: vi.fn(),
+        onAddUrlImage: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -147,8 +150,26 @@ describe("ReferenceCollection", () => {
     });
   });
 
-  it("submits a link without inventing a creator", async () => {
-    const onAddLink = vi.fn(async () => created);
+  it("fetches a pasted image URL without inventing a creator", async () => {
+    const image = {
+      ...created,
+      reference: {
+        ...created.reference,
+        kind: "image" as const,
+        title: "board",
+        availability: "available" as const,
+        asset: {
+          id: "00000000-0000-4000-8000-000000000012",
+          sha256: "a".repeat(64),
+          mediaType: "image/png" as const,
+          byteSize: 12,
+          width: 1,
+          height: 1,
+        },
+      },
+    } satisfies ProjectReference;
+    const onAddUrlImage = vi.fn(async () => image);
+    const onAddLink = vi.fn();
     const view = await render(
       createElement(ReferenceCollection, {
         projectId: "00000000-0000-4000-8000-000000000001", refreshKey: 0,
@@ -157,6 +178,7 @@ describe("ReferenceCollection", () => {
         onRetryReferences: vi.fn(),
         onAddImage: vi.fn(),
         onAddLink,
+        onAddUrlImage,
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -165,12 +187,55 @@ describe("ReferenceCollection", () => {
     );
     await act(async () => {
       const event = new Event("paste", { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "clipboardData", { value: { files: [], getData: () => "https://example.com/board" } });
+      Object.defineProperty(event, "clipboardData", { value: { files: [], getData: () => "https://example.com/board.png" } });
       document.dispatchEvent(event);
     });
-    expect(onAddLink).toHaveBeenCalledWith(
-      expect.objectContaining({ url: "https://example.com/board", creator: "", motion: null }),
+    expect(onAddUrlImage).toHaveBeenCalledWith(expect.objectContaining({ url: "https://example.com/board.png" }));
+    expect(onAddLink).not.toHaveBeenCalled();
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("falls back to a link when the URL is not an image", async () => {
+    const onAddUrlImage = vi.fn(async () => {
+      throw new ReferenceRequestError(
+        "That address is not a JPEG, PNG, or WebP image.",
+        "validation",
+        undefined,
+        "not_an_image",
+      );
+    });
+    const onAddLink = vi.fn(async () => created);
+    const view = await render(
+      createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        refreshKey: 0,
+        references: [],
+        notice: null,
+        onRetryReferences: vi.fn(),
+        onAddImage: vi.fn(),
+        onAddLink,
+        onAddUrlImage,
+        onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
+        onPlace: vi.fn(),
+      }),
     );
+    await act(async () => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { files: [], getData: () => "https://example.com/page" },
+      });
+      document.dispatchEvent(event);
+    });
+    expect(onAddUrlImage).toHaveBeenCalled();
+    expect(onAddLink).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://example.com/page", creator: "", motion: null }),
+    );
+    const status = view.container.querySelector(".canvas-status");
+    expect(status?.textContent).toContain("Saved as a link: that address isn't a JPEG, PNG or WebP image.");
     await act(async () => {
       view.root.unmount();
     });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CreateLinkReference,
   CreateNoteReference,
+  CreateUrlImage,
   ImageFields,
   LibraryReference,
   ProjectReference,
@@ -9,6 +10,7 @@ import type {
 import {
   addProjectLink,
   addProjectNote,
+  addProjectUrlImage,
   listProjectReferences,
   placeReference,
   ReferenceRequestError,
@@ -30,6 +32,7 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
   retry: () => Promise<void>;
   addImage: (file: File, fields: ImageFields) => Promise<ProjectReference>;
   addLink: (input: CreateLinkReference) => Promise<ProjectReference>;
+  addUrlImage: (input: CreateUrlImage) => Promise<ProjectReference>;
   addNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   saveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
   savePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
@@ -103,6 +106,15 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     [projectId, remember],
   );
 
+  const addUrlImage = useCallback(
+    async (input: CreateUrlImage): Promise<ProjectReference> => {
+      const item = await addProjectUrlImage(projectId, input);
+      remember(item);
+      return item;
+    },
+    [projectId, remember],
+  );
+
   const addNote = useCallback(
     async (input: CreateNoteReference): Promise<ProjectReference> => {
       const item = await addProjectNote(projectId, input);
@@ -145,5 +157,18 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     [projectId, remember],
   );
 
-  return { references, notice, status, refreshing, retry: load, addImage, addLink, addNote, saveDetails, savePlacement, place };
+  return {
+    references,
+    notice,
+    status,
+    refreshing,
+    retry: load,
+    addImage,
+    addLink,
+    addUrlImage,
+    addNote,
+    saveDetails,
+    savePlacement,
+    place,
+  };
 }
