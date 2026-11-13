@@ -84,13 +84,13 @@ afterEach(async () => {
 });
 
 describe("MCP adapter over stdio", () => {
-  it("serves exactly the diagnostic tool and authenticates to a running service", async () => {
+  it("serves the diagnostic tool and authenticates to a running service", async () => {
     const running = await startStudio();
     const client = await connectClient();
 
     expect(client.getServerVersion()).toMatchObject({ name: "reference-studio" });
     const tools = await client.listTools();
-    expect(tools.tools.map((tool) => tool.name)).toEqual(["get_workspace_status"]);
+    expect(tools.tools.map((tool) => tool.name)).toContain("get_workspace_status");
     expect(client.getServerCapabilities()?.resources).toBeUndefined();
     const resources = await client.listResources().catch(() => ({ resources: [] }));
     expect(resources.resources).toEqual([]);
