@@ -306,4 +306,123 @@ describe("draft write tools over stdio", () => {
     expect(result.structuredContent).toMatchObject({ code: "service_unavailable" });
     expect(text(result)).not.toContain(token);
   });
+
+  describe("update_direction", () => {
+    const humanNote = (directionId: string, body = "Keep it quiet.") => ({ id: crypto.randomUUID(), target: { type: "direction", directionId }, body, borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human", name: "Owner" } });
+
+    async function seedHuman(ids: Seed, extra: Json[] = []): Promise<Json> {
+      const board = await api("GET", `/api/projects/${ids.projectId}/board`);
+      return browserApi("PUT", `/api/projects/${ids.projectId}/board`, { expectedRevision: board.revision, layout: { ...board.layout, annotations: [humanNote(ids.directionId), ...extra] } });
+    }
+    const revisionOf = async (ids: Seed) => ((await api("GET", `/api/projects/${ids.projectId}/board`)).layout.frames[0].revision as number);
+    const args = (ids: Seed, revision: number, extra: Json = {}) => ({ projectId: ids.projectId, directionId: ids.directionId, expectedRevision: revision, reason: "The brief asked for contrast.", concept: "Loud and graphic", mutationKey: key(), ...extra });
+
+    it("revises wording, keeps the previous wording in an agent note, sends one event and stays an agent write", async () => {
+      const ids = await seed();
+      const seeded = await seedHuman(ids);
+      await subscribe();
+      const client = await connectClient();
+      const revision = await revisionOf(ids);
+      const result = await call(client, "update_direction", args(ids, revision, { authorName: "Scout" }));
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toMatchObject({ draft: true, replayed: false, directionId: ids.directionId, directionRevision: revision + 1, boardRevision: seeded.revision + 1, changedFields: ["concept"] });
+      expect(text(result)).toContain("draft revision");
+      expect(text(result)).toContain(`kept in note ${result.structuredContent!.annotationId}`);
+      expect(text(result)).toContain("not an approval");
+      expect(JSON.stringify(result)).not.toContain(token);
+      await until(() => boardEvents().length === 1);
+      await settle(300);
+      expect(boardEvents()).toHaveLength(1);
+      expect(boardEvents()[0]).toMatchObject({ projectId: ids.projectId, revision: seeded.revision + 1 });
+
+      const board = await api("GET", `/api/projects/${ids.projectId}/board`);
+      expect(board.layout.frames[0]).toMatchObject({ concept: "Loud and graphic", name: "Quiet", decisions: "", revision: revision + 1 });
+      const note = board.layout.annotations.find((entry: Json) => entry.id === result.structuredContent!.annotationId);
+      expect(note).toMatchObject({ provenance: { author: "agent", name: "Scout" }, target: { type: "direction", directionId: ids.directionId }, body: "Reason: The brief asked for contrast.\n\nReplaced wording:\n\nconcept:\nSoft" });
+      expect(note.decision).toBeUndefined();
+      expect(board.layout.annotations.filter((entry: Json) => entry.provenance.author === "human")).toHaveLength(1);
+
+      const forged = await fetch(`${base}/api/projects/${ids.projectId}/board`, { method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ expectedRevision: board.revision, layout: { ...board.layout, annotations: [...board.layout.annotations, humanNote(ids.directionId, "Forged")] } }) });
+      expect(forged.status).toBe(400);
+      expect(await boardJson(ids.projectId)).toBe(JSON.stringify(board));
+    });
+
+    it("returns revision_conflict after a browser rename, writing nothing and sending no event", async () => {
+      const ids = await seed();
+      await seedHuman(ids);
+      const client = await connectClient();
+      const revision = await revisionOf(ids);
+      await browserApi("PATCH", `/api/projects/${ids.projectId}/directions/${ids.directionId}`, { expectedRevision: revision, name: "Renamed by a person" });
+      await subscribe();
+      const before = await boardJson(ids.projectId);
+      const stale = await call(client, "update_direction", args(ids, revision));
+      expect(stale.isError).toBe(true);
+      expect(stale.structuredContent).toMatchObject({ code: "revision_conflict", currentRevision: revision + 1, recordType: "direction", recordId: ids.directionId });
+      expect(stale.structuredContent!.nextStep).toContain("get_project_context");
+      expect(text(stale)).not.toContain(token);
+      await settle(500);
+      expect(boardEvents()).toHaveLength(0);
+      expect(await boardJson(ids.projectId)).toBe(before);
+    });
+
+    it("rolls back completely when the board already holds 1,000 annotations", async () => {
+      const ids = await seed();
+      const notes = Array.from({ length: 1_000 }, (_, index) => humanNote(ids.directionId, `note ${index}`));
+      const board = await api("GET", `/api/projects/${ids.projectId}/board`);
+      await browserApi("PUT", `/api/projects/${ids.projectId}/board`, { expectedRevision: board.revision, layout: { ...board.layout, annotations: notes } });
+      await subscribe();
+      const client = await connectClient();
+      const before = await boardJson(ids.projectId);
+      const result = await call(client, "update_direction", args(ids, await revisionOf(ids)));
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({ code: "validation" });
+      await settle(300);
+      expect(boardEvents()).toHaveLength(0);
+      expect(await boardJson(ids.projectId)).toBe(before);
+      expect(JSON.parse(before).layout.frames[0].concept).toBe("Soft");
+    });
+
+    it("reports validation for a no-op and SDK input errors for a missing reason or decisions", async () => {
+      const ids = await seed();
+      const client = await connectClient();
+      const revision = await revisionOf(ids);
+      const before = await boardJson(ids.projectId);
+      const noop = await call(client, "update_direction", args(ids, revision, { concept: "Soft" }));
+      expect(noop.structuredContent).toMatchObject({ code: "validation" });
+      const outputs: string[] = [];
+      for (const [input, message] of [
+        [{ ...args(ids, revision), reason: undefined }, "reason: Invalid input: expected string, received undefined"],
+        [{ ...args(ids, revision), decisions: "Approved" }, 'Unrecognized key: "decisions"'],
+        [{ ...args(ids, revision), archived: true }, 'Unrecognized key: "archived"'],
+      ] as const) {
+        const result = (await client.callTool({ name: "update_direction", arguments: input })) as ToolResult;
+        expect(result.isError).toBe(true);
+        expect(text(result)).toContain("Input validation error: Invalid arguments for tool update_direction");
+        expect(text(result)).toContain(message);
+        outputs.push(text(result));
+      }
+      expect(outputs.join("\n")).not.toContain(token);
+      expect(await boardJson(ids.projectId)).toBe(before);
+    });
+
+    it("reports not_found for an unknown direction, and replays a mutationKey without a second event", async () => {
+      const ids = await seed();
+      await subscribe();
+      const client = await connectClient();
+      const unknown = await call(client, "update_direction", { ...args(ids, 1), directionId: crypto.randomUUID() });
+      expect(unknown.structuredContent).toMatchObject({ code: "not_found" });
+      expect(text(unknown)).toContain("Next step");
+      const request = args(ids, await revisionOf(ids));
+      const first = await call(client, "update_direction", request);
+      await until(() => boardEvents().length === 1);
+      const again = await call(client, "update_direction", request);
+      expect(again.structuredContent).toMatchObject({ annotationId: first.structuredContent!.annotationId, replayed: true });
+      expect(text(again)).toContain("Replayed");
+      await settle(300);
+      expect(boardEvents()).toHaveLength(1);
+      const mismatch = await call(client, "update_direction", { ...request, concept: "Something else" });
+      expect(mismatch.structuredContent).toMatchObject({ code: "idempotency_mismatch" });
+      expect((await api("GET", `/api/projects/${ids.projectId}/board`)).layout.annotations).toHaveLength(1);
+    });
+  });
 });
