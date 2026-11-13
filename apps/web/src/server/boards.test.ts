@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { boardSchema, createId, projectReferenceSchema, projectSchema, type BoardAnnotation, type BoardLayout, type StudioEvent } from "@reference-studio/core";
+import { boardSchema, createId, IDEMPOTENCY_REPLAYED_HEADER, updateDirectionResultSchema, projectReferenceSchema, projectSchema, type BoardAnnotation, type BoardLayout, type StudioEvent } from "@reference-studio/core";
 import { createApp } from "./app.js";
 import { browserHeaders } from "./test/browserSession.js";
 import { loadConfig } from "./config.js";
@@ -458,6 +458,111 @@ describe("project boards", () => {
       await t.rejected(t.browser(t.edit((layout) => { layout.annotations!.push(t.note("Impersonated", "agent")); })), 400);
       const created = await t.browser(t.edit((layout) => { layout.annotations!.push(t.note("Browser note", "human")); }));
       expect(created.statusCode).toBe(200);
+    });
+  });
+
+  describe("agent direction updates", () => {
+    async function direction() {
+      const ctx = await setup();
+      const directionId = ctx.layout.frames[0]!.id;
+      const url = `/api/projects/${ctx.created.id}/directions/${directionId}`;
+      const stored = () => ctx.database.prepare("SELECT revision, layout_json FROM project_boards WHERE project_id = ?").get(ctx.created.id) as { revision: number; layout_json: string };
+      const boardEvents = () => ctx.events.filter((event) => event.type === "changed" && event.entity === "board").length;
+      const patch = (payload: object, headers: Record<string, string> = ctx.headers, key = createId()) => ctx.app.inject({ method: "PATCH", url, headers: { ...headers, "content-type": "application/json", "idempotency-key": key }, payload });
+      const board = boardSchema.parse((await ctx.put(1)).json());
+      const revision = board.layout.frames[0]!.revision ?? 1;
+      const read = () => boardSchema.parse({ projectId: ctx.created.id, revision: stored().revision, layout: JSON.parse(stored().layout_json) });
+      async function rejected(response: ReturnType<typeof patch>, status: number) {
+        const before = stored(); const events = boardEvents();
+        const result = await response;
+        expect(result.statusCode).toBe(status);
+        expect(stored()).toEqual(before);
+        expect(boardEvents()).toBe(events);
+        return result;
+      }
+      return { ctx, directionId, patch, revision, stored, boardEvents, read, rejected, board };
+    }
+
+    it("replaces wording with one revision, one event and a note holding the previous wording", async () => {
+      const t = await direction();
+      const events = t.boardEvents();
+      const response = await t.patch({ expectedRevision: t.revision, concept: "Louder editorial", name: "North", reason: "Brief asked for contrast", authorName: "Scout" });
+      expect(response.statusCode).toBe(200);
+      const result = updateDirectionResultSchema.parse(response.json());
+      expect(result).toMatchObject({ directionId: t.directionId, directionRevision: t.revision + 1, changedFields: ["concept"] });
+      const board = t.read();
+      expect(board.revision).toBe(result.boardRevision);
+      expect(board.layout.frames[0]).toMatchObject({ concept: "Louder editorial", name: "North", revision: t.revision + 1 });
+      expect(board.layout.annotations).toHaveLength(1);
+      expect(board.layout.annotations![0]).toMatchObject({ id: result.annotationId, target: { type: "direction", directionId: t.directionId }, provenance: { author: "agent", name: "Scout" },
+        body: "Reason: Brief asked for contrast\n\nReplaced wording:\n\nconcept:\nEditorial" });
+      expect(t.boardEvents()).toBe(events + 1);
+    });
+
+    it("lists each changed field with its full previous value", async () => {
+      const t = await direction();
+      const response = await t.patch({ expectedRevision: t.revision, name: "South", feeling: "Loud", questions: "Who?", reason: "Reframe" });
+      expect(updateDirectionResultSchema.parse(response.json()).changedFields).toEqual(["name", "feeling", "questions"]);
+      expect(t.read().layout.annotations![0]!.body).toBe("Reason: Reframe\n\nReplaced wording:\n\nname:\nNorth\n\nfeeling:\nQuiet\n\nquestions:\n");
+    });
+
+    it("rejects stale revisions with the current revision and writes nothing", async () => {
+      const t = await direction();
+      expect((await t.patch({ expectedRevision: t.revision, name: "Renamed" }, t.ctx.browser)).statusCode).toBe(200);
+      const stale = await t.rejected(t.patch({ expectedRevision: t.revision, concept: "Late", reason: "Stale" }), 409);
+      expect(stale.json().error.details).toMatchObject({ currentRevision: t.revision + 1, expectedRevision: t.revision });
+    });
+
+    it("rejects missing reasons, decisions, archiving and no-ops", async () => {
+      const t = await direction();
+      await t.rejected(t.patch({ expectedRevision: t.revision, concept: "Louder" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, decisions: "Approved", reason: "x" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, archived: true, reason: "x" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, concept: "Editorial", reason: "Same" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, reason: "No fields" }), 400);
+      await t.rejected(t.patch({ expectedRevision: t.revision, concept: "Louder", reason: "x" }, t.ctx.browser), 400);
+    });
+
+    it("rolls back when the board is full or the kept wording would not fit", async () => {
+      const t = await direction();
+      const text = "a".repeat(20_000);
+      const long = await t.patch({ expectedRevision: t.revision, concept: text }, t.ctx.browser);
+      expect(long.statusCode).toBe(200);
+      const revision = t.revision + 1;
+      const tooLong = await t.rejected(t.patch({ expectedRevision: revision, concept: "Short", reason: "Trim" }), 400);
+      expect(tooLong.json().error.message).toContain("20000");
+      expect(t.read().layout.frames[0]!.concept).toBe(text);
+
+      const fresh = await direction();
+      const notes = Array.from({ length: 1_000 }, (_, index) => ({ id: createId(), target: { type: "project" as const, projectId: fresh.ctx.created.id }, body: `note ${index}`, borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" as const } }));
+      const full = await fresh.ctx.putBrowser(fresh.board.revision, { ...fresh.board.layout, annotations: notes });
+      expect(full.statusCode).toBe(200);
+      const board = boardSchema.parse(full.json());
+      const before = fresh.read();
+      const refused = await fresh.rejected(fresh.patch({ expectedRevision: board.layout.frames[0]!.revision ?? 1, concept: "Louder", reason: "Full" }), 400);
+      expect(refused.json().error.code).toBe("validation");
+      expect(fresh.read().layout.frames[0]).toEqual(before.layout.frames[0]);
+      expect(fresh.read().layout.annotations).toHaveLength(1_000);
+    });
+
+    it("replays the stored result without a second event and rejects a changed payload", async () => {
+      const t = await direction();
+      const key = createId();
+      const payload = { expectedRevision: t.revision, concept: "Louder", reason: "Replay" };
+      const first = await t.patch(payload, t.ctx.headers, key);
+      expect(first.statusCode).toBe(200);
+      const events = t.boardEvents();
+      const again = await t.patch(payload, t.ctx.headers, key);
+      expect(again.statusCode).toBe(200);
+      expect(again.json()).toEqual(first.json());
+      expect(again.headers[IDEMPOTENCY_REPLAYED_HEADER]).toBe("true");
+      expect(first.headers[IDEMPOTENCY_REPLAYED_HEADER]).toBeUndefined();
+      expect(t.boardEvents()).toBe(events);
+      expect(t.read().layout.annotations).toHaveLength(1);
+      const mismatch = await t.patch({ ...payload, concept: "Different" }, t.ctx.headers, key);
+      expect(mismatch.statusCode).toBe(409);
+      expect(mismatch.json().error.details.reason).toBe("idempotency_mismatch");
+      expect(t.boardEvents()).toBe(events);
     });
   });
 });

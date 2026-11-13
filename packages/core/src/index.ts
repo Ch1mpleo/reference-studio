@@ -112,8 +112,8 @@ export {
 export type { BackupManifest, BackupUploadRequest } from "./backup.js";
 export { boardRectSchema, boardFrameSchema, boardItemSchema, boardLayoutSchema, boardSchema, updateBoardSchema } from "./board.js";
 export type { BoardRect, BoardFrame, BoardItem, BoardLayout, Board } from "./board.js";
-export { annotationTargetSchema, boardAnnotationSchema, updateDirectionSchema, duplicateDirectionSchema, createAnnotationRequestSchema, proposeDirectionRequestSchema, createAnnotationResultSchema, proposeDirectionResultSchema } from "./board.js";
-export type { AnnotationTarget, BoardAnnotation, CreateAnnotationRequest, ProposeDirectionRequest, CreateAnnotationResult, ProposeDirectionResult } from "./board.js";
+export { annotationTargetSchema, boardAnnotationSchema, updateDirectionSchema, duplicateDirectionSchema, createAnnotationRequestSchema, proposeDirectionRequestSchema, createAnnotationResultSchema, proposeDirectionResultSchema, updateDirectionResultSchema, AGENT_DIRECTION_FIELDS } from "./board.js";
+export type { AnnotationTarget, BoardAnnotation, CreateAnnotationRequest, ProposeDirectionRequest, CreateAnnotationResult, ProposeDirectionResult, UpdateDirectionRequest, UpdateDirectionResult, AgentDirectionField } from "./board.js";
 export { systemContextSchema, motionSettingsSchema, designContentSchema, motionContentSchema, systemRecordSchema, createSystemSchema, updateSystemSchema, systemEntries, systemChildren, systemContexts, remapSystem } from "./systems.js";
 export type { SystemContext, MotionSettings, DesignContent, MotionContent, SystemRecord, SystemKind } from "./systems.js";
 export { motionVariantSchema } from "./systems.js";
