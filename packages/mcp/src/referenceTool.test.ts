@@ -7,6 +7,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../../apps/web/src/server/config.js";
+import { openDatabase } from "../../../apps/web/src/server/db.js";
 import { startService, type RunningService } from "../../../apps/web/src/server/run.js";
 import { browserFetch } from "../../../apps/web/src/server/test/browserSession.js";
 
@@ -458,5 +459,41 @@ describe("get_reference over stdio", () => {
     expect(bodies.at(-1)).toBe("decision note");
     expect(bodies.at(0)).toBe("human 3");
     expect(annotations.items.at(-1).decision).toEqual({ rationale: { text: "Fits.", truncated: false } });
+  }, 30_000);
+
+  it("still includes a legacy agent-authored decision note from storage", async () => {
+    const ids = await seed();
+    const board = await api("GET", `/api/projects/${ids.projectId}/board`);
+    const legacy = {
+      id: crypto.randomUUID(),
+      target: { type: "placement", placementId: ids.placementId },
+      body: "Legacy agent decision",
+      borrowedQuality: "",
+      translation: "",
+      limitations: "",
+      provenance: { author: "agent", name: "old-bot" },
+      decision: { rationale: "Fits the brief." },
+    };
+    const layout = { ...board.layout, annotations: [...(board.layout.annotations ?? []), legacy] };
+    const database = openDatabase(dataDir);
+    try {
+      database.prepare("UPDATE project_boards SET revision = ?, layout_json = ? WHERE project_id = ?").run(
+        board.revision + 1,
+        JSON.stringify(layout),
+        ids.projectId,
+      );
+    } finally {
+      database.close();
+    }
+    const client = await connectClient();
+    const result = await call(client, { referenceId: ids.quadId, projectId: ids.projectId, includeImage: false });
+    const annotations = (result.structuredContent?.project as Json).annotations;
+    expect(annotations.total).toBeGreaterThanOrEqual(1);
+    const entry = annotations.items.find((item: Json) => item.id === legacy.id);
+    expect(entry).toMatchObject({
+      author: "agent",
+      body: { text: "Legacy agent decision", truncated: false },
+      decision: { rationale: { text: "Fits the brief.", truncated: false } },
+    });
   }, 30_000);
 });

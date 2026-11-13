@@ -140,11 +140,11 @@ describe("project boards", () => {
     board = boardSchema.parse((await ctx.app.inject({ url: ctx.url, headers: ctx.headers })).json());
     expect(board.layout.annotations).toHaveLength(1);
     for (const invalid of [
-      { ...annotation, target: { type: "project", projectId: createId() } },
-      { ...annotation, target: { type: "placement", placementId: createId() } },
-      { ...annotation, target: { type: "placement", placementId: ctx.note.placementId }, region: { x: 0, y: 0, width: 1, height: 1 } },
-      { ...annotation, decision: { rationale: "Broken link", annotationId: createId() } },
-    ]) expect((await ctx.put(board.revision, { ...board.layout, annotations: [invalid] } as BoardLayout)).statusCode).toBe(400);
+      { ...annotation, id: createId(), target: { type: "project", projectId: createId() } },
+      { ...annotation, id: createId(), target: { type: "placement", placementId: createId() } },
+      { ...annotation, id: createId(), target: { type: "placement", placementId: ctx.note.placementId }, region: { x: 0, y: 0, width: 1, height: 1 } },
+      { ...annotation, id: createId(), decision: { rationale: "Broken link", annotationId: createId() } },
+    ]) expect((await ctx.put(board.revision, { ...board.layout, annotations: [...(board.layout.annotations ?? []), invalid] } as BoardLayout)).statusCode).toBe(400);
   });
 
   it("branches direction reasoning without copying shared evidence or changing the source", async () => {
@@ -439,7 +439,7 @@ describe("project boards", () => {
       await t.rejected(t.bearer(t.edit((layout) => { delete layout.annotations!.find((entry) => entry.id === t.decided.id)!.decision; })), 409, "protected_annotation");
     });
 
-    it("keeps direction wording behind update_direction for bearer callers but allows geometry and own notes", async () => {
+    it("keeps direction wording behind update_direction for bearer callers, allows geometry, and treats all existing notes as append-only", async () => {
       const t = await seeded();
       await t.rejected(t.bearer(t.edit((layout) => { layout.frames[0]!.concept = "Louder"; })), 409, "use_update_direction");
       await t.rejected(t.bearer(t.edit((layout) => { layout.frames[0]!.archived = true; layout.items[0]!.frameId = null; })), 409, "use_update_direction");
@@ -448,9 +448,15 @@ describe("project boards", () => {
       const current = boardSchema.parse(moved.json());
       const own = structuredClone(current.layout);
       own.annotations!.find((entry) => entry.id === t.agent.id)!.body = "Agent revised";
-      const edited = await t.ctx.app.inject({ method: "PUT", url: t.ctx.url, headers: { ...t.ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: current.revision, layout: own } });
-      expect(edited.statusCode).toBe(200);
-      expect(boardSchema.parse(edited.json()).layout.annotations!.find((entry) => entry.id === t.agent.id)!.body).toBe("Agent revised");
+      await t.rejected(t.ctx.app.inject({ method: "PUT", url: t.ctx.url, headers: { ...t.ctx.headers, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: current.revision, layout: own } }), 409, "protected_annotation");
+      const deleted = structuredClone(current.layout);
+      deleted.annotations = deleted.annotations!.filter((entry) => entry.id !== t.agent.id);
+      await t.rejected(t.ctx.app.inject({ method: "PUT", url: t.ctx.url, headers: { ...t.ctx.headers, "content-type": "application/json", "idempotency-key": createId() }, payload: { expectedRevision: current.revision, layout: deleted } }), 409, "protected_annotation");
+      const appended = structuredClone(current.layout);
+      appended.annotations = [...(appended.annotations ?? []), t.note("Fresh agent note", "agent")];
+      const added = await t.ctx.app.inject({ method: "PUT", url: t.ctx.url, headers: { ...t.ctx.headers, "idempotency-key": createId() }, payload: { expectedRevision: current.revision, layout: appended } });
+      expect(added.statusCode).toBe(200);
+      expect(boardSchema.parse(added.json()).layout.annotations).toHaveLength(current.layout.annotations!.length + 1);
     });
 
     it("lets browsers create human notes but not agent-authored ones", async () => {
@@ -458,6 +464,16 @@ describe("project boards", () => {
       await t.rejected(t.browser(t.edit((layout) => { layout.annotations!.push(t.note("Impersonated", "agent")); })), 400);
       const created = await t.browser(t.edit((layout) => { layout.annotations!.push(t.note("Browser note", "human")); }));
       expect(created.statusCode).toBe(200);
+    });
+
+
+    it("rejects a bearer-created frame that carries decisions or is archived", async () => {
+      const t = await seeded();
+      const frame = { id: createId(), name: "South", concept: "", feeling: "", decisions: "Approved already", questions: "", archived: false, rect: { x: 800, y: 0, width: 700, height: 600 } };
+      await t.rejected(t.bearer(t.edit((layout) => { layout.frames.push(frame); })), 409, "use_update_direction");
+      await t.rejected(t.bearer(t.edit((layout) => { layout.frames.push({ ...frame, decisions: "", archived: true }); })), 409, "use_update_direction");
+      const allowed = await t.bearer(t.edit((layout) => { layout.frames.push({ ...frame, decisions: "", archived: false }); }));
+      expect(allowed.statusCode).toBe(200);
     });
   });
 

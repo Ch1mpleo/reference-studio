@@ -6,7 +6,7 @@ Checkpoint: 2026-11-13 on `feat/m3.3b-update-direction` (base `1882835`, M3.3a).
 
 - `updateDirectionSchema` gains optional `reason` and `authorName`; `updateDirectionResultSchema` returns `{directionId, directionRevision, boardRevision, annotationId, changedFields}`. Agents may change only `name`, `concept`, `feeling` and `questions`.
 - Agent PATCH `/api/projects/:projectId/directions/:directionId` runs in one `commitMutation`: check the direction's `expectedRevision`, apply field changes, append an agent annotation (`Reason: …` then `Replaced wording:` with the full previous value of each changed field), then one `saveBoardLayout`. Both or neither. `reason` is required for bearer callers. A no-op or a body over 20,000 characters is validation with nothing written and no truncation. One board event on success; a replay sets `idempotency-replayed: true` and sends no event. Browser PATCH behaviour is unchanged.
-- PUT /board provenance (`boardProvenance.ts`): new annotations must match the caller kind; a bearer caller cannot create decisions, modify or delete human or decision annotations (409 `immutable`, `details.reason: "protected_annotation"`), or change frame text / `archived` (409 `immutable`, `details.reason: "use_update_direction"`); geometry and the agent's own notes remain editable. Browser callers cannot create `author: "agent"` notes.
+- PUT /board provenance (`boardProvenance.ts`): new annotations must match the caller kind; a bearer caller cannot create decisions; cannot edit or delete any existing annotation (human, decision or agent — append-only, 409 `immutable`, `details.reason: "protected_annotation"`); cannot change frame text / `archived` or add a new frame with decisions or archived true (409 `immutable`, `details.reason: "use_update_direction"`); geometry and appending new agent notes remain allowed. Browser callers cannot create `author: "agent"` notes.
 - Adapter tool `update_direction` (annotations `readOnlyHint:false`, `destructiveHint:false`, `idempotentHint:true`) PATCHes through `ServiceConnection.sendJson`, which now accepts PATCH. The text result says it is a draft revision, the previous wording is kept in the note, and it is not approval. M3.3a error codes and the conflict next step are reused.
 - Test seeding of human / decision annotations and human direction edits moves to browser sessions (`browserHeaders` / `browserFetch`).
 
@@ -19,13 +19,13 @@ Node v24.22.3 (npm 11.19.1). MCP SDK `@modelcontextprotocol/client` and `@modelc
 | Task 1 `npm test` before helpers | 53 files, 268 tests: 268 passed |
 | Task 1 `npm test` after helpers (no service change) | 53 files, 268 tests: 268 passed |
 | `npm run check` | exit 0, no diagnostics |
-| `npm test` (final) | 53 files, 284 tests: 284 passed, 0 failed, 0 skipped |
+| `npm test` (final) | 53 files, 286 tests: 286 passed, 0 failed, 0 skipped |
 | `npm run build` | exit 0 |
 | `npm run test:e2e` (Chromium) | 69 tests: 69 passed, 0 failed, 0 skipped |
 | Task 6 `canvas-simplicity` "zoom stays bare" `--repeat-each=10` | 10 passed |
 | Task 6 `variants` "keeps slider values…" `--repeat-each=10` | 10 passed |
 
-New coverage: `boards.test.ts` PUT provenance block (4) and agent direction updates (6); `writeTools.test.ts` `update_direction` stdio block (5) against a real service with human data seeded through browser sessions and a bearer `/api/events` subscription; `serviceClient.test.ts` PATCH mapping; `e2e/agent-writes.spec.ts` (2 new browser tests). Flake fixes are test-only in `canvas-simplicity.spec.ts` and `variants.spec.ts`.
+New coverage: `boards.test.ts` PUT provenance block (including append-only agent notes and new-frame rules) and agent direction updates (6); `writeTools.test.ts` `update_direction` stdio block (5) against a real service with human data seeded through browser sessions and a bearer `/api/events` subscription; `serviceClient.test.ts` PATCH mapping; `e2e/agent-writes.spec.ts` (2 new browser tests). Flake fixes are test-only in `canvas-simplicity.spec.ts` and `variants.spec.ts`.
 
 The stdio suite asserts: success changes the text, the new agent note holds the old wording (via GET /board), and exactly one changed event arrives; after a browser rename, `revision_conflict` with `currentRevision`, a byte-identical board, and no event within 500 ms; the 1,000-annotation case through the tool leaves the direction unchanged; missing `reason` / `decisions` in the input are SDK input-validation results; a no-op is validation; an unknown direction is `not_found`; a replay sends no event; provenance is `author: "agent"`; a raw bearer PUT /board forging a human note is rejected.
 
@@ -129,4 +129,16 @@ board identical after rollback: true
 ## Flake fixes (task 6, test-only)
 
 - `canvas-simplicity` "zoom stays bare": wait for the saved note display text, select the React Flow node, then click Fit selection. `--repeat-each=10`: 10 passed.
-- `variants` "keeps slider values when a save fails or loses a revision race": wait for the competing PATCH to refresh (poll durationMs 220) and wrap the 480 fill/slider assertion in `expect().toPass()`. `--repeat-each=10`: 10 passed.
+- `variants` "keeps slider values when a save fails or loses a revision race": the competing PATCH already returns 200 with the new server value; stability comes from wrapping the 480 fill/slider assertion in `expect().toPass()` (not from polling the server again). `--repeat-each=10`: 10 passed.
+
+## QA follow-up
+
+Strict append-only annotations on bearer PUT /board (no edit/delete of any existing note, including the agent's own); new frames cannot carry decisions or be archived; e2e (b) renames the direction while a person holds an uncommitted group name; legacy agent-authored decisions still appear in `get_reference` via `isHumanOrDecision`; agent-workflow documents append-only notes.
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | exit 0, no diagnostics |
+| `npm test` | 53 files, 286 tests: 286 passed, 0 failed, 0 skipped |
+| `npm run build` | exit 0 |
+| `npm run test:e2e` (Chromium) | 69 tests: 69 passed, 0 failed, 0 skipped |
+| `e2e/agent-writes.spec.ts --repeat-each=5` | 15 passed (3 tests × 5) |

@@ -127,13 +127,15 @@ test("an agent direction update does not replace a person's uncommitted group na
 
   const client = await connectAdapter();
   try {
-    const result = await updateDirection(client, project.id, direction.id, direction.revision ?? 1, { concept: "Agent concept" });
+    const result = await updateDirection(client, project.id, direction.id, direction.revision ?? 1, { name: "Agent renamed" });
     expect(result.isError).toBeUndefined();
-    await expect.poll(async () => boardSchema.parse(await json(page, url)).layout.frames[0]!.concept, { timeout: 10_000 }).toBe("Agent concept");
+    await expect.poll(async () => boardSchema.parse(await json(page, url)).layout.frames[0]!.name, { timeout: 10_000 }).toBe("Agent renamed");
   } finally {
     await client.close();
   }
   // Uncommitted draft must stay in the open editor; if Studio replaces it, stop and report.
   await expect(editor).toHaveValue("Human draft name", { timeout: 5_000 });
+  await editor.press("Escape");
+  await expect(page.getByRole("textbox", { name: "Group name", exact: true })).toHaveText("Agent renamed", { timeout: 5_000 });
   expect(loads.count).toBe(1);
 });

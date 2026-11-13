@@ -211,7 +211,7 @@ describe("POST /directions", () => {
     const ctx = await setup();
     const board = ctx.readBoard();
     const far = { ...board.layout.frames[0]!, id: createId(), name: "Archived far right", archived: true, revision: undefined, rect: { x: 2000, y: 0, width: 700, height: 600 } };
-    const saved = await ctx.send("PUT", `${ctx.base}/board`, { expectedRevision: board.revision, layout: { ...board.layout, frames: [...board.layout.frames, far] } });
+    const saved = await ctx.send("PUT", `${ctx.base}/board`, { expectedRevision: board.revision, layout: { ...board.layout, frames: [...board.layout.frames, far] } }, createId(), ctx.browser);
     expect(saved.statusCode).toBe(200);
     const response = await ctx.send("POST", `${ctx.base}/directions`, proposal(ctx.readBoard().revision));
     const frame = ctx.readBoard().layout.frames.find((entry) => entry.id === response.json().directionId)!;
