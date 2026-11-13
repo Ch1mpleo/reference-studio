@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   UPLOAD_LIMIT_MAX,
   UPLOAD_LIMIT_MIN,
@@ -8,7 +8,12 @@ import {
 import { StudioButton } from "./StudioButton.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioParameter } from "./StudioParameter.js";
-import { SettingsRequestError, getSettings, updateSettings } from "./settingsApi.js";
+import {
+  SETTINGS_CHANGED_EVENT,
+  SettingsRequestError,
+  getSettings,
+  updateSettings,
+} from "./settingsApi.js";
 
 const MIB = 1024 * 1024;
 
@@ -24,30 +29,45 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [openToken, setOpenToken] = useState(0);
+  const [wasOpen, setWasOpen] = useState(open);
+  const dirtyRef = useRef(false);
+  const loadGen = useRef(0);
+
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      loadGen.current += 1;
+      dirtyRef.current = false;
+      setOpenToken(loadGen.current);
+      setLoadState("loading");
+      setSaveState("idle");
+      setMessage(null);
+    }
+  }
 
   useEffect(() => {
     if (!open) {
       return;
     }
+    const gen = loadGen.current;
     let cancelled = false;
-    setLoadState("loading");
-    setMessage(null);
-    setSaveState("idle");
     void getSettings()
       .then((settings) => {
-        if (cancelled) return;
+        if (cancelled || gen !== loadGen.current) return;
+        if (dirtyRef.current) return;
         applyLoaded(settings);
         setLoadState("ready");
       })
       .catch((error: unknown) => {
-        if (cancelled) return;
+        if (cancelled || gen !== loadGen.current) return;
         setLoadState("error");
         setMessage(error instanceof Error ? error.message : "Could not load settings.");
       });
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, openToken]);
 
   function applyLoaded(settings: SettingsRecord): void {
     const mib = settings.maxUploadBytes / MIB;
@@ -56,8 +76,13 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
     setBaselineMib(mib);
   }
 
+  function editLimit(next: number): void {
+    dirtyRef.current = true;
+    setMaxUploadMib(next);
+  }
+
   async function save(): Promise<void> {
-    if (saveState === "saving" || loadState !== "ready") {
+    if (saveState === "saving" || loadState !== "ready" || !limitValid) {
       return;
     }
     setSaveState("saving");
@@ -68,8 +93,9 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
         maxUploadBytes: maxUploadMib * MIB,
       });
       applyLoaded(saved);
+      dirtyRef.current = false;
       setSaveState("idle");
-      window.dispatchEvent(new Event("reference-studio:settings"));
+      window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
       onClose();
     } catch (error) {
       setSaveState("error");
@@ -86,7 +112,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
         }
         return;
       }
-      setMessage(error instanceof SettingsRequestError ? error.message : "Save failed");
+      setMessage(error instanceof SettingsRequestError ? error.message : "Save failed.");
     }
   }
 
@@ -94,6 +120,9 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
   const maxMib = UPLOAD_LIMIT_MAX / MIB;
   const stepMib = UPLOAD_LIMIT_STEP / MIB;
   const dirty = maxUploadMib !== baselineMib;
+  const limitValid =
+    Number.isInteger(maxUploadMib) && maxUploadMib >= minMib && maxUploadMib <= maxMib;
+  const fieldsReady = loadState === "ready";
 
   return (
     <StudioDialog
@@ -106,7 +135,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
           <StudioButton
             variant="primary"
             busy={saveState === "saving"}
-            disabled={loadState !== "ready" || !dirty}
+            disabled={!fieldsReady || !dirty || !limitValid}
             onClick={() => {
               void save();
             }}
@@ -116,7 +145,11 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
         </>
       }
     >
-      <section className="studio-settings-section" data-settings-ready={loadState === "ready" ? "true" : undefined}>
+      <section
+        className="studio-settings-section"
+        data-settings-ready={fieldsReady ? "true" : "false"}
+        data-settings-open-token={String(openToken)}
+      >
         <h3>Storage</h3>
         <StudioParameter
           label="Max upload size"
@@ -125,7 +158,8 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
           min={minMib}
           max={maxMib}
           step={stepMib}
-          onChange={setMaxUploadMib}
+          disabled={!fieldsReady}
+          onChange={editLimit}
         />
         <p className="studio-help">
           {maxUploadMib} MiB. Applies to new uploads from Studio and agents.

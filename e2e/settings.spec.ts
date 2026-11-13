@@ -29,9 +29,17 @@ async function createProject(page: Page, name: string) {
 }
 
 async function openSettings(page: Page) {
+  const section = page.locator(".studio-settings-section");
+  const previousToken = await section.getAttribute("data-settings-open-token").catch(() => null);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(dialog).toBeVisible();
+  if (previousToken !== null) {
+    await expect(dialog.locator(".studio-settings-section")).not.toHaveAttribute(
+      "data-settings-open-token",
+      previousToken,
+    );
+  }
   await expect(dialog.locator("[data-settings-ready='true']")).toBeVisible();
   return dialog;
 }
@@ -120,9 +128,16 @@ test("settings upload limit persists, blocks oversized drops, and restores keybo
 
   const settingsButton = page.getByRole("button", { name: "Settings", exact: true });
   await settingsButton.focus();
+  const reopenToken = await page.locator(".studio-settings-section").getAttribute("data-settings-open-token");
   await page.keyboard.press("Enter");
   dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(dialog).toBeVisible();
+  if (reopenToken !== null) {
+    await expect(dialog.locator(".studio-settings-section")).not.toHaveAttribute(
+      "data-settings-open-token",
+      reopenToken,
+    );
+  }
   await expect(dialog.locator("[data-settings-ready='true']")).toBeVisible();
   await setUploadLimitMib(page, 12);
   await expect(dialog.getByRole("button", { name: "Save", exact: true })).toBeEnabled();

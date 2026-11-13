@@ -20,6 +20,9 @@ export class SettingsRequestError extends Error {
   }
 }
 
+/** Window event name fired after settings are saved successfully. */
+export const SETTINGS_CHANGED_EVENT = "reference-studio:settings" as const;
+
 type KeyMemory = { key: string; hash: string };
 
 let keyMemory: KeyMemory | null = null;
@@ -47,24 +50,19 @@ async function request(
   init?: { method: "PUT"; body: unknown },
 ): Promise<Response> {
   const key = init === undefined ? undefined : idempotencyKey(init.body);
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: init?.method ?? "GET",
-      credentials: "same-origin",
-      cache: "no-store",
-      headers:
-        init === undefined
-          ? undefined
-          : {
-              "content-type": "application/json",
-              "idempotency-key": key ?? "",
-            },
-      body: init === undefined ? undefined : JSON.stringify(init.body),
-    });
-  } catch (error) {
-    throw error;
-  }
+  const response = await fetch(url, {
+    method: init?.method ?? "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers:
+      init === undefined
+        ? undefined
+        : {
+            "content-type": "application/json",
+            "idempotency-key": key ?? "",
+          },
+    body: init === undefined ? undefined : JSON.stringify(init.body),
+  });
   keyMemory = null;
   if (!response.ok) {
     throw await readError(response);

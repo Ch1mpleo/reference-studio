@@ -23,7 +23,7 @@ import type { SystemSaveResult } from "./SystemEditor.js";
 import { BoardRequestError, duplicateDirection, patchDirection, type DirectionPatch } from "./boardApi.js";
 import type { PlacementOptions, PlacementUseInput, ReferenceDetailsInput } from "./referenceApi.js";
 import type { ReferenceLoadStatus } from "./useProjectReferences.js";
-import { getSettings } from "./settingsApi.js";
+import { SETTINGS_CHANGED_EVENT, getSettings } from "./settingsApi.js";
 
 const emptyFields: ImageFields = { title: "", sourceUrl: null, creator: null, observations: "" };
 type Point = { x: number; y: number };
@@ -78,10 +78,10 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       });
     };
     load();
-    window.addEventListener("reference-studio:settings", load);
+    window.addEventListener(SETTINGS_CHANGED_EVENT, load);
     return () => {
       cancelled = true;
-      window.removeEventListener("reference-studio:settings", load);
+      window.removeEventListener(SETTINGS_CHANGED_EVENT, load);
     };
   }, [projectId, refreshKey]);
   const selected = references.find((item) => item.placementId === inspectedId) ?? null;

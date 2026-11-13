@@ -24,7 +24,7 @@ function setControlValue(control: HTMLInputElement, value: string): void {
   control.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-async function render(open = true): Promise<{ container: HTMLElement; root: Root; onClose: ReturnType<typeof vi.fn> }> {
+async function render(open = true): Promise<{ container: HTMLElement; root: Root; onClose: () => void }> {
   const container = document.createElement("div");
   container.className = "studio-ui";
   document.body.append(container);
@@ -32,7 +32,7 @@ async function render(open = true): Promise<{ container: HTMLElement; root: Root
   layer.className = "studio-layer";
   container.append(layer);
   const root = createRoot(container);
-  const onClose = vi.fn();
+  const onClose = vi.fn(() => undefined);
   await act(async () => {
     root.render(createElement(StudioSettings, { open, onClose }));
   });
@@ -119,6 +119,82 @@ describe("StudioSettings", () => {
     );
     expect(view.onClose).not.toHaveBeenCalled();
     expect(getSettings).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("disables inputs while GET is held and ignores stale responses over a dirty draft", async () => {
+    const resolvers: Array<(value: { maxUploadBytes: number; revision: number }) => void> = [];
+    getSettings.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    const view = await render(false);
+    await act(async () => {
+      view.root.render(createElement(StudioSettings, { open: true, onClose: view.onClose }));
+    });
+    const section = document.body.querySelector(".studio-settings-section");
+    const number = document.body.querySelector<HTMLInputElement>('input[type="number"]');
+    if (number === null) throw new Error("Expected number field");
+    expect(section?.getAttribute("data-settings-ready")).toBe("false");
+    expect(number.disabled).toBe(true);
+    expect(resolvers.length).toBe(1);
+
+    await act(async () => {
+      view.root.render(createElement(StudioSettings, { open: false, onClose: view.onClose }));
+    });
+    await act(async () => {
+      view.root.render(createElement(StudioSettings, { open: true, onClose: view.onClose }));
+    });
+    expect(section?.getAttribute("data-settings-ready")).toBe("false");
+    expect(number.disabled).toBe(true);
+    expect(resolvers.length).toBe(2);
+
+    await act(async () => {
+      resolvers[1]!({ maxUploadBytes: 5 * 1024 * 1024, revision: 2 });
+      await Promise.resolve();
+    });
+    expect(section?.getAttribute("data-settings-ready")).toBe("true");
+    expect(number.disabled).toBe(false);
+    expect(number.value).toBe("5");
+
+    await act(async () => {
+      setControlValue(number, "8");
+    });
+    expect(number.value).toBe("8");
+
+    await act(async () => {
+      resolvers[0]!({ maxUploadBytes: 3 * 1024 * 1024, revision: 99 });
+      await Promise.resolve();
+    });
+    expect(number.value).toBe("8");
+    expect(section?.getAttribute("data-settings-ready")).toBe("true");
+
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("disables Save for fractional MiB and shows the whole-MiB message", async () => {
+    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 });
+    const view = await render(true);
+    const number = document.body.querySelector<HTMLInputElement>('input[type="number"]');
+    if (number === null) throw new Error("Expected number field");
+    await act(async () => {
+      setControlValue(number, "2.5");
+    });
+    expect(document.body.textContent).toContain("Use whole MiB from 1 to 512.");
+    const save = [...document.body.querySelectorAll("button")].find((button) => button.textContent === "Save");
+    expect(save?.disabled).toBe(true);
+    await act(async () => {
+      setControlValue(number, "600");
+    });
+    expect(document.body.textContent).toContain("Use whole MiB from 1 to 512.");
+    expect(save?.disabled).toBe(true);
     await act(async () => {
       view.root.unmount();
     });
