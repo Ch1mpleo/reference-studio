@@ -18,6 +18,8 @@ export function canonicalRequestJson(value: unknown): string {
   return JSON.stringify(normalizeCanonical(value));
 }
 
+export const IDEMPOTENCY_REPLAYED_HEADER = "idempotency-replayed";
+
 export const idempotencyKeySchema = z
   .string()
   .regex(

@@ -15,7 +15,7 @@ export { healthResponse, healthResponseSchema } from "./health.js";
 export type { HealthResponse } from "./health.js";
 export { changedEvent, readyEvent, studioEventSchema, STUDIO_ENTITY_TYPES } from "./events.js";
 export type { ChangedEvent, StudioEvent } from "./events.js";
-export { canonicalRequestJson, idempotencyKeySchema, mutationScope, CALLER_KINDS } from "./idempotency.js";
+export { canonicalRequestJson, IDEMPOTENCY_REPLAYED_HEADER, idempotencyKeySchema, mutationScope, CALLER_KINDS } from "./idempotency.js";
 export type { CallerKind } from "./idempotency.js";
 export { parseContract } from "./parse.js";
 export {

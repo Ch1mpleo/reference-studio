@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { CONTRACT_VERSION } from "@reference-studio/core";
+import { CONTRACT_VERSION, IDEMPOTENCY_REPLAYED_HEADER } from "@reference-studio/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { AdapterError, resolveDataDir } from "./discovery.js";
 import { z } from "zod";
@@ -370,7 +370,7 @@ describe("connect().sendJson", () => {
 
   it("posts JSON with the bearer token and mutation key and reports replays", async () => {
     let calls = 0;
-    const { service, seen } = await client(() => ({ status: 201, body: { id: "a" }, headers: (++calls > 1 ? { "idempotency-replayed": "true" } : {}) as Record<string, string> }));
+    const { service, seen } = await client(() => ({ status: 201, body: { id: "a" }, headers: (++calls > 1 ? { [IDEMPOTENCY_REPLAYED_HEADER]: "true" } : {}) as Record<string, string> }));
     await expect(service.sendJson("POST", "/api/x", { a: 1 }, result, "key-1")).resolves.toEqual({ data: { id: "a" }, replayed: false });
     await expect(service.sendJson("POST", "/api/x", { a: 1 }, result, "key-1")).resolves.toEqual({ data: { id: "a" }, replayed: true });
     expect(seen[0]).toMatchObject({ method: "POST", url: "/api/x", key: "key-1", auth: `Bearer ${TOKEN}`, body: '{"a":1}' });
@@ -382,9 +382,18 @@ describe("connect().sendJson", () => {
     const error = await failureOf(service.sendJson("POST", "/api/x", {}, result, "k"));
     expect(error.code).toBe("revision_conflict");
     expect(error.conflict).toEqual({ currentRevision: 7, recordType: "direction", recordId: "d-1" });
-    expect(error.nextStep).toContain("get_project_context");
+    expect(error.nextStep).toContain("get_project_context (with directionId)");
     expect(error.nextStep).toContain("new mutationKey");
     expect(seen).toHaveLength(1);
+  });
+
+  it("leaves directionId out of the next step for a board conflict", async () => {
+    const details = { currentRevision: 9, expectedRevision: 2, recordType: "board", recordId: "p-1" };
+    const { service } = await client(() => ({ status: 409, body: { error: { code: "conflict", message: "The record changed since it was loaded.", details } } }));
+    const error = await failureOf(service.sendJson("POST", "/api/x", {}, result, "k"));
+    expect(error.conflict).toMatchObject({ currentRevision: 9, recordType: "board" });
+    expect(error.nextStep).toContain("get_project_context to read");
+    expect(error.nextStep).not.toContain("directionId");
   });
 
   it("maps an idempotency 409 to idempotency_mismatch and never retries", async () => {

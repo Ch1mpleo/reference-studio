@@ -1,4 +1,4 @@
-import { CONTRACT_VERSION, serviceErrorBodySchema } from "@reference-studio/core";
+import { CONTRACT_VERSION, IDEMPOTENCY_REPLAYED_HEADER, serviceErrorBodySchema } from "@reference-studio/core";
 import type { ZodType } from "zod";
 import { AdapterError, readDiscovery, resolveDataDir, type ConflictDetails } from "./discovery.js";
 
@@ -123,8 +123,10 @@ async function getJson<T>(
   throw mapServiceFailure(response.status, response.body, path);
 }
 
-const REVISION_NEXT_STEP =
-  "Call get_project_context (with directionId) to read the current revision and the human's changes, then retry against currentRevision with a new mutationKey.";
+function revisionNextStep(conflict: ConflictDetails | undefined): string {
+  const target = conflict?.recordType === "board" ? "" : " (with directionId)";
+  return `Call get_project_context${target} to read the current revision and the human's changes, then retry against currentRevision with a new mutationKey.`;
+}
 
 /** Writes are sent once: the adapter never retries, so a lost reply is resolved by the caller replaying its mutationKey. */
 async function sendJson<T>(
@@ -174,7 +176,7 @@ async function sendJson<T>(
         "Rebuild and restart Studio and the MCP adapter from the same checkout (`npm run build`, then `npm run dev`).",
       );
     }
-    return { data: parsed.data, replayed: response.headers.get("idempotency-replayed") === "true" };
+    return { data: parsed.data, replayed: response.headers.get(IDEMPOTENCY_REPLAYED_HEADER) === "true" };
   }
   throw mapServiceFailure(response.status, parsedBody, path, true);
 }
@@ -272,11 +274,12 @@ function mapServiceFailure(status: number, body: unknown, path: string, write = 
     );
   }
   if (status === 409) {
+    const conflict = conflictDetails(body);
     return new AdapterError(
       "revision_conflict",
       message ?? "The record changed since the revision the caller knew.",
-      write ? REVISION_NEXT_STEP : "Refetch the context without knownRevision (or with the current revision) and continue from it.",
-      conflictDetails(body),
+      write ? revisionNextStep(conflict) : "Refetch the context without knownRevision (or with the current revision) and continue from it.",
+      conflict,
     );
   }
   if (status === 401 || status === 403) {

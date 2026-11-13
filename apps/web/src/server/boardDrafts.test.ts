@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { afterEach, describe, expect, it } from "vitest";
-import { boardSchema, createId, projectReferenceSchema, projectSchema, type StudioEvent } from "@reference-studio/core";
+import { boardSchema, createId, IDEMPOTENCY_REPLAYED_HEADER, projectReferenceSchema, projectSchema, type StudioEvent } from "@reference-studio/core";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { openDatabase } from "./db.js";
@@ -132,8 +132,8 @@ describe("POST /annotations", () => {
     const second = await ctx.annotate(request, key);
     expect(second.statusCode).toBe(201);
     expect(second.json()).toEqual(first.json());
-    expect(second.headers["idempotency-replayed"]).toBe("true");
-    expect(first.headers["idempotency-replayed"]).toBeUndefined();
+    expect(second.headers[IDEMPOTENCY_REPLAYED_HEADER]).toBe("true");
+    expect(first.headers[IDEMPOTENCY_REPLAYED_HEADER]).toBeUndefined();
     expect(ctx.events).toHaveLength(1);
     expect(ctx.readBoard().layout.annotations).toHaveLength(1);
     const mismatch = await ctx.annotate({ ...request, body: "Different" }, key);
@@ -207,6 +207,17 @@ describe("POST /directions", () => {
     expect(JSON.stringify(ctx.database.prepare("SELECT * FROM project_boards WHERE project_id = ?").get(ctx.project.id))).toBe(snapshot);
   });
 
+  it("never overlaps an archived frame", async () => {
+    const ctx = await setup();
+    const board = ctx.readBoard();
+    const far = { ...board.layout.frames[0]!, id: createId(), name: "Archived far right", archived: true, revision: undefined, rect: { x: 2000, y: 0, width: 700, height: 600 } };
+    const saved = await ctx.send("PUT", `${ctx.base}/board`, { expectedRevision: board.revision, layout: { ...board.layout, frames: [...board.layout.frames, far] } });
+    expect(saved.statusCode).toBe(200);
+    const response = await ctx.send("POST", `${ctx.base}/directions`, proposal(ctx.readBoard().revision));
+    const frame = ctx.readBoard().layout.frames.find((entry) => entry.id === response.json().directionId)!;
+    expect(frame.rect.x).toBeGreaterThanOrEqual(2700);
+  });
+
   it("replays one key without a second frame or event and rejects a different body", async () => {
     const ctx = await setup();
     const request = proposal(ctx.readBoard().revision);
@@ -214,7 +225,7 @@ describe("POST /directions", () => {
     const first = await ctx.send("POST", `${ctx.base}/directions`, request, key);
     const second = await ctx.send("POST", `${ctx.base}/directions`, request, key);
     expect(second.json()).toEqual(first.json());
-    expect(second.headers["idempotency-replayed"]).toBe("true");
+    expect(second.headers[IDEMPOTENCY_REPLAYED_HEADER]).toBe("true");
     expect(ctx.readBoard().layout.frames).toHaveLength(2);
     expect(ctx.events).toHaveLength(1);
     const mismatch = await ctx.send("POST", `${ctx.base}/directions`, { ...request, name: "Other" }, key);

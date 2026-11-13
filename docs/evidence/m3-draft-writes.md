@@ -7,7 +7,7 @@ Checkpoint: 2026-11-13 on `feat/m3.3-annotations-directions` (base `75214a7`). M
 - `POST /api/projects/:projectId/annotations` and `POST /api/projects/:projectId/directions` (`apps/web/src/server/boardDrafts.ts`), both inside `commitMutation` and reusing `saveBoardLayout`, so region and 1,000-annotation validation, direction revision bumps and the board event come from the existing path. Strict schemas in `packages/core/src/board.ts` reject any `provenance`, `decision` or `id`.
 - Provenance is set by the service from the caller: `agent` for a bearer caller, `human` for a browser session; `authorName` is optional free text.
 - Revision scope follows the M3.2 rule: the direction's revision for a direction target or a placement inside a frame, otherwise the board's. `propose_direction` always takes the board revision. A stale value is 409 with `currentRevision`, `expectedRevision`, `recordType` and `recordId`; nothing is written and no event is sent.
-- `propose_direction` adds a frame at revision 1 (700 x 600, `decisions: ""`, no items) to the right of the non-archived frames and aligned with the topmost one (origin on an empty board), plus an annotation on it whose body is the rationale, in one transaction and one board event.
+- `propose_direction` adds a frame at revision 1 (700 x 600, `decisions: ""`, no items) to the right of every frame, archived included, and aligned with the topmost visible one (origin on an empty board), plus an annotation on it whose body is the rationale, in one transaction and one board event.
 - Replay signal: the service sets the response header `idempotency-replayed: true` on a replayed result; the adapter turns it into `replayed: true`. A reused key with a different request is 409 `details.reason: "idempotency_mismatch"` and is mapped to the adapter code `idempotency_mismatch`.
 - Adapter: `ServiceConnection.sendJson(method, path, body, schema, mutationKey)` sends once and never retries. `errorOutput` gained optional `currentRevision`, `recordType` and `recordId`. Tool annotations are `readOnlyHint:false, destructiveHint:false, idempotentHint:true`. Tool inputs are strict, so forged provenance is rejected by the SDK before the service sees it.
 
@@ -18,15 +18,15 @@ Node v24.22.3 (npm 11.19.1). MCP SDK `@modelcontextprotocol/client` and `/server
 | Command | Result |
 | --- | --- |
 | `npm run check` | exit 0, no diagnostics |
-| `npm test` | 53 files, 266 tests: 266 passed, 0 failed, 0 skipped |
+| `npm test` | 53 files, 268 tests: 268 passed, 0 failed, 0 skipped |
 | `npm run build` | exit 0 |
-| `npm run test:e2e` (Chromium) | 67 tests: 67 passed, 0 failed, 0 skipped |
+| `npm run test:e2e` (Chromium) | 67 tests: 67 passed, 0 failed, 0 skipped (an earlier run of this commit had one failure in `canvas-simplicity.spec.ts` "zoom stays bare", a pixel threshold of 10 against `> 10`; it passed alone and in the full rerun) |
 
-New coverage: `boardDrafts.test.ts` (11 `app.inject` tests), `serviceClient.test.ts` `sendJson` block (8), `writeTools.test.ts` (6 stdio tests against a real service on a free port, seeded only through the HTTP API, with a bearer `/api/events` subscription) and `e2e/agent-writes.spec.ts` (1 browser test).
+New coverage: `boardDrafts.test.ts` (12 `app.inject` tests), `serviceClient.test.ts` `sendJson` block (9), `writeTools.test.ts` (6 stdio tests against a real service on a free port, seeded only through the HTTP API, with a bearer `/api/events` subscription) and `e2e/agent-writes.spec.ts` (1 browser test).
 
 The stdio suite asserts: success on a direction, an image placement with a region and an inbox placement (`location: "inbox"`), and a proposed frame visible in `GET /board`; every agent record has `author: "agent"` and no decision; each write produces exactly one `changed` `board` event with the new revision; after a `PATCH /directions` edit a stale write is `revision_conflict` with `currentRevision`, the board JSON is byte-identical and no event arrives within 500 ms; replay returns `replayed: true` with no event, and a different body under the same key is `idempotency_mismatch`; a region on a link placement is `validation`; an unknown project or target is `not_found`; a stopped service is `service_unavailable`; the token never appears in tool output.
 
-SDK input-validation result (the SDK answers with an `isError` tool result carrying `Input validation error`, not a protocol error and not an adapter code):
+SDK input-validation result (the stdio test asserts each exact message; the SDK answers with an `isError` tool result carrying `Input validation error`, not a protocol error and not an adapter code):
 
 ```text
 empty body {"resolved":true,"isError":true,"text":"Input validation error: Invalid arguments for tool add_annotation: body: Too small: expected string to have >=1 characters"}
@@ -204,6 +204,6 @@ seeded project 9c7a78f8-1573-4ec2-ab7b-d38186edcd2f; board revision 2; direction
 
 - The live workspace does not render the "Agent proposal" label or a direction's notes: `AnnotationEditor` and `DirectionViews` (which carry that label) are only used by the specimen preview. The live UI shows the new group and, for an inspected non-note placement, the note body under "Attached notes". The UI was out of scope, so this was not changed.
 - Agent notes stay out of `get_project_context` and `get_reference` under the M3.2 read rules (human-authored or decision only), so an agent cannot yet read back its own notes through the tools.
-- The direction rectangle is a fixed 700 x 600 at 48 units right of the rightmost non-archived frame; an archived frame can be overlapped, and coordinates beyond the 100,000 limit are a `validation` error.
+- The direction rectangle is a fixed 700 x 600 at 48 units right of the rightmost frame, archived included; coordinates beyond the 100,000 limit are a `validation` error.
 - A timed-out write is reported as `service_unavailable` with advice to repeat the same `mutationKey`; the adapter does not retry on its own.
 - Not run: a real MCP host client, the default Edge channel, and the M3.3b/M3.3c tools.

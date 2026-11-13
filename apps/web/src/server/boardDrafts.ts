@@ -1,5 +1,5 @@
 import {
-  assertExpectedRevision, createAnnotationRequestSchema, createId, mutationScope, parseContract, proposeDirectionRequestSchema, ServiceError,
+  assertExpectedRevision, createAnnotationRequestSchema, IDEMPOTENCY_REPLAYED_HEADER, createId, mutationScope, parseContract, proposeDirectionRequestSchema, ServiceError,
   type BoardAnnotation, type BoardFrame, type CreateAnnotationResult, type ProposeDirectionResult,
 } from "@reference-studio/core";
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -10,10 +10,8 @@ import type { EventHub } from "./events.js";
 import { commitMutation, hashCanonicalRequest, readIdempotencyKey, type MutationOutcome } from "./idempotency.js";
 import { readBoard, requireJson, saveBoardLayout } from "./boards.js";
 
-export const REPLAYED_HEADER = "idempotency-replayed";
-
 function send(reply: FastifyReply, outcome: MutationOutcome) {
-  if (outcome.replayed) reply.header(REPLAYED_HEADER, "true");
+  if (outcome.replayed) reply.header(IDEMPOTENCY_REPLAYED_HEADER, "true");
   return reply.code(outcome.statusCode).send(outcome.body);
 }
 
@@ -29,10 +27,10 @@ function requirePlacementInProject(database: DatabaseSync, projectId: string, pl
 
 const PROPOSED_FRAME = { width: 700, height: 600, gap: 48 };
 
-/** Places a new frame to the right of the visible frames, aligned with the topmost one. */
+/** Places a new frame to the right of every frame, archived included, aligned with the topmost visible one. */
 function freeFrameRect(frames: BoardFrame[]): BoardFrame["rect"] {
   const open = frames.filter((frame) => !frame.archived);
-  return { x: open.length === 0 ? 0 : Math.max(...open.map((frame) => frame.rect.x + frame.rect.width)) + PROPOSED_FRAME.gap,
+  return { x: frames.length === 0 ? 0 : Math.max(...frames.map((frame) => frame.rect.x + frame.rect.width)) + PROPOSED_FRAME.gap,
     y: open.length === 0 ? 0 : Math.min(...open.map((frame) => frame.rect.y)), width: PROPOSED_FRAME.width, height: PROPOSED_FRAME.height };
 }
 

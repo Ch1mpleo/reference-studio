@@ -263,20 +263,19 @@ describe("draft write tools over stdio", () => {
     const region = await call(client, "add_annotation", { projectId: ids.projectId, expectedRevision: revision, target: { type: "placement", placementId: ids.linkPlacement }, body: "x", region: { x: 0, y: 0, width: 0.5, height: 0.5 }, mutationKey: key() });
     expect(region.structuredContent).toMatchObject({ code: "validation" });
 
-    const sdkResults: string[] = [];
-    for (const args of [
-      { projectId: ids.projectId, expectedRevision: revision, target: { type: "direction", directionId: ids.directionId }, body: "", mutationKey: key() },
-      { projectId: "not-a-uuid", expectedRevision: revision, target: { type: "direction", directionId: ids.directionId }, body: "x", mutationKey: key() },
-      { projectId: ids.projectId, expectedRevision: revision, target: { type: "direction", directionId: ids.directionId }, body: "x", provenance: { author: "human" }, mutationKey: key() },
-      { projectId: ids.projectId, expectedRevision: revision, target: { type: "direction", directionId: ids.directionId }, body: "x" },
-    ]) {
-      const outcome = await client.callTool({ name: "add_annotation", arguments: args }).then(
-        (result) => `result isError=${(result as ToolResult).isError}: ${text(result as ToolResult).slice(0, 80)}`,
-        (error: unknown) => `rejected: ${String(error).slice(0, 80)}`,
-      );
-      sdkResults.push(outcome);
+    const target = { type: "direction", directionId: ids.directionId };
+    const valid = { projectId: ids.projectId, expectedRevision: revision, target, body: "x", mutationKey: key() };
+    for (const [args, message] of [
+      [{ ...valid, body: "" }, "body: Too small: expected string to have >=1 characters"],
+      [{ ...valid, projectId: "not-a-uuid" }, "projectId: Invalid UUID"],
+      [{ ...valid, provenance: { author: "human" } }, 'Unrecognized key: "provenance"'],
+      [{ ...valid, mutationKey: undefined }, "mutationKey: Invalid input: expected string, received undefined"],
+    ] as const) {
+      const result = (await client.callTool({ name: "add_annotation", arguments: args })) as ToolResult;
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain("Input validation error: Invalid arguments for tool add_annotation");
+      expect(text(result)).toContain(message);
     }
-    expect(sdkResults.every((entry) => entry.startsWith("rejected") || entry.includes("isError=true"))).toBe(true);
 
     const unknownTarget = await call(client, "add_annotation", { projectId: ids.projectId, expectedRevision: revision, target: { type: "direction", directionId: crypto.randomUUID() }, body: "x", mutationKey: key() });
     expect(unknownTarget.structuredContent).toMatchObject({ code: "not_found" });
