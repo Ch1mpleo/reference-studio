@@ -138,8 +138,12 @@ test("keeps slider values when a save fails or loses a revision race", async ({ 
     return response.status;
   });
   expect(raced).toBe(200);
-  await duration.fill("480");
-  await expect(slider).toHaveValue("480");
+  // Wait for the competing PATCH to refresh the open editor before typing a new draft.
+  await expect.poll(async () => (await readVariants(page)).find((entry) => entry.name === "Held locally")?.motion.durationMs, { timeout: 5_000 }).toBe(220);
+  await expect(async () => {
+    await duration.fill("480");
+    await expect(slider).toHaveValue("480");
+  }).toPass({ timeout: 5_000 });
   await saved.getByRole("button", { name: "Save", exact: true }).click();
   await expect(saved.getByRole("status")).toContainText("Conflict");
   await expect(duration).toHaveValue("480");
