@@ -152,3 +152,30 @@ test("settings upload limit persists, blocks oversized drops, and restores keybo
   await expect(dialog).toBeHidden();
   await expect(settingsButton).toBeFocused();
 });
+
+test("Images from URLs Save a copy persists across reload", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  await page.goto(server.origin);
+  await createProject(page, "URL image mode");
+
+  let dialog = await openSettings(page);
+  await expect(dialog.getByRole("heading", { name: "Storage", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("radio", { name: "Show from link", exact: true })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await dialog.getByRole("radio", { name: "Save a copy", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toBeHidden();
+
+  await page.reload();
+  await expect(page.locator(".canvas-status")).toContainText("Saved");
+  dialog = await openSettings(page);
+  await expect(dialog.getByRole("radio", { name: "Save a copy", exact: true })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+});

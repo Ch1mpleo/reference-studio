@@ -6,7 +6,7 @@ import type { BoardAnnotation, LibraryReference } from "@reference-studio/core";
 import { ImageRegions } from "./ImageRegions.js";
 
 it("anchors normalized regions to the original image aspect ratio and reserves it on missing media", () => {
-  const reference: LibraryReference = { id: "00000000-0000-4000-8000-000000000005", kind: "image", title: "Light", sourceUrl: null, creator: null, observations: "", tags: [], availability: "available", archived: false, motion: null, asset: { id: "00000000-0000-4000-8000-000000000006", sha256: "a".repeat(64), mediaType: "image/png", byteSize: 12, width: 800, height: 400 }, revision: 1, createdAt: "2026-10-21T00:00:00.000Z", updatedAt: "2026-10-21T00:00:00.000Z" };
+  const reference: LibraryReference = { id: "00000000-0000-4000-8000-000000000005", kind: "image", title: "Light", sourceUrl: null, creator: null, observations: "", tags: [], availability: "available", archived: false, motion: null, asset: { id: "00000000-0000-4000-8000-000000000006", sha256: "a".repeat(64), mediaType: "image/png", byteSize: 12, width: 800, height: 400 }, previewImageUrl: null, revision: 1, createdAt: "2026-10-21T00:00:00.000Z", updatedAt: "2026-10-21T00:00:00.000Z" };
   const annotation: BoardAnnotation = { id: "00000000-0000-4000-8000-000000000002", target: { type: "placement", placementId: "00000000-0000-4000-8000-000000000001" }, body: "Warm edge", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" }, region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 } };
   const host = document.createElement("div");
   host.innerHTML = renderToStaticMarkup(createElement(ImageRegions, { reference, annotations: [annotation] }));

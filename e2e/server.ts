@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { promises as dns } from "node:dns";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -6,6 +7,9 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { FastifyInstance } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
+
+/** Fake host for url-images e2e; mapped to 127.0.0.1 without public DNS. */
+export const PREVIEW_TEST_HOST = "preview.test";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
@@ -103,6 +107,15 @@ export class IsolatedServer {
       database,
       remoteFetch: {
         allowLoopbackPort: loopbackPort,
+        resolver: async (
+          host: string,
+          options: { all: true; verbatim: true },
+        ): Promise<Array<{ address: string; family: number }>> => {
+          if (host === PREVIEW_TEST_HOST) {
+            return [{ address: "127.0.0.1", family: 4 }];
+          }
+          return dns.lookup(host, options);
+        },
       },
     });
     await app.listen({ host: config.host, port: config.port });
@@ -129,6 +142,15 @@ export class IsolatedServer {
   async dispose(): Promise<void> {
     await this.stop();
     rmSync(this.dataDir, { recursive: true, force: true });
+  }
+
+  /** Test-only: run SQL against the in-process database. */
+  runSql(sql: string, params: Array<null | number | string | bigint | Uint8Array> = []): void {
+    const database = this.inProcess?.database;
+    if (database === undefined) {
+      throw new Error("SQL requires the in-process isolated service.");
+    }
+    database.prepare(sql).run(...params);
   }
 }
 

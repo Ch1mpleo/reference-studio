@@ -8,12 +8,14 @@ const moveKeys = new Set(["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Ho
 /** One choice. Arrow keys move the selection and report it immediately. */
 export function StudioSegment({
   label,
+  labelledBy,
   value,
   options,
   disabled = false,
   onChange,
 }: {
   label: string;
+  labelledBy?: string;
   value: string;
   options: readonly StudioSegmentOption[];
   disabled?: boolean;
@@ -37,8 +39,12 @@ export function StudioSegment({
   }
 
   return (
-    <div ref={groupRef} className="studio-segment" role="radiogroup" aria-label={label}>
-      {options.map((option, index) => {
+    <div
+      ref={groupRef}
+      className="studio-segment"
+      role="radiogroup"
+      {...(labelledBy !== undefined ? { "aria-labelledby": labelledBy } : { "aria-label": label })}
+    >      {options.map((option, index) => {
         const checked = option.value === value;
         return (
           <StudioButton

@@ -77,7 +77,13 @@ describe("backup manifest", () => {
     expect(() => readBackupManifest({ format: "other", formatVersion: 1 })).toThrow(
       "This file is not a Reference Studio backup.",
     );
-    expect(() => readBackupManifest(manifest({ formatVersion: 6 as never }))).toThrow(backupVersionMessage("6"));
+    expect(() => readBackupManifest(manifest({ formatVersion: 7 as never }))).toThrow(backupVersionMessage("7"));
+    expect(() => readBackupManifest(manifest({ formatVersion: "6" as never }))).toThrow(
+      "This backup's format version must be a number (received string).",
+    );
+    expect(() => readBackupManifest(manifest({ formatVersion: 6.5 as never }))).toThrow(
+      "This backup's format version must be a whole number (received 6.5).",
+    );
     expect(() =>
       readBackupManifest({
         ...manifest(),
@@ -133,5 +139,110 @@ describe("backup manifest", () => {
         placements: [{ ...manifest().placements[0], referenceOriginalId: placementId }],
       }),
     ).toThrow("This backup has a placement for a missing reference.");
+  });
+
+  it("accepts previewImageUrl on links in format 6 and rejects it on images", () => {
+    const linkId = "00000000-0000-4000-8000-000000000010";
+    const linkManifest = {
+      ...manifest(),
+      formatVersion: 6 as const,
+      board: { frames: [], items: [] },
+      references: [
+        {
+          originalId: linkId,
+          kind: "link" as const,
+          title: "Preview",
+          sourceUrl: "https://example.com/photo.png",
+          creator: null,
+          observations: "",
+          tags: [],
+          availability: "unknown" as const,
+          archived: false,
+          motion: null,
+          assetOriginalId: null,
+          previewImageUrl: "https://example.com/photo.png",
+        },
+      ],
+      placements: [
+        {
+          originalId: placementId,
+          referenceOriginalId: linkId,
+          directionOriginalId: null,
+          role: "inspiration" as const,
+          usageNotes: "",
+          crop: null,
+          interpretation: "",
+          rect: null,
+        },
+      ],
+    };
+    expect(readBackupManifest(linkManifest).references[0]?.previewImageUrl).toBe(
+      "https://example.com/photo.png",
+    );
+    expect(
+      readBackupManifest({
+        ...manifest(),
+        formatVersion: 5,
+        board: { frames: [], items: [] },
+      }).references[0]?.previewImageUrl,
+    ).toBeUndefined();
+    expect(() =>
+      readBackupManifest({
+        ...linkManifest,
+        formatVersion: 5,
+      }),
+    ).toThrow("Preview image URLs require backup format 6.");
+    expect(() =>
+      readBackupManifest({
+        ...linkManifest,
+        formatVersion: 4,
+        board: { frames: [], items: [] },
+      }),
+    ).toThrow("Preview image URLs require backup format 6.");
+    expect(() =>
+      readBackupManifest({
+        ...linkManifest,
+        references: [
+          {
+            ...linkManifest.references[0]!,
+            previewImageUrl: "http://127.0.0.1/steal.png",
+          },
+        ],
+      }),
+    ).toThrow("That preview image URL is not allowed.");
+    expect(() =>
+      readBackupManifest({
+        ...manifest(),
+        formatVersion: 6,
+        board: { frames: [], items: [] },
+        assets: [
+          {
+            originalId: referenceId,
+            sha256: "a".repeat(64),
+            mediaType: "image/png",
+            byteSize: 12,
+            width: 1,
+            height: 1,
+            path: `assets/${"a".repeat(64)}.png`,
+          },
+        ],
+        references: [
+          {
+            originalId: referenceId,
+            kind: "image",
+            title: "Stored",
+            sourceUrl: null,
+            creator: null,
+            observations: "",
+            tags: [],
+            availability: "available",
+            archived: false,
+            motion: null,
+            assetOriginalId: referenceId,
+            previewImageUrl: "https://example.com/nope.png",
+          },
+        ],
+      }),
+    ).toThrow(ServiceError);
   });
 });

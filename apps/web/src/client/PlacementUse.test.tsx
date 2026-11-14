@@ -31,6 +31,7 @@ const image: ProjectReference = {
       width: 1,
       height: 1,
     },
+    previewImageUrl: null,
     revision: 1,
     createdAt: "2026-10-21T00:00:00.000Z",
     updatedAt: "2026-10-21T00:00:00.000Z",

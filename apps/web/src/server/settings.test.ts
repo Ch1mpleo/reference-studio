@@ -8,6 +8,7 @@ import {
   UPLOAD_LIMIT_MAX,
   UPLOAD_LIMIT_MIN,
   UPLOAD_LIMIT_STEP,
+  URL_IMAGE_MODE_DEFAULT,
   type StudioEvent,
 } from "@reference-studio/core";
 import type { FastifyInstance } from "fastify";
@@ -77,16 +78,24 @@ function agentHeaders(extra?: Record<string, string>): Record<string, string> {
 }
 
 describe("settings API", () => {
-  it("serves the 20 MiB default to browser and bearer callers", async () => {
+  it("serves the 20 MiB default and hotlink mode to browser and bearer callers", async () => {
     const { app } = await startApp();
     const browser = await browserHeaders(app);
     const browserGet = await app.inject({ method: "GET", url: "/api/settings", headers: browser });
     expect(browserGet.statusCode).toBe(200);
-    expect(browserGet.json()).toEqual({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 });
+    expect(browserGet.json()).toEqual({
+      maxUploadBytes: UPLOAD_LIMIT_DEFAULT,
+      urlImageMode: URL_IMAGE_MODE_DEFAULT,
+      revision: 1,
+    });
 
     const agentGet = await app.inject({ method: "GET", url: "/api/settings", headers: agentHeaders() });
     expect(agentGet.statusCode).toBe(200);
-    expect(agentGet.json()).toEqual({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 });
+    expect(agentGet.json()).toEqual({
+      maxUploadBytes: UPLOAD_LIMIT_DEFAULT,
+      urlImageMode: URL_IMAGE_MODE_DEFAULT,
+      revision: 1,
+    });
   });
 
   it("lets a browser update the limit, bumps revision, and persists across createApp", async () => {
@@ -103,7 +112,11 @@ describe("settings API", () => {
       payload: { expectedRevision: 1, maxUploadBytes: next },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json()).toEqual({ maxUploadBytes: next, revision: 2 });
+    expect(updated.json()).toEqual({
+      maxUploadBytes: next,
+      urlImageMode: URL_IMAGE_MODE_DEFAULT,
+      revision: 2,
+    });
     expect(events.filter((event) => event.type === "changed")).toEqual([]);
     unsubscribe();
     await app.close();
@@ -119,8 +132,62 @@ describe("settings API", () => {
       headers: await browserHeaders(reopened),
     });
     expect(loaded.statusCode).toBe(200);
-    expect(loaded.json()).toEqual({ maxUploadBytes: next, revision: 2 });
+    expect(loaded.json()).toEqual({
+      maxUploadBytes: next,
+      urlImageMode: URL_IMAGE_MODE_DEFAULT,
+      revision: 2,
+    });
     await reopened.close();
+  });
+
+  it("persists urlImageMode store and keeps it across a limit-only PUT", async () => {
+    const { app } = await startApp();
+    const browser = await browserHeaders(app);
+    const mode = await app.inject({
+      method: "PUT",
+      url: "/api/settings",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "mode-store" },
+      payload: { expectedRevision: 1, urlImageMode: "store" },
+    });
+    expect(mode.statusCode).toBe(200);
+    expect(mode.json()).toEqual({
+      maxUploadBytes: UPLOAD_LIMIT_DEFAULT,
+      urlImageMode: "store",
+      revision: 2,
+    });
+
+    const next = UPLOAD_LIMIT_DEFAULT + UPLOAD_LIMIT_STEP;
+    const limitOnly = await app.inject({
+      method: "PUT",
+      url: "/api/settings",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "limit-only" },
+      payload: { expectedRevision: 2, maxUploadBytes: next },
+    });
+    expect(limitOnly.statusCode).toBe(200);
+    expect(limitOnly.json()).toEqual({
+      maxUploadBytes: next,
+      urlImageMode: "store",
+      revision: 3,
+    });
+  });
+
+  it("rejects an unknown urlImageMode with 400", async () => {
+    const { app } = await startApp();
+    const browser = await browserHeaders(app);
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/settings",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "bad-mode" },
+      payload: { expectedRevision: 1, urlImageMode: "cache" },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: "validation" } });
+    const loaded = await app.inject({ method: "GET", url: "/api/settings", headers: browser });
+    expect(loaded.json()).toEqual({
+      maxUploadBytes: UPLOAD_LIMIT_DEFAULT,
+      urlImageMode: URL_IMAGE_MODE_DEFAULT,
+      revision: 1,
+    });
   });
 
   it("rejects bearer PUT with 403 and leaves the row unchanged", async () => {
@@ -136,7 +203,11 @@ describe("settings API", () => {
       error: { code: "forbidden", message: "Settings are changed in Studio only." },
     });
     const loaded = await app.inject({ method: "GET", url: "/api/settings", headers: agentHeaders() });
-    expect(loaded.json()).toEqual({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 });
+    expect(loaded.json()).toEqual({
+      maxUploadBytes: UPLOAD_LIMIT_DEFAULT,
+      urlImageMode: URL_IMAGE_MODE_DEFAULT,
+      revision: 1,
+    });
   });
 
   it("rejects anonymous callers with 401", async () => {
@@ -216,6 +287,40 @@ describe("settings API", () => {
     expect(second.json()).toEqual(first.json());
     expect(second.headers[IDEMPOTENCY_REPLAYED_HEADER]).toBe("true");
     const loaded = await app.inject({ method: "GET", url: "/api/settings", headers: browser });
-    expect(loaded.json()).toEqual({ maxUploadBytes: UPLOAD_LIMIT_MIN, revision: 2 });
+    expect(loaded.json()).toEqual({
+      maxUploadBytes: UPLOAD_LIMIT_MIN,
+      urlImageMode: URL_IMAGE_MODE_DEFAULT,
+      revision: 2,
+    });
+  });
+
+  it("returns revision_conflict details and writes nothing for a stale urlImageMode PUT", async () => {
+    const { app } = await startApp();
+    const browser = await browserHeaders(app);
+    await app.inject({
+      method: "PUT",
+      url: "/api/settings",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "bump-mode" },
+      payload: { expectedRevision: 1, urlImageMode: "store" },
+    });
+    const stale = await app.inject({
+      method: "PUT",
+      url: "/api/settings",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "stale-mode" },
+      payload: { expectedRevision: 1, urlImageMode: "hotlink" },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({
+      error: {
+        code: "conflict",
+        details: { currentRevision: 2, expectedRevision: 1 },
+      },
+    });
+    const loaded = await app.inject({ method: "GET", url: "/api/settings", headers: browser });
+    expect(loaded.json()).toEqual({
+      maxUploadBytes: UPLOAD_LIMIT_DEFAULT,
+      urlImageMode: "store",
+      revision: 2,
+    });
   });
 });

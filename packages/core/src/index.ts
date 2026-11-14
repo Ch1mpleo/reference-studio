@@ -102,10 +102,12 @@ export {
   UPLOAD_LIMIT_MAX,
   UPLOAD_LIMIT_MIN,
   UPLOAD_LIMIT_STEP,
+  URL_IMAGE_MODE_DEFAULT,
+  URL_IMAGE_MODES,
   studioSettingsSchema,
   updateSettingsSchema,
 } from "./settings.js";
-export type { StudioSettings, UpdateSettingsRequest } from "./settings.js";
+export type { StudioSettings, UpdateSettingsRequest, UrlImageMode } from "./settings.js";
 export {
   BACKUP_FORMAT,
   BACKUP_FORMAT_VERSION,
@@ -121,6 +123,13 @@ export {
   readBackupManifest,
 } from "./backup.js";
 export type { BackupManifest, BackupUploadRequest } from "./backup.js";
+export {
+  assertSafePreviewImageUrl,
+  isAllowedHotlinkPreviewUrl,
+  isBlockedAddress,
+  normalizeHostname,
+  previewImageUrlNotAllowedMessage,
+} from "./safeHttpUrl.js";
 export { boardRectSchema, boardFrameSchema, boardItemSchema, boardLayoutSchema, boardSchema, updateBoardSchema } from "./board.js";
 export type { BoardRect, BoardFrame, BoardItem, BoardLayout, Board } from "./board.js";
 export { annotationTargetSchema, boardAnnotationSchema, updateDirectionSchema, duplicateDirectionSchema, createAnnotationRequestSchema, proposeDirectionRequestSchema, createAnnotationResultSchema, proposeDirectionResultSchema, updateDirectionResultSchema, AGENT_DIRECTION_FIELDS } from "./board.js";

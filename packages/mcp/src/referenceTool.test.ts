@@ -395,6 +395,61 @@ describe("get_reference over stdio", () => {
     controller.abort();
     await pump;
 
+    const preview = await api("POST", `/api/projects/${ids.projectId}/references/links`, {
+      url: "https://example.com/hotlink.png",
+      title: "Hotlinked preview",
+      creator: "",
+      observations: "",
+      motion: null,
+    });
+    const previewId = preview.reference.id as string;
+    const previewUrl = "https://example.com/hotlink.png";
+    const database = openDatabase(dataDir);
+    database.prepare(`UPDATE "references" SET preview_image_url = ? WHERE id = ?`).run(previewUrl, previewId);
+    database.close();
+    const beforeHotlink = listFiles(dataDir);
+    const hotlinked = await call(client, { referenceId: previewId });
+    expect(hotlinked.isError).toBeFalsy();
+    expect(imageBlock(hotlinked)).toBeUndefined();
+    expect(hotlinked.structuredContent?.image).toMatchObject({
+      status: "hotlinked",
+      url: previewUrl,
+    });
+    expect(listFiles(dataDir)).toEqual(beforeHotlink);
+
+    const hotlinkCrop = await call(client, {
+      referenceId: previewId,
+      crop: { x: 0, y: 0, width: 0.5, height: 0.5 },
+    });
+    expect(hotlinkCrop.isError).toBe(true);
+    expect(hotlinkCrop.structuredContent).toMatchObject({ code: "asset_missing" });
+    expect(imageBlock(hotlinkCrop)).toBeUndefined();
+
+    const previewPlacement = await api("POST", `/api/projects/${ids.projectId}/references/links`, {
+      url: "https://example.com/hotlink-placed.png",
+      title: "Hotlinked placed",
+      creator: "",
+      observations: "",
+      motion: null,
+    });
+    const placedPreviewId = previewPlacement.reference.id as string;
+    const placedPreviewUrl = "https://example.com/hotlink-placed.png";
+    const placeDb = openDatabase(dataDir);
+    placeDb.prepare(`UPDATE "references" SET preview_image_url = ? WHERE id = ?`).run(placedPreviewUrl, placedPreviewId);
+    const placedRow = placeDb
+      .prepare(`SELECT id FROM placements WHERE reference_id = ?`)
+      .get(placedPreviewId) as { id: string };
+    placeDb.close();
+    const hotlinkPlacement = await call(client, {
+      referenceId: placedPreviewId,
+      projectId: ids.projectId,
+      placementId: placedRow.id,
+    });
+    expect(hotlinkPlacement.isError).toBe(true);
+    expect(hotlinkPlacement.structuredContent).toMatchObject({ code: "asset_missing" });
+    expect(imageBlock(hotlinkPlacement)).toBeUndefined();
+    expect(listFiles(dataDir)).toEqual(beforeHotlink);
+
     const original = (service?.database.prepare("SELECT original_path FROM assets WHERE id = ?").get(
       (stateBefore.references as Json[])[0]?.asset.id,
     ) ?? {}) as { original_path?: string };

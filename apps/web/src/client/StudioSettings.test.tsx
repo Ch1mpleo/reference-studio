@@ -55,7 +55,7 @@ describe("StudioSettings", () => {
   });
 
   it("renders the Storage section with the loaded upload limit", async () => {
-    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 });
+    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, urlImageMode: "hotlink", revision: 1 });
     const view = await render(true);
     expect(document.body.textContent).toContain("Settings");
     expect(document.body.textContent).toContain("Storage");
@@ -69,8 +69,8 @@ describe("StudioSettings", () => {
   });
 
   it("saves the selected limit through updateSettings", async () => {
-    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 });
-    updateSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_MIN, revision: 2 });
+    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, urlImageMode: "hotlink", revision: 1 });
+    updateSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_MIN, urlImageMode: "hotlink", revision: 2 });
     const view = await render(true);
     const number = document.body.querySelector<HTMLInputElement>('input[type="number"]');
     if (number === null) throw new Error("Expected number field");
@@ -87,6 +87,7 @@ describe("StudioSettings", () => {
     expect(updateSettings).toHaveBeenCalledWith({
       expectedRevision: 1,
       maxUploadBytes: UPLOAD_LIMIT_MIN,
+      urlImageMode: "hotlink",
     });
     expect(view.onClose).toHaveBeenCalled();
     await act(async () => {
@@ -96,8 +97,8 @@ describe("StudioSettings", () => {
 
   it("shows the conflict message and reloads the revision", async () => {
     getSettings
-      .mockResolvedValueOnce({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 })
-      .mockResolvedValueOnce({ maxUploadBytes: 5 * 1024 * 1024, revision: 3 });
+      .mockResolvedValueOnce({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, urlImageMode: "hotlink", revision: 1 })
+      .mockResolvedValueOnce({ maxUploadBytes: 5 * 1024 * 1024, urlImageMode: "hotlink", revision: 3 });
     updateSettings.mockRejectedValue(
       new SettingsRequestError("The record changed since it was loaded.", "conflict", 3),
     );
@@ -125,7 +126,7 @@ describe("StudioSettings", () => {
   });
 
   it("disables inputs while GET is held and ignores stale responses over a dirty draft", async () => {
-    const resolvers: Array<(value: { maxUploadBytes: number; revision: number }) => void> = [];
+    const resolvers: Array<(value: { maxUploadBytes: number; urlImageMode: "hotlink", revision: number }) => void> = [];
     getSettings.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -155,7 +156,7 @@ describe("StudioSettings", () => {
     expect(resolvers.length).toBe(2);
 
     await act(async () => {
-      resolvers[1]!({ maxUploadBytes: 5 * 1024 * 1024, revision: 2 });
+      resolvers[1]!({ maxUploadBytes: 5 * 1024 * 1024, urlImageMode: "hotlink", revision: 2 });
       await Promise.resolve();
     });
     expect(section?.getAttribute("data-settings-ready")).toBe("true");
@@ -168,7 +169,7 @@ describe("StudioSettings", () => {
     expect(number.value).toBe("8");
 
     await act(async () => {
-      resolvers[0]!({ maxUploadBytes: 3 * 1024 * 1024, revision: 99 });
+      resolvers[0]!({ maxUploadBytes: 3 * 1024 * 1024, urlImageMode: "hotlink", revision: 99 });
       await Promise.resolve();
     });
     expect(number.value).toBe("8");
@@ -180,7 +181,7 @@ describe("StudioSettings", () => {
   });
 
   it("disables Save for fractional MiB and shows the whole-MiB message", async () => {
-    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 });
+    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, urlImageMode: "hotlink", revision: 1 });
     const view = await render(true);
     const number = document.body.querySelector<HTMLInputElement>('input[type="number"]');
     if (number === null) throw new Error("Expected number field");
@@ -201,7 +202,7 @@ describe("StudioSettings", () => {
   });
 
   it("keeps Save disabled while the field shows invalid text over a prior valid draft", async () => {
-    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, revision: 1 });
+    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, urlImageMode: "hotlink", revision: 1 });
     const view = await render(true);
     const number = document.body.querySelector<HTMLInputElement>('input[type="number"]');
     if (number === null) throw new Error("Expected number field");
@@ -216,6 +217,94 @@ describe("StudioSettings", () => {
       });
       expect(save?.disabled, `invalid ${JSON.stringify(invalid)}`).toBe(true);
     }
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("loads hotlink and saves store for Images from URLs", async () => {
+    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, urlImageMode: "hotlink", revision: 1 });
+    updateSettings.mockResolvedValue({
+      maxUploadBytes: UPLOAD_LIMIT_DEFAULT,
+      urlImageMode: "store",
+      revision: 2,
+    });
+    const view = await render(true);
+    expect(document.body.textContent).toContain("Images from URLs");
+    expect(document.body.textContent).toContain("Show from link");
+    const store = [...document.body.querySelectorAll("button")].find(
+      (button) => button.textContent === "Save a copy",
+    );
+    if (store === undefined) throw new Error("Expected Save a copy");
+    await act(async () => {
+      store.click();
+    });
+    const save = [...document.body.querySelectorAll("button")].find((button) => button.textContent === "Save");
+    if (save === undefined) throw new Error("Expected Save");
+    expect(save.disabled).toBe(false);
+    await act(async () => {
+      save.click();
+      await Promise.resolve();
+    });
+    expect(updateSettings).toHaveBeenCalledWith({
+      expectedRevision: 1,
+      maxUploadBytes: UPLOAD_LIMIT_DEFAULT,
+      urlImageMode: "store",
+    });
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("does not save when Cancel is clicked after switching mode", async () => {
+    getSettings.mockResolvedValue({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, urlImageMode: "hotlink", revision: 1 });
+    const view = await render(true);
+    const store = [...document.body.querySelectorAll("button")].find(
+      (button) => button.textContent === "Save a copy",
+    );
+    if (store === undefined) throw new Error("Expected Save a copy");
+    await act(async () => {
+      store.click();
+    });
+    const cancel = [...document.body.querySelectorAll("button")].find((button) => button.textContent === "Cancel");
+    if (cancel === undefined) throw new Error("Expected Cancel");
+    await act(async () => {
+      cancel.click();
+    });
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(view.onClose).toHaveBeenCalled();
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("reloads baselines on conflict after switching mode", async () => {
+    getSettings
+      .mockResolvedValueOnce({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, urlImageMode: "hotlink", revision: 1 })
+      .mockResolvedValueOnce({ maxUploadBytes: UPLOAD_LIMIT_DEFAULT, urlImageMode: "store", revision: 3 });
+    updateSettings.mockRejectedValue(
+      new SettingsRequestError("The record changed since it was loaded.", "conflict", 3),
+    );
+    const view = await render(true);
+    const store = [...document.body.querySelectorAll("button")].find(
+      (button) => button.textContent === "Save a copy",
+    );
+    if (store === undefined) throw new Error("Expected Save a copy");
+    await act(async () => {
+      store.click();
+    });
+    const save = [...document.body.querySelectorAll("button")].find((button) => button.textContent === "Save");
+    if (save === undefined) throw new Error("Expected Save");
+    await act(async () => {
+      save.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(document.body.textContent).toContain(
+      "Settings changed in another session. Your draft is still here. Save again to use the newer revision.",
+    );
+    expect(getSettings).toHaveBeenCalledTimes(2);
+    expect(view.onClose).not.toHaveBeenCalled();
     await act(async () => {
       view.root.unmount();
     });

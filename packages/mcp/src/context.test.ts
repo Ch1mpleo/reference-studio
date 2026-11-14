@@ -76,6 +76,7 @@ function placement(overrides: Partial<ProjectReference> = {}): ProjectReference 
       archived: false,
       motion: null,
       asset: null,
+      previewImageUrl: null,
       revision: 1,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",

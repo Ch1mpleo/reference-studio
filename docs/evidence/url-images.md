@@ -56,3 +56,83 @@ Bootstrap: `IsolatedServer.createAllowingLoopbackFetch(port)` starts the built A
 ## Limits
 
 - U2 hotlink / `urlImageMode`, og:image, drag-link drop, agent URL add, and CSP are not in this slice.
+
+---
+
+# URL images U1r — preview-by-default + `urlImageMode`
+
+Checkpoint on `feat/url-images-preview` (base `origin/feat/url-images-store` @ `1c9f037`). Spec: [storage](../specs/storage.md).
+
+## What shipped
+
+- Default `urlImageMode` is `hotlink`: paste probes the URL (SSRF + magic, no download) and inserts a link with `previewImageUrl` = the pasted URL. The board shows the image from the origin with `referrerPolicy="no-referrer"`. Nothing is stored under assets.
+- Opt-in `store` keeps U1's url-image path. Settings Storage section: Images from URLs (`Show from link` / `Save a copy`). Mode changes affect new pastes only.
+- Broken preview: keep the reference, hide the img, show link-style card with “Preview unavailable”; reload retries. No delete, no persisted failure state.
+- MCP `get_reference` returns `image.status: "hotlinked"` with URL metadata only (no fetch, no image content block).
+- Backup format 6 exports/restores `previewImageUrl` as URL only (formats 1–5 → null when absent). Settings are not in backups. No CSP added.
+- QA follow-up: restore rejects unsafe `previewImageUrl` (loopback/LAN/localhost/userinfo) via shared `assertSafePreviewImageUrl`; `HotlinkPreview` client guard; format &lt; 6 may not carry non-null preview; MCP crop/placementId on hotlink → `asset_missing`; settings labelledby; default-mode e2e asserts fresh `hotlink` without forcing the mode.
+
+## Rule-to-test table (U1r)
+
+| Rule | Proof |
+| --- | --- |
+| Migration `009` adds `url_image_mode` default `hotlink` and `preview_image_url` | `migrate.test.ts`, `settings.test.ts` |
+| PUT mode-only / limit-only; invalid mode 400; stale revision; bearer 403 | `settings.test.ts` |
+| `probeRemoteImage`: magic PNG, early close, no `.incoming`; HTML / blocked redirect / too many redirects / rebinding / stall / oversize content-length accepted | `remoteFetch.test.ts` probe cases |
+| `POST …/url-preview` success → link + `previewImageUrl`, no assets, one event; replay; mismatch; SSRF 400s; agent 403 | `references.test.ts` url-preview |
+| Paste follows mode; SETTINGS_CHANGED switches next paste; shared fallback | `ReferenceCollection.test.tsx` |
+| HotlinkPreview error → img gone, title + Preview unavailable, no API | `HotlinkPreview.test.tsx` |
+| HotlinkPreview refuses loopback / private literals (no img) | `HotlinkPreview.test.tsx`, `safeHttpUrl.test.ts` |
+| Restore loopback/LAN/localhost/userinfo preview → 400, no rows (bearer + browser) | `backup.test.ts`, `safeHttpUrl.test.ts` |
+| Format &lt; 6 with non-null `previewImageUrl` → 400; string formatVersion names type | `backup.test.ts` (core) |
+| Settings segment load/save/cancel/conflict; labelled heading | `StudioSettings.test.tsx` |
+| MCP hotlinked metadata; crop/placementId → `asset_missing`; no fetch | `packages/mcp` `get_reference` |
+| Backup v6 round-trip; v5 restore null preview; v6 preview on image kind 400 | `backup.test.ts` |
+| E2e: default Linked preview (asserts default hotlink); broken preview; page fallback; loopback guard (no steal request); store-mode U1; Save a copy persists | `e2e/url-images.spec.ts`, `e2e/settings.spec.ts` |
+
+## Commands and results (U1r)
+
+Node **v24.22.3** (npm **11.19.1**). Browser: Chromium via `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium`.
+
+Initial U1r gate: 59 files / 437 unit / 78 e2e.
+
+QA follow-up gate (B1 era): 60 files / 460 unit / 79 e2e.
+
+B2 / nits follow-up (preview.test, BlockList restore, trailing-dot / export / formatVersion):
+
+Gate (run 1), Node **v24.22.3** (npm **11.19.1**):
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | exit 0, no diagnostics |
+| `npm test` | 61 files, 505 tests: 505 passed, 0 failed, 0 skipped |
+| `npm run build` | exit 0 |
+| `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` | 79 tests: 79 passed, 0 failed, 0 skipped |
+
+Gate (run 2): same counts (61 / 505 / 79); both runs exit 0.
+
+`preview.test` e2e (no public DNS), `--repeat-each=3` on the three default-mode specs: **9 passed** (3× PNG Linked preview, broken preview, page fallback).
+
+B3 (parsed-host restore/export/browser guard; strip all trailing dots):
+
+| Rule | Proof |
+| --- | --- |
+| Localhost/IP checks use `normalizeHostname(new URL(raw).hostname)` | `safeHttpUrl.test.ts` encoded bypass forms |
+| Decimal/hex/short/fullwidth/percent/tab localhost spellings rejected | `safeHttpUrl.test.ts`, `HotlinkPreview.test.tsx`, `backup.test.ts` restore+export |
+| Leading-zero typed host is additional reject only | `http://01.2.3.4/` cases |
+| `localhost..` rejected (all trailing dots stripped) | `normalizeHostname` + restore/client tests |
+
+B3 gate (run 1), Node **v24.22.3** (npm **11.19.1**):
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | exit 0, no diagnostics |
+| `npm test` | 61 files, 556 tests: 556 passed, 0 failed, 0 skipped |
+| `npm run build` | exit 0 |
+| `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` | 79 tests: 79 passed, 0 failed, 0 skipped |
+
+B3 gate (run 2): same counts (61 / 556 / 79); both runs exit 0.
+
+## Limits (U1r)
+
+- Save a copy from a preview (U3), og:image, drag-link drop, agent URL add, CSP, and converting existing items when the mode changes remain out of scope.

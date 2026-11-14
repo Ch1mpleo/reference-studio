@@ -362,12 +362,12 @@ describe("backup and restore", () => {
     const newer = await restoreZip(
       app,
       storedArchive([
-        { name: "backup.json", data: Buffer.from(JSON.stringify({ format: BACKUP_FORMAT, formatVersion: 6 })) },
+        { name: "backup.json", data: Buffer.from(JSON.stringify({ format: BACKUP_FORMAT, formatVersion: 7 })) },
       ]),
       "newer",
     );
     expect(newer.statusCode).toBe(400);
-    expect(JSON.stringify(newer.json())).toContain(backupVersionMessage("6"));
+    expect(JSON.stringify(newer.json())).toContain(backupVersionMessage("7"));
     const pathForm = multipart(Buffer.from("zip"), "backup.zip", { path: "C:\\secret.zip" });
     const pathResponse = await app.inject({
       method: "POST",
@@ -587,6 +587,303 @@ describe("backup and restore", () => {
     expect(JSON.stringify(missing.json())).toContain("This project's image is missing from storage.");
     expect(JSON.stringify(missing.json())).not.toContain(config.dataDir);
     expect(JSON.stringify(missing.json())).not.toContain(stored.original_path);
+  });
+
+  it("exports null for unsafe planted previewImageUrl spellings and still succeeds", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { app, database } = await startApp();
+    const atlas = await createProject(app, "Unsafe export", "unsafe-export");
+    const browser = await browserHeaders(app);
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${atlas}/references/links`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "unsafe-export-link" },
+      payload: {
+        url: "https://example.com/page",
+        title: "Planted",
+        creator: "",
+        observations: "",
+        motion: null,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const referenceId = (created.json() as { reference: { id: string } }).reference.id;
+    const planted = [
+      "http://127.0.0.1:4317/steal.png",
+      "http://2130706433/",
+      "http://0x7f000001/",
+      "http://0x7f.1/",
+      "http://127.1/",
+      "http://0177.0.0.1/",
+      "http://１２７．０．０．１/",
+      "http://%31%32%37.0.0.1/",
+      "http://127.0.\t0.1/",
+      "http://3232235777/",
+      "http://0xa9fea9fe/",
+      "http://169.254.43518/",
+      "http://0/",
+      "http://loc\talhost/",
+      "http://%6c%6f%63%61%6c%68%6f%73%74/",
+      "http://ｌｏｃａｌｈｏｓｔ/",
+      "http://localhost../",
+      "http://01.2.3.4/x.png",
+    ];
+    for (const previewImageUrl of planted) {
+      warn.mockClear();
+      database
+        .prepare(`UPDATE "references" SET preview_image_url = ? WHERE id = ?`)
+        .run(previewImageUrl, referenceId);
+      const downloaded = await app.inject({
+        method: "GET",
+        url: `/api/projects/${atlas}/backup`,
+        headers: agentHeaders(),
+      });
+      expect(downloaded.statusCode, previewImageUrl).toBe(200);
+      const manifest = JSON.parse(
+        Buffer.from(readBackupZip(downloaded.rawPayload).get("backup.json")!).toString("utf8"),
+      ) as { references: Array<{ previewImageUrl: string | null }> };
+      expect(manifest.references[0]?.previewImageUrl, previewImageUrl).toBeNull();
+      expect(warn, previewImageUrl).toHaveBeenCalled();
+    }
+    warn.mockRestore();
+  });
+
+  it("round-trips previewImageUrl in format 6 without asset entries", async () => {
+    const { app, database } = await startApp();
+    const atlas = await createProject(app, "Preview", "preview");
+    const browser = await browserHeaders(app);
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${atlas}/references/links`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "preview-link" },
+      payload: {
+        url: "https://example.com/photo.png",
+        title: "Hotlink",
+        creator: "",
+        observations: "",
+        motion: null,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const referenceId = (created.json() as { reference: { id: string } }).reference.id;
+    database
+      .prepare(`UPDATE "references" SET preview_image_url = ? WHERE id = ?`)
+      .run("https://example.com/photo.png", referenceId);
+
+    const downloaded = await app.inject({
+      method: "GET",
+      url: `/api/projects/${atlas}/backup`,
+      headers: agentHeaders(),
+    });
+    expect(downloaded.statusCode).toBe(200);
+    const entries = readBackupZip(downloaded.rawPayload);
+    expect([...entries.keys()]).toEqual(["backup.json"]);
+    const manifest = JSON.parse(Buffer.from(entries.get("backup.json")!).toString("utf8")) as {
+      formatVersion: number;
+      references: Array<{ previewImageUrl: string | null; kind: string }>;
+      assets: unknown[];
+    };
+    expect(manifest.formatVersion).toBe(6);
+    expect(manifest.assets).toEqual([]);
+    expect(manifest.references[0]).toMatchObject({
+      kind: "link",
+      previewImageUrl: "https://example.com/photo.png",
+    });
+
+    const restored = await restoreZip(app, downloaded.rawPayload, "restore-preview");
+    expect(restored.statusCode).toBe(201);
+    const copyId = (restored.json() as { id: string }).id;
+    const listed = await app.inject({
+      method: "GET",
+      url: `/api/projects/${copyId}/references`,
+      headers: agentHeaders(),
+    });
+    expect(listed.json()).toMatchObject({
+      references: [
+        {
+          reference: {
+            kind: "link",
+            previewImageUrl: "https://example.com/photo.png",
+            asset: null,
+          },
+        },
+      ],
+    });
+  });
+
+  it("rejects restore of previewImageUrl pointing at loopback, LAN, localhost, or userinfo", async () => {
+    const { app, database } = await startApp();
+    const before = Number(
+      (database.prepare(`SELECT COUNT(*) AS count FROM projects`).get() as { count: number }).count,
+    );
+    const cases = [
+      "http://127.0.0.1:4317/steal.png",
+      "http://192.168.1.1/reboot.cgi",
+      "http://localhost/a.png",
+      "http://localhost.:4317/x.png",
+      "http://foo.localhost./x.png",
+      "http://user:pw@example.com/a.png",
+      "http://2130706433/",
+      "http://0x7f000001/",
+      "http://0x7f.1/",
+      "http://127.1/",
+      "http://0177.0.0.1/",
+      "http://１２７．０．０．１/",
+      "http://%31%32%37.0.0.1/",
+      "http://127.0.\t0.1/",
+      "http://3232235777/",
+      "http://0xa9fea9fe/",
+      "http://169.254.43518/",
+      "http://0/",
+      "http://loc\talhost/",
+      "http://%6c%6f%63%61%6c%68%6f%73%74/",
+      "http://ｌｏｃａｌｈｏｓｔ/",
+      "http://localhost../",
+      "http://01.2.3.4/x.png",
+    ];
+    for (const [index, previewImageUrl] of cases.entries()) {
+      const projectId = createId();
+      const referenceId = createId();
+      const placementId = createId();
+      const manifest = {
+        format: BACKUP_FORMAT,
+        formatVersion: 6,
+        exportedAt: "2026-10-23T00:00:00.000Z",
+        project: {
+          originalId: projectId,
+          name: `Unsafe ${index}`,
+          brief: "",
+          audience: "",
+          purpose: "",
+          constraints: "",
+          status: "active",
+        },
+        assets: [],
+        references: [
+          {
+            originalId: referenceId,
+            kind: "link",
+            title: "Unsafe preview",
+            sourceUrl: "https://example.com/page",
+            creator: null,
+            observations: "",
+            tags: [],
+            availability: "unknown",
+            archived: false,
+            motion: null,
+            assetOriginalId: null,
+            previewImageUrl,
+          },
+        ],
+        placements: [
+          {
+            originalId: placementId,
+            referenceOriginalId: referenceId,
+            directionOriginalId: null,
+            role: "inspiration",
+            usageNotes: "",
+            crop: null,
+            interpretation: "",
+            rect: null,
+          },
+        ],
+        board: { frames: [], items: [], systems: [] },
+        variants: [],
+        sections: { systems: [], variants: [], evidence: [], snapshots: [] },
+      };
+      const zip = writeBackupZip(new Map([["backup.json", Buffer.from(JSON.stringify(manifest), "utf8")]]));
+      const agent = await restoreZip(app, zip, `unsafe-agent-${index}`);
+      expect(agent.statusCode, previewImageUrl).toBe(400);
+      expect(JSON.stringify(agent.json())).toContain("preview image URL is not allowed");
+
+      const form = multipart(zip, "backup.zip");
+      const browser = await app.inject({
+        method: "POST",
+        url: "/api/projects/restore",
+        headers: {
+          ...(await browserHeaders(app)),
+          "idempotency-key": `unsafe-browser-${index}`,
+          "content-type": form.contentType,
+        },
+        payload: form.payload,
+      });
+      expect(browser.statusCode, previewImageUrl).toBe(400);
+      expect(JSON.stringify(browser.json())).toContain("preview image URL is not allowed");
+    }
+    const after = Number(
+      (database.prepare(`SELECT COUNT(*) AS count FROM projects`).get() as { count: number }).count,
+    );
+    expect(after).toBe(before);
+    expect(
+      (database.prepare(`SELECT COUNT(*) AS count FROM "references"`).get() as { count: number }).count,
+    ).toBe(0);
+  });
+
+  it("restores format 5 backups with null previewImageUrl", async () => {
+    const { app } = await startApp();
+    const projectId = createId();
+    const referenceId = createId();
+    const placementId = createId();
+    const manifest = {
+      format: BACKUP_FORMAT,
+      formatVersion: 5,
+      exportedAt: "2026-10-23T00:00:00.000Z",
+      project: {
+        originalId: projectId,
+        name: "Legacy",
+        brief: "",
+        audience: "",
+        purpose: "",
+        constraints: "",
+        status: "active",
+      },
+      assets: [],
+      references: [
+        {
+          originalId: referenceId,
+          kind: "link",
+          title: "Legacy link",
+          sourceUrl: "https://example.com/legacy",
+          creator: null,
+          observations: "",
+          tags: [],
+          availability: "unknown",
+          archived: false,
+          motion: null,
+          assetOriginalId: null,
+        },
+      ],
+      placements: [
+        {
+          originalId: placementId,
+          referenceOriginalId: referenceId,
+          directionOriginalId: null,
+          role: "inspiration",
+          usageNotes: "",
+          crop: null,
+          interpretation: "",
+          rect: null,
+        },
+      ],
+      board: { frames: [], items: [], systems: [] },
+      variants: [],
+      sections: { systems: [], variants: [], evidence: [], snapshots: [] },
+    };
+    const restored = await restoreZip(
+      app,
+      writeBackupZip(new Map([["backup.json", Buffer.from(JSON.stringify(manifest), "utf8")]])),
+      "restore-v5",
+    );
+    expect(restored.statusCode).toBe(201);
+    const copyId = (restored.json() as { id: string }).id;
+    const listed = await app.inject({
+      method: "GET",
+      url: `/api/projects/${copyId}/references`,
+      headers: agentHeaders(),
+    });
+    expect(listed.json()).toMatchObject({
+      references: [{ reference: { kind: "link", previewImageUrl: null } }],
+    });
   });
 });
 

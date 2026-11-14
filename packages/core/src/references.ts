@@ -157,6 +157,7 @@ export const libraryReferenceSchema = z.object({
   archived: z.boolean(),
   motion: motionMarkSchema.nullable(),
   asset: assetSummarySchema.nullable(),
+  previewImageUrl: z.string().nullable(),
   revision: z.number().int().positive(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),

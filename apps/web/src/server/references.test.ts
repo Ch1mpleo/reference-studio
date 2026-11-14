@@ -33,8 +33,8 @@ import { setAfterPublishForTests, setCommitMutationForTests } from "./references
 import {
   fetchRemoteImageToTemp,
   isBlockedAddress,
-  type FetchRemoteImageOptions,
-  type FetchedRemoteImage,
+  probeRemoteImage,
+  type RemoteFetchDependencies,
 } from "./remoteFetch.js";
 import { browserHeaders } from "./test/browserSession.js";
 import { incomingUploadsDir } from "./uploads.js";
@@ -142,13 +142,9 @@ async function listenPngServer(
   return { origin: `http://127.0.0.1:${address.port}`, hits };
 }
 
-async function startAppWithRemoteFetch(remoteFetch?: {
-  fetchRemoteImageToTemp?: (
-    url: string,
-    options: FetchRemoteImageOptions,
-  ) => Promise<FetchedRemoteImage>;
-  isBlocked?: (ip: string) => boolean;
-}): Promise<{
+async function startAppWithRemoteFetch(
+  remoteFetch?: RemoteFetchDependencies,
+): Promise<{
   app: FastifyInstance;
   database: DatabaseSync;
   hub: EventHub;
@@ -1827,5 +1823,151 @@ describe("POST /api/projects/:projectId/references/url-image", () => {
       agent.destroy();
       await app.close();
     }
+  });
+});
+
+describe("POST /api/projects/:projectId/references/url-preview", () => {
+  it("creates a link with previewImageUrl, no asset files, one event, and revision +1", async () => {
+    const { origin } = await listenPngServer();
+    const { app, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const browser = await browserHeaders(app);
+    const url = `${origin}/photos/north%20wall.png`;
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-preview`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "url-preview-1" },
+      payload: { url },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      reference: {
+        kind: "link",
+        title: "north wall",
+        sourceUrl: url,
+        previewImageUrl: url,
+        asset: null,
+        revision: 1,
+      },
+    });
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
+    assetDirsEmpty(config.dataDir);
+  });
+
+  it("replays the same idempotency key without probing again", async () => {
+    const { origin } = await listenPngServer();
+    let probes = 0;
+    const { app } = await startAppWithRemoteFetch({
+      probeRemoteImage: async (url, options) => {
+        probes += 1;
+        return probeRemoteImage(url, { ...options, isBlocked: allowLoopback });
+      },
+    });
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const payload = { url: `${origin}/pixel.png` };
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-preview`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "preview-replay" },
+      payload,
+    });
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-preview`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "preview-replay" },
+      payload,
+    });
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    expect(second.json()).toEqual(first.json());
+    expect(probes).toBe(1);
+  });
+
+  it("rejects the same key with a different URL", async () => {
+    const { origin } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-preview`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "preview-mismatch" },
+      payload: { url: `${origin}/a.png` },
+    });
+    const mismatch = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-preview`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "preview-mismatch" },
+      payload: { url: `${origin}/b.png` },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json()).toMatchObject({
+      error: { details: { reason: "idempotency_mismatch" } },
+    });
+  });
+
+  it("rejects bearer callers with 403", async () => {
+    const { origin, hits } = await listenPngServer();
+    const { app, database, hub } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-preview`,
+      headers: agentHeaders("agent-preview", { "content-type": "application/json" }),
+      payload: { url: `${origin}/pixel.png` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: "forbidden", message: "URL image preview is available to the Studio browser only." },
+    });
+    const count = database.prepare('SELECT COUNT(*) AS c FROM "references"').get() as {
+      c: number | bigint;
+    };
+    expect(Number(count.c)).toBe(0);
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    expect(hits.value).toBe(0);
+  });
+
+  it.each([
+    ["loopback", "http://127.0.0.1/x.png", "url_blocked_address"],
+    ["userinfo", "http://user:pw@example.com/x.png", "url_not_allowed"],
+    ["ftp", "ftp://example.com/x.png", "url_not_allowed"],
+    ["v4mapped", "http://[::ffff:10.0.0.1]/", "url_blocked_address"],
+  ] as const)("rejects SSRF candidate %s and fetches nothing", async (label, url, reason) => {
+    const { hits } = await listenPngServer();
+    const { app, database, hub } = await startApp();
+    const projectId = await createProject(app);
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const browser = await browserHeaders(app);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/url-preview`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": `ssrf-${label}` },
+      payload: { url },
+    });
+    expect(response.statusCode).toBe(400);
+    const body = response.json() as {
+      error: { code: string; details?: { reason?: string; issues?: unknown }; message?: string };
+    };
+    expect(body.error.code).toBe("validation");
+    if (label === "ftp") {
+      // Schema rejects non-http(s) before assertFetchableUrl; still no fetch and no row.
+      expect(body.error.message).toBe("URL image details are invalid.");
+      expect(body.error.details).toHaveProperty("issues");
+    } else {
+      expect(body.error.details).toMatchObject({ reason });
+    }
+    const count = database.prepare('SELECT COUNT(*) AS c FROM "references"').get() as {
+      c: number | bigint;
+    };
+    expect(Number(count.c)).toBe(0);
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    expect(hits.value).toBe(0);
   });
 });

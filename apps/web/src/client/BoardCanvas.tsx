@@ -7,6 +7,7 @@ import type { Board, BoardAnnotation, BoardLayout, ProjectReference } from "@ref
 import { StudioButton } from "./StudioButton.js";
 import { ImageRegions } from "./ImageRegions.js";
 import { BoardInlineText } from "./BoardInlineText.js";
+import { HotlinkPreview } from "./HotlinkPreview.js";
 import type { CanvasPlayground } from "./MotionPlayground.js";
 import "@xyflow/react/dist/style.css";
 
@@ -30,14 +31,39 @@ function Playground({ data }: NodeProps<PlaygroundNode>) {
 
 function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
   const reference = data.item?.reference;
+  const [previewUnavailable, setPreviewUnavailable] = useState(false);
+  const previewUrl =
+    reference?.kind === "link" && reference.previewImageUrl !== null ? reference.previewImageUrl : null;
+  const showPreview = previewUrl !== null && !previewUnavailable;
   const imageWidth = reference?.asset ? Math.min(1, ((height ?? reference.asset.height) / (width ?? reference.asset.width)) * reference.asset.width / reference.asset.height) * 100 : 100;
   return <div className={data.frame ? "board-frame" : `board-material board-material-${reference?.kind ?? "note"}`}>
     <NodeResizer isVisible={selected && !data.readOnly && !data.editing} minWidth={data.frame ? 240 : 100} minHeight={data.frame ? 160 : 80}
       keepAspectRatio={!data.frame && reference?.kind === "image"} onResizeStart={data.resizeStarted} onResizeEnd={data.resized} />
     {data.frame ? <div className="board-frame-heading"><BoardInlineText value={data.title} revision={data.revision} label="Group name" editing={data.editing} disabled={data.readOnly} onEdit={data.edit} onDone={data.done} onSave={data.saveText} /><span className="studio-meta">{data.count} {data.count === 1 ? "item" : "items"}</span></div> : reference?.kind === "note" ? <div className="board-note"><BoardInlineText value={reference.observations} revision={reference.revision} label="Note text" multiline editing={data.editing} onEdit={data.edit} onDone={data.done} onSave={data.saveText} /></div> : <>
-      {reference?.asset ? <div className="board-image-plane"><div style={{ width: `${imageWidth}%` }}><ImageRegions reference={reference} resolution="thumbnail" annotations={data.annotations} onSelect={data.inspect} /></div></div> :
-        <div className="board-material-text"><p className="studio-kicker">{reference?.kind}</p><h3>{data.title}</h3><p>{reference?.observations || reference?.sourceUrl || "Image unavailable"}</p></div>}
-      <div className="board-item-caption"><span>{data.title}</span></div>
+      {showPreview && previewUrl !== null ? (
+        <div className="board-image-plane">
+          <HotlinkPreview
+            url={previewUrl}
+            alt={data.title}
+            onStatusChange={(status) => {
+              if (status === "unavailable") setPreviewUnavailable(true);
+            }}
+          />
+        </div>
+      ) : reference?.asset ? (
+        <div className="board-image-plane"><div style={{ width: `${imageWidth}%` }}><ImageRegions reference={reference} resolution="thumbnail" annotations={data.annotations} onSelect={data.inspect} /></div></div>
+      ) : (
+        <div className="board-material-text">
+          <p className="studio-kicker">{previewUrl !== null ? "Linked" : reference?.kind}</p>
+          <h3>{data.title}</h3>
+          <p>{reference?.observations || reference?.sourceUrl || "Image unavailable"}</p>
+          {previewUnavailable ? <p className="studio-help">Preview unavailable</p> : null}
+        </div>
+      )}
+      <div className="board-item-caption">
+        {previewUrl !== null ? <span className="studio-kicker">Linked</span> : null}
+        <span>{data.title}</span>
+      </div>
     </>}
     {selected && !data.editing ? <div className="board-item-actions nodrag nopan">
       {data.frame ? <><StudioButton variant="ghost" disabled={data.readOnly} onClick={data.edit}>Rename</StudioButton><StudioButton variant="ghost" onClick={data.systems}>Systems</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.duplicate}>Duplicate</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.archive}>Ungroup</StudioButton></> : reference?.kind === "note" ? <StudioButton variant="ghost" onClick={data.edit}>Edit note</StudioButton> : <StudioButton variant="ghost" onClick={data.inspect}>Details</StudioButton>}

@@ -17,9 +17,10 @@ import { boardLayoutSchema } from "./board.js";
 import { UPLOAD_LIMIT_MAX } from "./settings.js";
 import { systemContexts } from "./systems.js";
 import { assertBackupVariants, MAX_BACKUP_VARIANTS, variantRecordSchema } from "./variants.js";
+import { assertSafePreviewImageUrl } from "./safeHttpUrl.js";
 
 export const BACKUP_FORMAT = "reference-studio-backup";
-export const BACKUP_FORMAT_VERSION = 5;
+export const BACKUP_FORMAT_VERSION = 6;
 
 /** 80 MiB across the archive, declared uncompressed size, and the upload. */
 export const MAX_BACKUP_BYTES = 80 * 1024 * 1024;
@@ -79,6 +80,7 @@ const backupReferenceSchema = z
     archived: z.boolean(),
     motion: motionMarkSchema.nullable(),
     assetOriginalId: originalId.nullable(),
+    previewImageUrl: z.string().nullable().optional(),
   })
   .strict()
   .superRefine((reference, context) => {
@@ -93,6 +95,16 @@ const backupReferenceSchema = z
     }
     if (reference.kind !== "link" && reference.sourceUrl !== null && !isHttpUrl(reference.sourceUrl)) {
       context.addIssue({ code: "custom", message: "Use an http or https link." });
+    }
+    if (
+      reference.previewImageUrl !== undefined &&
+      reference.previewImageUrl !== null &&
+      (reference.kind !== "link" || !isHttpUrl(reference.previewImageUrl))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Only a link can store a preview image URL.",
+      });
     }
   });
 
@@ -114,7 +126,14 @@ const emptySection = z.array(z.never()).length(0);
 export const backupManifestSchema = z
   .object({
     format: z.literal(BACKUP_FORMAT),
-    formatVersion: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+    formatVersion: z.union([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal(5),
+      z.literal(6),
+    ]),
     exportedAt: z.iso.datetime(),
     project: z
       .object({
@@ -159,7 +178,19 @@ export function readBackupManifest(value: unknown): BackupManifest {
   if (!isRecord(value) || value.format !== BACKUP_FORMAT) {
     throw new ServiceError("validation", "This file is not a Reference Studio backup.");
   }
-  if (value.formatVersion !== 1 && value.formatVersion !== 2 && value.formatVersion !== 3 && value.formatVersion !== 4 && value.formatVersion !== BACKUP_FORMAT_VERSION) {
+  if (typeof value.formatVersion !== "number") {
+    throw new ServiceError(
+      "validation",
+      `This backup's format version must be a number (received ${formatVersionType(value.formatVersion)}).`,
+    );
+  }
+  if (!Number.isInteger(value.formatVersion)) {
+    throw new ServiceError(
+      "validation",
+      `This backup's format version must be a whole number (received ${String(value.formatVersion)}).`,
+    );
+  }
+  if (value.formatVersion < 1 || value.formatVersion > BACKUP_FORMAT_VERSION) {
     throw new ServiceError("validation", backupVersionMessage(shownVersion(value.formatVersion)));
   }
   if (isRecord(value.sections)) {
@@ -170,11 +201,16 @@ export function readBackupManifest(value: unknown): BackupManifest {
       }
     }
   }
-  if (Array.isArray(value.variants) && value.variants.length > 0 && value.formatVersion !== 5) {
+  if (Array.isArray(value.variants) && value.variants.length > 0 && value.formatVersion < 5) {
     throw new ServiceError("validation", "Variant records require backup format 5.");
   }
   if (isRecord(value.board) && "variants" in value.board) {
-    throw new ServiceError("validation", value.formatVersion === 5 ? "Variant records are stored beside the board, not inside it." : "Variant records require backup format 5.");
+    throw new ServiceError(
+      "validation",
+      value.formatVersion >= 5
+        ? "Variant records are stored beside the board, not inside it."
+        : "Variant records require backup format 5.",
+    );
   }
   if (Array.isArray(value.placements)) {
     for (const placement of value.placements) {
@@ -199,6 +235,19 @@ export function readBackupManifest(value: unknown): BackupManifest {
   validateBackupGraph(manifest);
   if (manifest.formatVersion < 5 && manifest.board?.systems?.some((system) => system.kind === "motion" && (system.content.variants?.length ?? 0) > 0)) throw new ServiceError("validation", "Motion variants require backup format 5.");
   if (manifest.formatVersion < 4 && (manifest.board?.systems?.length ?? 0) > 0) throw new ServiceError("validation", "System records require backup format 4.");
+  if (manifest.formatVersion < 6) {
+    for (const reference of manifest.references) {
+      if (reference.previewImageUrl !== undefined && reference.previewImageUrl !== null) {
+        throw new ServiceError("validation", "Preview image URLs require backup format 6.");
+      }
+    }
+  } else {
+    for (const reference of manifest.references) {
+      if (reference.previewImageUrl !== undefined && reference.previewImageUrl !== null) {
+        assertSafePreviewImageUrl(reference.previewImageUrl);
+      }
+    }
+  }
   return manifest;
 }
 
@@ -288,6 +337,16 @@ function shownVersion(value: unknown): string {
     return value;
   }
   return "unknown";
+}
+
+function formatVersionType(value: unknown): string {
+  if (value === null) {
+    return "null";
+  }
+  if (Array.isArray(value)) {
+    return "array";
+  }
+  return typeof value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

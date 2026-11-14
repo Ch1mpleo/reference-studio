@@ -3,11 +3,14 @@ import {
   UPLOAD_LIMIT_MAX,
   UPLOAD_LIMIT_MIN,
   UPLOAD_LIMIT_STEP,
+  URL_IMAGE_MODE_DEFAULT,
   type StudioSettings as SettingsRecord,
+  type UrlImageMode,
 } from "@reference-studio/core";
 import { StudioButton } from "./StudioButton.js";
 import { StudioDialog } from "./StudioDialog.js";
 import { StudioParameter } from "./StudioParameter.js";
+import { StudioSegment } from "./StudioSegment.js";
 import {
   SETTINGS_CHANGED_EVENT,
   SettingsRequestError,
@@ -16,6 +19,11 @@ import {
 } from "./settingsApi.js";
 
 const MIB = 1024 * 1024;
+
+const URL_IMAGE_MODE_OPTIONS = [
+  { value: "hotlink", label: "Show from link" },
+  { value: "store", label: "Save a copy" },
+] as const;
 
 type StudioSettingsProps = {
   open: boolean;
@@ -26,6 +34,8 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
   const [revision, setRevision] = useState(1);
   const [maxUploadMib, setMaxUploadMib] = useState(UPLOAD_LIMIT_MIN / MIB);
   const [baselineMib, setBaselineMib] = useState(UPLOAD_LIMIT_MIN / MIB);
+  const [urlImageMode, setUrlImageMode] = useState<UrlImageMode>(URL_IMAGE_MODE_DEFAULT);
+  const [baselineMode, setBaselineMode] = useState<UrlImageMode>(URL_IMAGE_MODE_DEFAULT);
   const [message, setMessage] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
@@ -76,11 +86,21 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
     setRevision(settings.revision);
     setMaxUploadMib(mib);
     setBaselineMib(mib);
+    setUrlImageMode(settings.urlImageMode);
+    setBaselineMode(settings.urlImageMode);
   }
 
   function editLimit(next: number): void {
     dirtyRef.current = true;
     setMaxUploadMib(next);
+  }
+
+  function editMode(next: string): void {
+    if (next !== "hotlink" && next !== "store") {
+      return;
+    }
+    dirtyRef.current = true;
+    setUrlImageMode(next);
   }
 
   async function save(): Promise<void> {
@@ -93,6 +113,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
       const saved = await updateSettings({
         expectedRevision: revision,
         maxUploadBytes: maxUploadMib * MIB,
+        urlImageMode,
       });
       applyLoaded(saved);
       dirtyRef.current = false;
@@ -109,6 +130,7 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
           const latest = await getSettings();
           setRevision(latest.revision);
           setBaselineMib(latest.maxUploadBytes / MIB);
+          setBaselineMode(latest.urlImageMode);
         } catch {
           // Keep the local draft; revision may still be stale.
         }
@@ -121,10 +143,15 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
   const minMib = UPLOAD_LIMIT_MIN / MIB;
   const maxMib = UPLOAD_LIMIT_MAX / MIB;
   const stepMib = UPLOAD_LIMIT_STEP / MIB;
-  const dirty = maxUploadMib !== baselineMib;
+  const dirty = maxUploadMib !== baselineMib || urlImageMode !== baselineMode;
   const limitValid =
     Number.isInteger(maxUploadMib) && maxUploadMib >= minMib && maxUploadMib <= maxMib;
   const fieldsReady = loadState === "ready";
+  const modeCaption =
+    urlImageMode === "hotlink"
+      ? "Shown from the original site, which sees your requests and IP address. If the link breaks, the preview disappears. Backups keep the link, not the image."
+      : "Saved into your storage folder under the upload limit and included in backups.";
+  const urlImageModeHeadingId = "studio-settings-url-image-mode";
 
   return (
     <StudioDialog
@@ -168,6 +195,18 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
         <p className="studio-help">
           {maxUploadMib} MiB. Applies to new uploads from Studio and agents.
         </p>
+        <div className="studio-field">
+          <p id={urlImageModeHeadingId}>Images from URLs</p>
+          <StudioSegment
+            label="Images from URLs"
+            labelledBy={urlImageModeHeadingId}
+            value={urlImageMode}
+            options={URL_IMAGE_MODE_OPTIONS}
+            disabled={!fieldsReady}
+            onChange={editMode}
+          />
+          <p className="studio-help">{modeCaption}</p>
+        </div>
         {message !== null ? (
           <p className={saveState === "error" ? "form-error" : "studio-help"} role="alert">
             {message}
