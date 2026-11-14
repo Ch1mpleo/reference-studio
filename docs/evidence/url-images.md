@@ -122,7 +122,16 @@ B3 (parsed-host restore/export/browser guard; strip all trailing dots):
 | Leading-zero typed host is additional reject only | `http://01.2.3.4/` cases |
 | `localhost..` rejected (all trailing dots stripped) | `normalizeHostname` + restore/client tests |
 
-Gate counts recorded below after B3.
+B3 gate (run 1), Node **v24.22.3** (npm **11.19.1**):
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | exit 0, no diagnostics |
+| `npm test` | 61 files, 556 tests: 556 passed, 0 failed, 0 skipped |
+| `npm run build` | exit 0 |
+| `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` | 79 tests: 79 passed, 0 failed, 0 skipped |
+
+B3 gate (run 2): same counts (61 / 556 / 79); both runs exit 0.
 
 ## Limits (U1r)
 
