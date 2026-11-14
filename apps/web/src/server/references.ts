@@ -4,6 +4,7 @@ import {
   createLinkReferenceSchema,
   createNoteReferenceSchema,
   createPlacementRequestSchema,
+  createUrlImageSchema,
   imageCropSchema,
   imageFieldSchema,
   imageRequestForStorage,
@@ -48,10 +49,17 @@ import type { EventHub } from "./events.js";
 import { inspectImage, type InspectedImage } from "./images.js";
 import {
   commitMutation as commitMutationImpl,
+  findCommittedOutcome,
   hashCanonicalRequest,
   readIdempotencyKey,
   rejectIdempotencyMismatch,
 } from "./idempotency.js";
+import {
+  fetchRemoteImageToTemp as fetchRemoteImageToTempImpl,
+  type FetchRemoteImageOptions,
+  type FetchedRemoteImage,
+  type RemoteFetchDependencies,
+} from "./remoteFetch.js";
 
 type CommitMutation = typeof commitMutationImpl;
 let commitMutation: CommitMutation = commitMutationImpl;
@@ -119,7 +127,10 @@ export function registerReferenceRoutes(
   database: DatabaseSync,
   dataDir: string,
   hub: EventHub,
+  remoteFetch?: RemoteFetchDependencies,
 ): void {
+  const fetchRemoteImage =
+    remoteFetch?.fetchRemoteImageToTemp ?? fetchRemoteImageToTempImpl;
   app.get("/api/projects/:projectId/references", async (request) => {
     const projectId = requireProject(database, routeParam(request, "projectId"));
     return { references: listProjectReferences(database, projectId) };
@@ -192,6 +203,133 @@ export function registerReferenceRoutes(
       }
     },
   );
+
+  app.post("/api/projects/:projectId/references/url-image", async (request, reply) => {
+    requireJson(request, "Send the image URL as application/json.");
+    const caller = requireCaller(request);
+    if (caller === "agent") {
+      throw new ServiceError("forbidden", "URL image import is available to the Studio browser only.");
+    }
+    const projectId = requireProject(database, routeParam(request, "projectId"));
+    const key = readIdempotencyKey(request.headers["idempotency-key"]);
+    const body = parseContract(createUrlImageSchema, request.body, "URL image details are invalid.");
+    const title = body.title ?? "";
+    const creator = body.creator === undefined ? null : body.creator;
+    const observations = body.observations ?? "";
+    const canonical = {
+      url: body.url,
+      title,
+      creator,
+      observations,
+    };
+    const requestHash = hashCanonicalRequest(canonical);
+    const scope = mutationScope(caller, "reference.url-image", projectId);
+    rejectIdempotencyMismatch(database, scope, key, requestHash);
+    const replayed = findCommittedOutcome(database, scope, key, requestHash);
+    if (replayed !== undefined) {
+      return reply.code(replayed.statusCode).send(replayed.body);
+    }
+
+    const maxUploadBytes = readSettings(database).maxUploadBytes;
+    const fetchOptions: FetchRemoteImageOptions = {
+      dataDir,
+      maxBytes: maxUploadBytes,
+    };
+    if (remoteFetch?.isBlocked !== undefined) {
+      fetchOptions.isBlocked = remoteFetch.isBlocked;
+    }
+    if (remoteFetch?.allowLoopbackPort !== undefined) {
+      fetchOptions.allowLoopbackPort = remoteFetch.allowLoopbackPort;
+    }
+    if (remoteFetch?.resolver !== undefined) {
+      fetchOptions.resolver = remoteFetch.resolver;
+    }
+
+    const disconnect = new AbortController();
+    // Per-response signal: reply.raw "close" before the response finishes means
+    // the client left. Keep-alive sockets must not abort later requests.
+    const onClientClose = (): void => {
+      if (!reply.raw.writableFinished) {
+        disconnect.abort();
+      }
+    };
+    reply.raw.on("close", onClientClose);
+    fetchOptions.signal = disconnect.signal;
+
+    let fetched: FetchedRemoteImage | undefined;
+    let paths: { originalPath: string; thumbnailPath: string } | undefined;
+    const created: string[] = [];
+    let released = false;
+    try {
+      fetched = await fetchRemoteImage(body.url, fetchOptions);
+      let inspected;
+      try {
+        inspected = await inspectImage(fetched.tempPath, {
+          maxBytes: maxUploadBytes,
+          sha256: fetched.sha256,
+        });
+      } catch (error) {
+        try {
+          unlinkSync(fetched.tempPath);
+        } catch {
+          // Best-effort temp cleanup when inspection fails.
+        }
+        throw error;
+      }
+      const resolvedTitle =
+        title.trim() !== ""
+          ? title.trim().slice(0, 200)
+          : titleFromRemoteUrl(fetched.finalUrl);
+      const imageCanonical = imageRequestForStorage(
+        {
+          title: resolvedTitle,
+          sourceUrl: body.url,
+          creator,
+          observations,
+        },
+        "image",
+        inspected.sha256,
+      );
+      paths = publishImageFiles(dataDir, inspected, fetched.tempPath, created);
+      if (afterPublishForTests !== undefined) {
+        await afterPublishForTests();
+      }
+      const outcome = commitMutation(database, {
+        scope,
+        key,
+        requestHash,
+        execute: () => {
+          const reference = insertImageReference(database, projectId, imageCanonical, inspected, paths!);
+          return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
+        },
+      });
+      publishReference(hub, projectId, outcome);
+      return reply.code(outcome.statusCode).send(outcome.body);
+    } catch (error) {
+      if (paths !== undefined) {
+        releasePublishedPath(paths.originalPath);
+        releasePublishedPath(paths.thumbnailPath);
+        released = true;
+      }
+      for (const relativePath of created) {
+        removeIfUnreferenced(database, dataDir, relativePath);
+      }
+      throw error;
+    } finally {
+      reply.raw.off("close", onClientClose);
+      if (paths !== undefined && !released) {
+        releasePublishedPath(paths.originalPath);
+        releasePublishedPath(paths.thumbnailPath);
+      }
+      if (fetched !== undefined && existsSync(fetched.tempPath)) {
+        try {
+          unlinkSync(fetched.tempPath);
+        } catch {
+          // Best-effort cleanup when publish did not rename the temp file.
+        }
+      }
+    }
+  });
 
   app.post("/api/projects/:projectId/references/links", async (request, reply) => {
     return createTextReference(request, reply, database, hub, "link");
@@ -421,6 +559,30 @@ async function readImageUpload(
       }
     }
   }
+}
+
+function titleFromRemoteUrl(finalUrl: string): string {
+  try {
+    const url = new URL(finalUrl);
+    const rawSegment = url.pathname.split("/").filter(Boolean).pop() ?? "";
+    let segment = "";
+    try {
+      segment = decodeURIComponent(rawSegment);
+    } catch {
+      segment = "";
+    }
+    const withoutExtension = segment.replace(/\.[^.]+$/, "").replace(/^\.+/, "").trim();
+    if (withoutExtension !== "") {
+      return withoutExtension.slice(0, 200);
+    }
+    const hostname = url.hostname.replace(/^\[|\]$/g, "");
+    if (hostname !== "") {
+      return hostname.slice(0, 200);
+    }
+  } catch {
+    // Fall through.
+  }
+  return "Image";
 }
 
 function publishImageFiles(

@@ -44,6 +44,7 @@ export {
   MAX_REFERENCE_TAGS,
   REFERENCE_PAGE_LIMIT,
   createLinkReferenceSchema,
+  createUrlImageSchema,
   createNoteReferenceSchema,
   createPlacementRequestSchema,
   formatMotionRange,
@@ -78,6 +79,7 @@ export {
 } from "./references.js";
 export type {
   CreateLinkReference,
+  CreateUrlImage,
   CreateNoteReference,
   CreatePlacementRequest,
   ImageCrop,

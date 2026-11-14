@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type DragEvent } from "react";
 import { UPLOAD_LIMIT_DEFAULT, imageTooLargeMessage, isHttpUrl, titleFromNote,
-  type Board, type BoardFrame, type CreateLinkReference, type CreateNoteReference, type ImageFields,
-  type LibraryReference, type ProjectReference, type SystemRecord } from "@reference-studio/core";
+  type Board, type BoardFrame, type CreateLinkReference, type CreateNoteReference, type CreateUrlImage,
+  type ImageFields, type LibraryReference, type ProjectReference, type SystemRecord } from "@reference-studio/core";
 import type { BoardView } from "./BoardCanvas.js";
 
 const BoardCanvas = lazy(async () => ({ default: (await import("./BoardCanvas.js")).BoardCanvas }));
@@ -21,12 +21,28 @@ import type { CanvasPlayground } from "./MotionPlayground.js";
 import { saveSystem } from "./systemApi.js";
 import type { SystemSaveResult } from "./SystemEditor.js";
 import { BoardRequestError, duplicateDirection, patchDirection, type DirectionPatch } from "./boardApi.js";
-import type { PlacementOptions, PlacementUseInput, ReferenceDetailsInput } from "./referenceApi.js";
+import {
+  ReferenceRequestError,
+  type PlacementOptions,
+  type PlacementUseInput,
+  type ReferenceDetailsInput,
+} from "./referenceApi.js";
 import type { ReferenceLoadStatus } from "./useProjectReferences.js";
 import { SETTINGS_CHANGED_EVENT, getSettings } from "./settingsApi.js";
 import { NATIVE_SHA256_MAX_BYTES } from "./sha256Stream.js";
 
 const emptyFields: ImageFields = { title: "", sourceUrl: null, creator: null, observations: "" };
+const URL_IMAGE_FALLBACK_REASONS = new Set([
+  "url_not_allowed",
+  "url_blocked_address",
+  "url_too_many_redirects",
+  "not_an_image",
+  "url_fetch_failed",
+  "url_timeout",
+  "image_too_large",
+  "image_too_large_pixels",
+  "image_unreadable",
+]);
 type Point = { x: number; y: number };
 type Panel = "library" | "inspect" | "systems" | null;
 export type CollectionProps = {
@@ -35,6 +51,7 @@ export type CollectionProps = {
   onRetryReferences: () => Promise<void>;
   onAddImage: (file: File, fields: ImageFields) => Promise<ProjectReference>;
   onAddLink: (input: CreateLinkReference) => Promise<ProjectReference>;
+  onAddUrlImage: (input: CreateUrlImage) => Promise<ProjectReference>;
   onAddNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   onSaveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
   onSavePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
@@ -42,7 +59,7 @@ export type CollectionProps = {
 };
 
 export function ReferenceWorkspace({ projectId, refreshKey, references, notice, status = "ready", refreshing = false,
-  onAddImage, onAddLink, onAddNote, onSaveDetails, onSavePlacement, onPlace, onRetryReferences }: CollectionProps) {
+  onAddImage, onAddLink, onAddUrlImage, onAddNote, onSaveDetails, onSavePlacement, onPlace, onRetryReferences }: CollectionProps) {
   const board = useProjectBoard(projectId, refreshKey);
   const [selection, setSelection] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -60,6 +77,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   const [message, setMessage] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [preparingImage, setPreparingImage] = useState(false);
+  const [fetchingImage, setFetchingImage] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
   const [viewerScale, setViewerScale] = useState(1);
@@ -197,14 +215,49 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   }
   async function addText(text: string, edit = false): Promise<void> {
     if (locked.current || !ready || !text.trim()) return;
-    locked.current = true; setImporting(true); setMessage(null);
+    locked.current = true; setImporting(true); setFetchingImage(false); setMessage(null);
     try {
-      const item = isHttpUrl(text.trim()) ? await onAddLink({ url: text.trim(), title: "", creator: "", observations: "", motion: null }) :
-        await onAddNote({ body: text, title: "", creator: "", sourceUrl: "", motion: null });
+      const trimmed = text.trim();
+      if (isHttpUrl(trimmed)) {
+        setFetchingImage(true);
+        try {
+          const item = await onAddUrlImage({ url: trimmed });
+          placeOnBoard(item, center());
+          if (edit) setEditingId(item.placementId);
+        } catch (error) {
+          if (
+            error instanceof ReferenceRequestError &&
+            error.code === "validation" &&
+            error.reason !== undefined &&
+            URL_IMAGE_FALLBACK_REASONS.has(error.reason)
+          ) {
+            const item = await onAddLink({
+              url: trimmed,
+              title: "",
+              creator: "",
+              observations: "",
+              motion: null,
+            });
+            placeOnBoard(item, center());
+            if (edit) setEditingId(item.placementId);
+            setMessage(`Saved as a link: ${urlImageFallbackReason(error.reason, maxUploadBytes)}`);
+            return;
+          }
+          if (error instanceof ReferenceRequestError && error.code === "network") {
+            setMessage("Studio couldn't reach the service.");
+            return;
+          }
+          setMessage(error instanceof Error ? error.message : "Could not add the reference.");
+        } finally {
+          setFetchingImage(false);
+        }
+        return;
+      }
+      const item = await onAddNote({ body: text, title: "", creator: "", sourceUrl: "", motion: null });
       placeOnBoard(item, center());
       if (edit) setEditingId(item.placementId);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not add the reference."); }
-    finally { locked.current = false; setImporting(false); }
+    finally { locked.current = false; setImporting(false); setFetchingImage(false); }
   }
   async function editNote(id: string, text: string, expectedRevision: number): Promise<number> {
     const item = references.find((entry) => entry.placementId === id);
@@ -288,7 +341,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     {ready && !playground && references.length === 0 && activeFrames.length === 0 ? <div className="canvas-empty"><pre aria-hidden="true">{"[ + ]"}</pre><h1>Drop your references here</h1><p>Drop images, paste links, or add a note. Make room for an idea.</p></div> : null}
     {dropping ? <div className="canvas-drop-hint" aria-hidden="true">Drop JPEG, PNG, or WebP images</div> : null}
     <div className="canvas-status" role="status">
-      {status === "loading" || board.state === "loading" ? "Loading workspace" : status === "error" ? "References unavailable" : preparingImage ? "Preparing image…" : importing ? "Adding reference" : operation ? "Saving group" : savingNotes > 0 ? "Saving note" : failedNotes.length ? "Note not saved" : board.state === "saving" ? "Saving arrangement" : board.state === "saved" ? refreshing ? "Updating" : "Saved" : board.unsaved ? "Arrangement not saved" : board.loaded ? "Refresh failed" : "Could not load workspace"}
+      {status === "loading" || board.state === "loading" ? "Loading workspace" : status === "error" ? "References unavailable" : preparingImage ? "Preparing image…" : fetchingImage ? "Fetching image…" : importing ? "Adding reference" : operation ? "Saving group" : savingNotes > 0 ? "Saving note" : failedNotes.length ? "Note not saved" : board.state === "saving" ? "Saving arrangement" : board.state === "saved" ? refreshing ? "Updating" : "Saved" : board.unsaved ? "Arrangement not saved" : board.loaded ? "Refresh failed" : "Could not load workspace"}
       {notice ? <p className="form-error">{notice}</p> : null}{message ? <p>{message}</p> : null}{board.message ? <p className="form-error">{board.message}</p> : null}
       {board.state === "error" ? <StudioButton onClick={board.retry}>Retry</StudioButton> : null}
       {status === "error" ? <StudioButton busy={refreshing} onClick={() => void onRetryReferences()}>Retry references</StudioButton> : null}
@@ -328,6 +381,22 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       {viewed?.reference.asset ? <div className="canvas-image-viewer"><div style={{ width: `${viewerScale * 100}%` }}><ImageRegions reference={viewed.reference} annotations={annotations.filter((note) => note.target.type === "placement" && note.target.placementId === viewed.placementId)} /></div></div> : null}
     </StudioDialog>
   </section>;
+}
+
+function urlImageFallbackReason(reason: string, maxUploadBytes: number): string {
+  if (reason === "not_an_image") {
+    return "that address isn't a JPEG, PNG or WebP image.";
+  }
+  if (reason === "image_too_large") {
+    return imageTooLargeMessage(maxUploadBytes);
+  }
+  if (reason === "image_too_large_pixels") {
+    return "that image is larger than 12,000 px per side.";
+  }
+  if (reason === "image_unreadable") {
+    return "that file couldn't be read as an image.";
+  }
+  return "the image couldn't be fetched.";
 }
 
 function isEditing(target: EventTarget | null): boolean {

@@ -96,6 +96,17 @@ export const createLinkReferenceSchema = z
 
 export type CreateLinkReference = z.infer<typeof createLinkReferenceSchema>;
 
+export const createUrlImageSchema = z
+  .object({
+    url: httpUrlSchema,
+    title: z.string().trim().max(200).optional(),
+    creator: optionalLabel.optional(),
+    observations: z.string().max(20_000).optional(),
+  })
+  .strict();
+
+export type CreateUrlImage = z.infer<typeof createUrlImageSchema>;
+
 export const createNoteReferenceSchema = z
   .object({
     body: z.string().trim().min(1).max(20_000),

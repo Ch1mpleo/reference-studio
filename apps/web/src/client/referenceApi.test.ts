@@ -64,7 +64,11 @@ describe("reference requests", () => {
       observations: "",
       motion: null,
     };
-    await expect(addProjectLink("00000000-0000-4000-8000-000000000001", input)).rejects.toThrow("socket closed");
+    await expect(addProjectLink("00000000-0000-4000-8000-000000000001", input)).rejects.toMatchObject({
+      name: "ReferenceRequestError",
+      code: "network",
+      message: "Studio couldn't reach the service.",
+    });
     await expect(addProjectLink("00000000-0000-4000-8000-000000000001", input)).resolves.toMatchObject({
       placementId: reference.placementId,
     });

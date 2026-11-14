@@ -359,6 +359,7 @@ function ProjectEditor({
         onRetryReferences={collection.retry}
         onAddImage={collection.addImage}
         onAddLink={collection.addLink}
+        onAddUrlImage={collection.addUrlImage}
         onAddNote={collection.addNote}
         onSaveDetails={collection.saveDetails}
         onSavePlacement={collection.savePlacement}

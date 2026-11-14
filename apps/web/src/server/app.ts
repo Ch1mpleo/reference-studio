@@ -37,6 +37,7 @@ import { registerReferenceRoutes } from "./references.js";
 import { registerReferenceImageRoutes } from "./referenceImages.js";
 import { registerSettingsRoutes } from "./settings.js";
 import { issueSessionCookie } from "./session.js";
+import type { RemoteFetchDependencies } from "./remoteFetch.js";
 import { incomingUploadsDir } from "./uploads.js";
 
 export { publishChange } from "./changes.js";
@@ -49,6 +50,8 @@ export type AppDependencies = {
   database: DatabaseSync;
   hub?: EventHub;
   migrationsDir?: string;
+  /** Test-only remote URL fetch seams; production never sets this. */
+  remoteFetch?: RemoteFetchDependencies;
 };
 
 export async function createApp(dependencies: AppDependencies): Promise<FastifyInstance> {
@@ -101,6 +104,25 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
     }
   });
 
+  // Register before routes and static so every encapsulation context inherits
+  // the ServiceError envelope (including serveClient:true).
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof ServiceError) {
+      return reply.code(error.status).send(serviceErrorBody(error));
+    }
+    const transport = transportError(error, request.url);
+    if (transport !== undefined) {
+      return reply.code(transport.status).send(transport.body);
+    }
+    request.log.error({ err: error }, "request failed");
+    return reply.code(500).send({
+      error: {
+        code: "internal",
+        message: "Internal error",
+      },
+    });
+  });
+
   app.get("/api/health", async () => healthResponse());
 
   app.get("/api/session", async (request, reply) => {
@@ -111,7 +133,13 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   });
 
   registerProjectRoutes(app, dependencies.database, hub);
-  registerReferenceRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
+  registerReferenceRoutes(
+    app,
+    dependencies.database,
+    dependencies.config.dataDir,
+    hub,
+    dependencies.remoteFetch,
+  );
   registerReferenceImageRoutes(app, dependencies.database, dependencies.config.dataDir);
   registerBackupRoutes(app, dependencies.database, dependencies.config.dataDir, hub);
   registerBoardRoutes(app, dependencies.database, hub);
@@ -181,23 +209,6 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
       return reply.sendFile("index.html");
     });
   }
-
-  app.setErrorHandler((error, request, reply) => {
-    if (error instanceof ServiceError) {
-      return reply.code(error.status).send(serviceErrorBody(error));
-    }
-    const transport = transportError(error, request.url);
-    if (transport !== undefined) {
-      return reply.code(transport.status).send(transport.body);
-    }
-    request.log.error({ err: error }, "request failed");
-    return reply.code(500).send({
-      error: {
-        code: "internal",
-        message: "Internal error",
-      },
-    });
-  });
 
   return app;
 }
