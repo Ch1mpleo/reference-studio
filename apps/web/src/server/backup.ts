@@ -11,6 +11,7 @@ import {
   mutationScope,
   parseContract,
   projectSchema,
+  assertSafePreviewImageUrl,
   readBackupManifest,
   ServiceError,
   type BackupManifest,
@@ -185,7 +186,7 @@ export function exportProjectBackup(
         archived: readInteger(row.archived) === 1,
         motion: readMotion(row),
         assetOriginalId,
-        previewImageUrl: kind === "link" ? blankToNull(row.preview_image_url) : null,
+        previewImageUrl: kind === "link" ? exportPreviewImageUrl(row.preview_image_url) : null,
       });
     }
     placements.push({
@@ -735,6 +736,21 @@ function blankToNull(value: string | null): string | null {
     return null;
   }
   return value;
+}
+
+/** Export keeps a safe preview URL; unsafe planted values become null with a warning. */
+function exportPreviewImageUrl(value: string | null): string | null {
+  const preview = blankToNull(value);
+  if (preview === null) {
+    return null;
+  }
+  try {
+    assertSafePreviewImageUrl(preview);
+    return preview;
+  } catch {
+    console.warn(`Omitting unsafe previewImageUrl from backup export: ${preview}`);
+    return null;
+  }
 }
 
 function readInteger(value: number | bigint): number {
