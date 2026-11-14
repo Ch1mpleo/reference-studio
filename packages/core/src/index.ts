@@ -127,6 +127,7 @@ export {
   assertSafePreviewImageUrl,
   isAllowedHotlinkPreviewUrl,
   isBlockedAddress,
+  normalizeHostname,
   previewImageUrlNotAllowedMessage,
 } from "./safeHttpUrl.js";
 export { boardRectSchema, boardFrameSchema, boardItemSchema, boardLayoutSchema, boardSchema, updateBoardSchema } from "./board.js";

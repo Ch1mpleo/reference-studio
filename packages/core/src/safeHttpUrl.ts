@@ -53,8 +53,8 @@ export function isBlockedAddress(ip: string): boolean {
 
 /**
  * Preview URLs for restore and hotlink rendering: http(s) only, no userinfo,
- * no localhost / *.localhost (after stripping one trailing '.'), no blocked or
- * invalid IP literals. Does not resolve DNS.
+ * no localhost / *.localhost (after stripping trailing '.'), no blocked IP
+ * literals on the parsed canonical host. Does not resolve DNS.
  */
 export function assertSafePreviewImageUrl(raw: string): URL {
   let url: URL;
@@ -80,27 +80,39 @@ export function assertSafePreviewImageUrl(raw: string): URL {
       reason: "url_not_allowed",
     });
   }
-  // Prefer the typed authority host so leading-zero IPv4 (01.2.3.4) is not
-  // accepted after URL normalisation to 1.2.3.4.
-  const host = normalizeHostname(typedHostname(raw) ?? url.hostname);
+  // Always check the parsed, canonical host (decimal/hex/short/fullwidth forms
+  // resolve here). Typed-host leading-zero rules are an additional reject only.
+  const host = normalizeHostname(url.hostname);
   if (host === "localhost" || host.endsWith(".localhost")) {
-    throw new ServiceError("validation", previewImageUrlNotAllowedMessage(), {
-      reason: "url_blocked_address",
-    });
+    throw blockedPreview();
   }
   const literal = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
-  if (looksLikeIpv4(literal)) {
-    if (!isIPv4(literal) || isBlockedAddress(literal)) {
-      throw new ServiceError("validation", previewImageUrlNotAllowedMessage(), {
-        reason: "url_blocked_address",
-      });
+  if (isIPv4(literal) || isIPv6(literal)) {
+    if (isBlockedAddress(literal)) {
+      throw blockedPreview();
     }
-  } else if (isIPv6(literal) && isBlockedAddress(literal)) {
-    throw new ServiceError("validation", previewImageUrlNotAllowedMessage(), {
-      reason: "url_blocked_address",
-    });
+  } else if (looksLikeIpv4(literal)) {
+    throw blockedPreview();
+  }
+
+  const typed = typedHostname(raw);
+  if (typed !== undefined) {
+    const typedHost = normalizeHostname(
+      typed.startsWith("[") && typed.endsWith("]") ? typed.slice(1, -1) : typed,
+    );
+    // Additional reject: numeric-looking typed host that is not a canonical
+    // dotted-quad (e.g. 01.2.3.4 → parsed 1.2.3.4 would otherwise pass).
+    if (looksLikeIpv4(typedHost) && !isIPv4(typedHost)) {
+      throw blockedPreview();
+    }
   }
   return url;
+}
+
+function blockedPreview(): ServiceError {
+  return new ServiceError("validation", previewImageUrlNotAllowedMessage(), {
+    reason: "url_blocked_address",
+  });
 }
 
 /** Browser hotlink guard: same restore policy, plus refuse same-page hostname. */
@@ -119,10 +131,9 @@ export function isAllowedHotlinkPreviewUrl(raw: string, pageHostname?: string): 
   }
 }
 
-/** Strip one trailing '.' so localhost. / foo.localhost. match the localhost rules. */
+/** Strip all trailing '.' so localhost. / localhost.. match the localhost rules. */
 export function normalizeHostname(hostname: string): string {
-  const lower = hostname.toLowerCase();
-  return lower.endsWith(".") ? lower.slice(0, -1) : lower;
+  return hostname.toLowerCase().replace(/\.+$/u, "");
 }
 
 function typedHostname(raw: string): string | undefined {

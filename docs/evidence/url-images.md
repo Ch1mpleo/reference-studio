@@ -113,6 +113,17 @@ Gate (run 2): same counts (61 / 505 / 79); both runs exit 0.
 
 `preview.test` e2e (no public DNS), `--repeat-each=3` on the three default-mode specs: **9 passed** (3× PNG Linked preview, broken preview, page fallback).
 
+B3 (parsed-host restore/export/browser guard; strip all trailing dots):
+
+| Rule | Proof |
+| --- | --- |
+| Localhost/IP checks use `normalizeHostname(new URL(raw).hostname)` | `safeHttpUrl.test.ts` encoded bypass forms |
+| Decimal/hex/short/fullwidth/percent/tab localhost spellings rejected | `safeHttpUrl.test.ts`, `HotlinkPreview.test.tsx`, `backup.test.ts` restore+export |
+| Leading-zero typed host is additional reject only | `http://01.2.3.4/` cases |
+| `localhost..` rejected (all trailing dots stripped) | `normalizeHostname` + restore/client tests |
+
+Gate counts recorded below after B3.
+
 ## Limits (U1r)
 
 - Save a copy from a preview (U3), og:image, drag-link drop, agent URL add, CSP, and converting existing items when the mode changes remain out of scope.

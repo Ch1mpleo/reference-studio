@@ -589,7 +589,7 @@ describe("backup and restore", () => {
     expect(JSON.stringify(missing.json())).not.toContain(stored.original_path);
   });
 
-  it("exports null for an unsafe planted previewImageUrl and still succeeds", async () => {
+  it("exports null for unsafe planted previewImageUrl spellings and still succeeds", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { app, database } = await startApp();
     const atlas = await createProject(app, "Unsafe export", "unsafe-export");
@@ -608,21 +608,43 @@ describe("backup and restore", () => {
     });
     expect(created.statusCode).toBe(201);
     const referenceId = (created.json() as { reference: { id: string } }).reference.id;
-    database
-      .prepare(`UPDATE "references" SET preview_image_url = ? WHERE id = ?`)
-      .run("http://127.0.0.1:4317/steal.png", referenceId);
-
-    const downloaded = await app.inject({
-      method: "GET",
-      url: `/api/projects/${atlas}/backup`,
-      headers: agentHeaders(),
-    });
-    expect(downloaded.statusCode).toBe(200);
-    const manifest = JSON.parse(
-      Buffer.from(readBackupZip(downloaded.rawPayload).get("backup.json")!).toString("utf8"),
-    ) as { references: Array<{ previewImageUrl: string | null }> };
-    expect(manifest.references[0]?.previewImageUrl).toBeNull();
-    expect(warn).toHaveBeenCalled();
+    const planted = [
+      "http://127.0.0.1:4317/steal.png",
+      "http://2130706433/",
+      "http://0x7f000001/",
+      "http://0x7f.1/",
+      "http://127.1/",
+      "http://0177.0.0.1/",
+      "http://１２７．０．０．１/",
+      "http://%31%32%37.0.0.1/",
+      "http://127.0.\t0.1/",
+      "http://3232235777/",
+      "http://0xa9fea9fe/",
+      "http://169.254.43518/",
+      "http://0/",
+      "http://loc\talhost/",
+      "http://%6c%6f%63%61%6c%68%6f%73%74/",
+      "http://ｌｏｃａｌｈｏｓｔ/",
+      "http://localhost../",
+      "http://01.2.3.4/x.png",
+    ];
+    for (const previewImageUrl of planted) {
+      warn.mockClear();
+      database
+        .prepare(`UPDATE "references" SET preview_image_url = ? WHERE id = ?`)
+        .run(previewImageUrl, referenceId);
+      const downloaded = await app.inject({
+        method: "GET",
+        url: `/api/projects/${atlas}/backup`,
+        headers: agentHeaders(),
+      });
+      expect(downloaded.statusCode, previewImageUrl).toBe(200);
+      const manifest = JSON.parse(
+        Buffer.from(readBackupZip(downloaded.rawPayload).get("backup.json")!).toString("utf8"),
+      ) as { references: Array<{ previewImageUrl: string | null }> };
+      expect(manifest.references[0]?.previewImageUrl, previewImageUrl).toBeNull();
+      expect(warn, previewImageUrl).toHaveBeenCalled();
+    }
     warn.mockRestore();
   });
 
@@ -701,6 +723,23 @@ describe("backup and restore", () => {
       "http://localhost.:4317/x.png",
       "http://foo.localhost./x.png",
       "http://user:pw@example.com/a.png",
+      "http://2130706433/",
+      "http://0x7f000001/",
+      "http://0x7f.1/",
+      "http://127.1/",
+      "http://0177.0.0.1/",
+      "http://１２７．０．０．１/",
+      "http://%31%32%37.0.0.1/",
+      "http://127.0.\t0.1/",
+      "http://3232235777/",
+      "http://0xa9fea9fe/",
+      "http://169.254.43518/",
+      "http://0/",
+      "http://loc\talhost/",
+      "http://%6c%6f%63%61%6c%68%6f%73%74/",
+      "http://ｌｏｃａｌｈｏｓｔ/",
+      "http://localhost../",
+      "http://01.2.3.4/x.png",
     ];
     for (const [index, previewImageUrl] of cases.entries()) {
       const projectId = createId();

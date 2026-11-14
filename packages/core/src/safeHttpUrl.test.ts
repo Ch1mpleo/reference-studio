@@ -4,8 +4,30 @@ import {
   assertSafePreviewImageUrl,
   isAllowedHotlinkPreviewUrl,
   isBlockedAddress,
+  normalizeHostname,
   previewImageUrlNotAllowedMessage,
 } from "./safeHttpUrl.js";
+
+/** Encoded / alternate spellings that WHATWG URL resolves to blocked hosts. */
+const ENCODED_BYPASS_FORMS = [
+  "http://2130706433/",
+  "http://0x7f000001/",
+  "http://0x7f.1/",
+  "http://127.1/",
+  "http://0177.0.0.1/",
+  "http://１２７．０．０．１/",
+  "http://%31%32%37.0.0.1/",
+  "http://127.0.\t0.1/",
+  "http://3232235777/",
+  "http://0xa9fea9fe/",
+  "http://169.254.43518/",
+  "http://0/",
+  "http://loc\talhost/",
+  "http://%6c%6f%63%61%6c%68%6f%73%74/",
+  "http://ｌｏｃａｌｈｏｓｔ/",
+  "http://localhost../",
+  "http://01.2.3.4/x.png",
+] as const;
 
 describe("isBlockedAddress", () => {
   it.each([
@@ -28,6 +50,13 @@ describe("isBlockedAddress", () => {
   });
 });
 
+describe("normalizeHostname", () => {
+  it("strips all trailing dots", () => {
+    expect(normalizeHostname("localhost..")).toBe("localhost");
+    expect(normalizeHostname("FOO.localhost.")).toBe("foo.localhost");
+  });
+});
+
 describe("assertSafePreviewImageUrl", () => {
   it("accepts a public https URL", () => {
     expect(assertSafePreviewImageUrl("https://cdn.example.com/photo.png").hostname).toBe(
@@ -45,8 +74,8 @@ describe("assertSafePreviewImageUrl", () => {
     ["http://foo.localhost./a.png", "url_blocked_address"],
     ["http://127.0.0.1/steal.png", "url_blocked_address"],
     ["http://192.168.1.1/reboot.cgi", "url_blocked_address"],
-    ["http://01.2.3.4/x.png", "url_blocked_address"],
     ["http://[::ffff:10.0.0.1]/x.png", "url_blocked_address"],
+    ...ENCODED_BYPASS_FORMS.map((raw) => [raw, "url_blocked_address"] as const),
   ])("rejects %s", (raw, reason) => {
     try {
       assertSafePreviewImageUrl(raw);
@@ -73,8 +102,13 @@ describe("isAllowedHotlinkPreviewUrl", () => {
     expect(isAllowedHotlinkPreviewUrl("http://192.168.1.1/reboot.cgi")).toBe(false);
   });
 
-  it("refuses localhost with a trailing dot", () => {
+  it("refuses localhost with trailing dots", () => {
     expect(isAllowedHotlinkPreviewUrl("http://localhost.:4317/x.png")).toBe(false);
     expect(isAllowedHotlinkPreviewUrl("http://foo.localhost./x.png")).toBe(false);
+    expect(isAllowedHotlinkPreviewUrl("http://localhost../x.png")).toBe(false);
+  });
+
+  it.each([...ENCODED_BYPASS_FORMS])("refuses encoded bypass form %s", (raw) => {
+    expect(isAllowedHotlinkPreviewUrl(raw)).toBe(false);
   });
 });

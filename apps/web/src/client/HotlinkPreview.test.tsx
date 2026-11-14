@@ -4,6 +4,26 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HotlinkPreview } from "./HotlinkPreview.js";
 
+const ENCODED_BYPASS_FORMS = [
+  "http://2130706433/",
+  "http://0x7f000001/",
+  "http://0x7f.1/",
+  "http://127.1/",
+  "http://0177.0.0.1/",
+  "http://１２７．０．０．１/",
+  "http://%31%32%37.0.0.1/",
+  "http://127.0.\t0.1/",
+  "http://3232235777/",
+  "http://0xa9fea9fe/",
+  "http://169.254.43518/",
+  "http://0/",
+  "http://loc\talhost/",
+  "http://%6c%6f%63%61%6c%68%6f%73%74/",
+  "http://ｌｏｃａｌｈｏｓｔ/",
+  "http://localhost../",
+  "http://01.2.3.4/x.png",
+] as const;
+
 function PreviewCard({ url, title }: { url: string; title: string }) {
   const [unavailable, setUnavailable] = useState(false);
   if (unavailable) {
@@ -89,6 +109,15 @@ describe("HotlinkPreview", () => {
         title: "Dotted localhost",
       }),
     );
+    expect(view.container.querySelector("img")).toBeNull();
+    expect(view.container.textContent).toContain("Preview unavailable");
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it.each([...ENCODED_BYPASS_FORMS])("refuses encoded bypass form %s without an img", async (url) => {
+    const view = await render(createElement(PreviewCard, { url, title: "Encoded" }));
     expect(view.container.querySelector("img")).toBeNull();
     expect(view.container.textContent).toContain("Preview unavailable");
     await act(async () => {
