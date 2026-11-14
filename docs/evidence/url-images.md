@@ -96,16 +96,22 @@ Node **v24.22.3** (npm **11.19.1**). Browser: Chromium via `REFERENCE_STUDIO_BRO
 
 Initial U1r gate: 59 files / 437 unit / 78 e2e.
 
-QA follow-up gate (run 1):
+QA follow-up gate (B1 era): 60 files / 460 unit / 79 e2e.
+
+B2 / nits follow-up (preview.test, BlockList restore, trailing-dot / export / formatVersion):
+
+Gate (run 1), Node **v24.22.3** (npm **11.19.1**):
 
 | Command | Result |
 | --- | --- |
 | `npm run check` | exit 0, no diagnostics |
-| `npm test` | 60 files, 460 tests: 460 passed, 0 failed, 0 skipped |
+| `npm test` | 61 files, 505 tests: 505 passed, 0 failed, 0 skipped |
 | `npm run build` | exit 0 |
 | `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` | 79 tests: 79 passed, 0 failed, 0 skipped |
 
-QA follow-up gate (run 2): same counts (60 / 460 / 79); both runs exit 0.
+Gate (run 2): same counts (61 / 505 / 79); both runs exit 0.
+
+`preview.test` e2e (no public DNS), `--repeat-each=3` on the three default-mode specs: **9 passed** (3× PNG Linked preview, broken preview, page fallback).
 
 ## Limits (U1r)
 
