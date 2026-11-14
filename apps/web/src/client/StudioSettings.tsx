@@ -149,8 +149,9 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
   const fieldsReady = loadState === "ready";
   const modeCaption =
     urlImageMode === "hotlink"
-      ? "Shown from the original site, which sees your requests and IP address. If the link breaks, the preview disappears. Not included in backups."
+      ? "Shown from the original site, which sees your requests and IP address. If the link breaks, the preview disappears. Backups keep the link, not the image."
       : "Saved into your storage folder under the upload limit and included in backups.";
+  const urlImageModeHeadingId = "studio-settings-url-image-mode";
 
   return (
     <StudioDialog
@@ -195,9 +196,10 @@ export function StudioSettings({ open, onClose }: StudioSettingsProps) {
           {maxUploadMib} MiB. Applies to new uploads from Studio and agents.
         </p>
         <div className="studio-field">
-          <label>Images from URLs</label>
+          <p id={urlImageModeHeadingId}>Images from URLs</p>
           <StudioSegment
             label="Images from URLs"
+            labelledBy={urlImageModeHeadingId}
             value={urlImageMode}
             options={URL_IMAGE_MODE_OPTIONS}
             disabled={!fieldsReady}
