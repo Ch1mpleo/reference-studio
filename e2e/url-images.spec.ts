@@ -9,7 +9,13 @@ import {
   projectReferenceListSchema,
   UPLOAD_LIMIT_MIN,
 } from "@reference-studio/core";
-import { IsolatedServer } from "./server.js";
+import { IsolatedServer, PREVIEW_TEST_HOST } from "./server.js";
+
+test.use({
+  launchOptions: {
+    args: [`--host-resolver-rules=MAP ${PREVIEW_TEST_HOST} 127.0.0.1`],
+  },
+});
 
 let server: IsolatedServer;
 let imageServer: Server;
@@ -17,8 +23,8 @@ let imagePort: number;
 /** Loopback origin used for store-mode fetches (allowLoopbackPort). */
 let imageOrigin: string;
 /**
- * Same fake server via a hostname that is not an IP literal, so the browser
- * hotlink guard still renders the img while DNS resolves to 127.0.0.1.
+ * Same fake server via preview.test (mapped to 127.0.0.1 in Playwright and the
+ * in-process resolver). Avoids public DNS / nip.io.
  */
 let hotlinkOrigin: string;
 let pngBytes: Buffer;
@@ -69,7 +75,7 @@ test.beforeAll(async () => {
   }
   imagePort = address.port;
   imageOrigin = `http://127.0.0.1:${imagePort}`;
-  hotlinkOrigin = `http://127.0.0.1.nip.io:${imagePort}`;
+  hotlinkOrigin = `http://${PREVIEW_TEST_HOST}:${imagePort}`;
 
   server = await IsolatedServer.createAllowingLoopbackFetch(imagePort);
 });
