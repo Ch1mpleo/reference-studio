@@ -75,8 +75,7 @@ describe("assertSafePreviewImageUrl", () => {
     ["http://127.0.0.1/steal.png", "url_blocked_address"],
     ["http://192.168.1.1/reboot.cgi", "url_blocked_address"],
     ["http://[::ffff:10.0.0.1]/x.png", "url_blocked_address"],
-    ...ENCODED_BYPASS_FORMS.map((raw) => [raw, "url_blocked_address"] as const),
-  ])("rejects %s", (raw, reason) => {
+  ] as const)("rejects %s", (raw, reason) => {
     try {
       assertSafePreviewImageUrl(raw);
       throw new Error("expected rejection");
@@ -84,6 +83,17 @@ describe("assertSafePreviewImageUrl", () => {
       expect(error).toBeInstanceOf(ServiceError);
       expect((error as ServiceError).message).toBe(previewImageUrlNotAllowedMessage());
       expect((error as ServiceError).details).toMatchObject({ reason });
+    }
+  });
+
+  it.each([...ENCODED_BYPASS_FORMS])("rejects encoded bypass form %s", (raw) => {
+    try {
+      assertSafePreviewImageUrl(raw);
+      throw new Error("expected rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ServiceError);
+      expect((error as ServiceError).message).toBe(previewImageUrlNotAllowedMessage());
+      expect((error as ServiceError).details).toMatchObject({ reason: "url_blocked_address" });
     }
   });
 });
