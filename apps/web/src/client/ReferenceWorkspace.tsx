@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type DragEvent } from "react";
-import { MAX_IMAGE_BYTES, imageTooLargeMessage, isHttpUrl, titleFromNote,
+import { UPLOAD_LIMIT_DEFAULT, imageTooLargeMessage, isHttpUrl, titleFromNote,
   type Board, type BoardFrame, type CreateLinkReference, type CreateNoteReference, type ImageFields,
   type LibraryReference, type ProjectReference, type SystemRecord } from "@reference-studio/core";
 import type { BoardView } from "./BoardCanvas.js";
@@ -23,6 +23,8 @@ import type { SystemSaveResult } from "./SystemEditor.js";
 import { BoardRequestError, duplicateDirection, patchDirection, type DirectionPatch } from "./boardApi.js";
 import type { PlacementOptions, PlacementUseInput, ReferenceDetailsInput } from "./referenceApi.js";
 import type { ReferenceLoadStatus } from "./useProjectReferences.js";
+import { SETTINGS_CHANGED_EVENT, getSettings } from "./settingsApi.js";
+import { NATIVE_SHA256_MAX_BYTES } from "./sha256Stream.js";
 
 const emptyFields: ImageFields = { title: "", sourceUrl: null, creator: null, observations: "" };
 type Point = { x: number; y: number };
@@ -57,15 +59,33 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   const [zoom, setZoom] = useState(0.8);
   const [message, setMessage] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [preparingImage, setPreparingImage] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
   const [viewerScale, setViewerScale] = useState(1);
+  const [maxUploadBytes, setMaxUploadBytes] = useState(UPLOAD_LIMIT_DEFAULT);
   const retryKeys = useRef(new Map<string, string>());
   const canvas = useRef<BoardView | null>(null);
   const root = useRef<HTMLElement>(null);
   const locked = useRef(false);
   const groupWrite = useRef(false);
   const latest = useRef(board); latest.current = board;
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      void getSettings().then((settings) => {
+        if (!cancelled) setMaxUploadBytes(settings.maxUploadBytes);
+      }).catch(() => {
+        if (!cancelled) setMaxUploadBytes(UPLOAD_LIMIT_DEFAULT);
+      });
+    };
+    load();
+    window.addEventListener(SETTINGS_CHANGED_EVENT, load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(SETTINGS_CHANGED_EVENT, load);
+    };
+  }, [projectId, refreshKey]);
   const selected = references.find((item) => item.placementId === inspectedId) ?? null;
   const viewed = references.find((item) => item.placementId === viewer) ?? null;
   const ready = board.loaded && status === "ready";
@@ -151,19 +171,29 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   }
   async function addFiles(files: File[], point = center()): Promise<void> {
     if (locked.current || !ready) return;
-    locked.current = true; setImporting(true); setMessage(null);
+    locked.current = true; setImporting(true); setPreparingImage(false); setMessage(null);
     const errors: string[] = []; let added = 0;
     try {
       for (const [index, file] of files.entries()) {
         try {
           if (!isCanvasImage(file)) throw new Error("Only JPEG, PNG, or WebP images can be added. Documents are not supported.");
-          if (file.size > MAX_IMAGE_BYTES) throw new Error(imageTooLargeMessage());
-          const item = await onAddImage(file, emptyFields);
-          placeOnBoard(item, { x: point.x + index % 3 * 290, y: point.y + Math.floor(index / 3) * 340 }); added++;
+          if (file.size > maxUploadBytes) throw new Error(imageTooLargeMessage(maxUploadBytes));
+          const needsPrepare = file.size > NATIVE_SHA256_MAX_BYTES;
+          if (needsPrepare) {
+            setPreparingImage(true);
+          }
+          try {
+            const item = await onAddImage(file, emptyFields);
+            placeOnBoard(item, { x: point.x + index % 3 * 290, y: point.y + Math.floor(index / 3) * 340 }); added++;
+          } finally {
+            if (needsPrepare) {
+              setPreparingImage(false);
+            }
+          }
         } catch (error) { errors.push(`${file.name}: ${error instanceof Error ? error.message : "Could not add this image."}`); }
       }
       setMessage(errors.length ? `${added} added. ${errors.join(" ")}` : `${added} ${added === 1 ? "image" : "images"} added`);
-    } finally { locked.current = false; setImporting(false); }
+    } finally { locked.current = false; setImporting(false); setPreparingImage(false); }
   }
   async function addText(text: string, edit = false): Promise<void> {
     if (locked.current || !ready || !text.trim()) return;
@@ -258,7 +288,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     {ready && !playground && references.length === 0 && activeFrames.length === 0 ? <div className="canvas-empty"><pre aria-hidden="true">{"[ + ]"}</pre><h1>Drop your references here</h1><p>Drop images, paste links, or add a note. Make room for an idea.</p></div> : null}
     {dropping ? <div className="canvas-drop-hint" aria-hidden="true">Drop JPEG, PNG, or WebP images</div> : null}
     <div className="canvas-status" role="status">
-      {status === "loading" || board.state === "loading" ? "Loading workspace" : status === "error" ? "References unavailable" : importing ? "Adding reference" : operation ? "Saving group" : savingNotes > 0 ? "Saving note" : failedNotes.length ? "Note not saved" : board.state === "saving" ? "Saving arrangement" : board.state === "saved" ? refreshing ? "Updating" : "Saved" : board.unsaved ? "Arrangement not saved" : board.loaded ? "Refresh failed" : "Could not load workspace"}
+      {status === "loading" || board.state === "loading" ? "Loading workspace" : status === "error" ? "References unavailable" : preparingImage ? "Preparing image…" : importing ? "Adding reference" : operation ? "Saving group" : savingNotes > 0 ? "Saving note" : failedNotes.length ? "Note not saved" : board.state === "saving" ? "Saving arrangement" : board.state === "saved" ? refreshing ? "Updating" : "Saved" : board.unsaved ? "Arrangement not saved" : board.loaded ? "Refresh failed" : "Could not load workspace"}
       {notice ? <p className="form-error">{notice}</p> : null}{message ? <p>{message}</p> : null}{board.message ? <p className="form-error">{board.message}</p> : null}
       {board.state === "error" ? <StudioButton onClick={board.retry}>Retry</StudioButton> : null}
       {status === "error" ? <StudioButton busy={refreshing} onClick={() => void onRetryReferences()}>Retry references</StudioButton> : null}

@@ -96,6 +96,15 @@ export type {
 export { browserSessionResponseSchema } from "./session.js";
 export type { BrowserSessionResponse } from "./session.js";
 export {
+  UPLOAD_LIMIT_DEFAULT,
+  UPLOAD_LIMIT_MAX,
+  UPLOAD_LIMIT_MIN,
+  UPLOAD_LIMIT_STEP,
+  studioSettingsSchema,
+  updateSettingsSchema,
+} from "./settings.js";
+export type { StudioSettings, UpdateSettingsRequest } from "./settings.js";
+export {
   BACKUP_FORMAT,
   BACKUP_FORMAT_VERSION,
   MAX_BACKUP_BYTES,

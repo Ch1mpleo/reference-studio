@@ -5,9 +5,11 @@ export const SERVICE_ERROR_CODES = [
   "not_found",
   "conflict",
   "unauthorized",
+  "forbidden",
   "forbidden_origin",
   "unsupported_media",
   "immutable",
+  "storage_full",
 ] as const;
 
 export type ServiceErrorCode = (typeof SERVICE_ERROR_CODES)[number];
@@ -17,9 +19,11 @@ export const serviceErrorStatus: Record<ServiceErrorCode, number> = {
   not_found: 404,
   conflict: 409,
   unauthorized: 401,
+  forbidden: 403,
   forbidden_origin: 403,
   unsupported_media: 415,
   immutable: 409,
+  storage_full: 507,
 };
 
 export class ServiceError extends Error {

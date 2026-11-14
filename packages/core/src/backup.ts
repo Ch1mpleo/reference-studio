@@ -3,7 +3,6 @@ import { ServiceError } from "./errors.js";
 import { parseContract } from "./parse.js";
 import {
   IMAGE_MEDIA_TYPES,
-  MAX_IMAGE_BYTES,
   MAX_IMAGE_EDGE,
   MAX_REFERENCE_TAGS,
   PLACEMENT_ROLES,
@@ -15,6 +14,7 @@ import {
 } from "./references.js";
 import { PROJECT_STATUSES } from "./projects.js";
 import { boardLayoutSchema } from "./board.js";
+import { UPLOAD_LIMIT_MAX } from "./settings.js";
 import { systemContexts } from "./systems.js";
 import { assertBackupVariants, MAX_BACKUP_VARIANTS, variantRecordSchema } from "./variants.js";
 
@@ -56,7 +56,7 @@ const backupAssetSchema = z
     originalId,
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
     mediaType: z.enum(IMAGE_MEDIA_TYPES),
-    byteSize: z.number().int().positive().max(MAX_IMAGE_BYTES),
+    byteSize: z.number().int().positive().max(UPLOAD_LIMIT_MAX),
     width: z.number().int().positive().max(MAX_IMAGE_EDGE),
     height: z.number().int().positive().max(MAX_IMAGE_EDGE),
     path: z.string().regex(/^assets\/[a-f0-9]{64}\.(jpg|png|webp)$/),

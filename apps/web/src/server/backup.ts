@@ -17,6 +17,7 @@ import {
   type Project,
   MAX_BACKUP_MANIFEST_BYTES,
   BACKUP_FORMAT_VERSION, remapSystem, remapVariant, systemChildren,
+  UPLOAD_LIMIT_MAX,
 } from "@reference-studio/core";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
@@ -281,7 +282,7 @@ async function prepareAssets(manifest: BackupManifest, archive: Map<string, Buff
     if (sha256 !== asset.sha256) {
       throw new ServiceError("validation", "An image in this backup does not match its recorded hash.");
     }
-    const image = await inspectImage(bytes);
+    const image = await inspectImage(bytes, { maxBytes: UPLOAD_LIMIT_MAX });
     if (
       image.mediaType !== asset.mediaType ||
       image.byteSize !== asset.byteSize ||

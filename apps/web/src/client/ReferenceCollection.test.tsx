@@ -1,15 +1,23 @@
 // @vitest-environment happy-dom
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ImageFields, ProjectReference } from "@reference-studio/core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { UPLOAD_LIMIT_MAX, type ImageFields, type ProjectReference } from "@reference-studio/core";
 import { ReferenceCollection } from "./ReferenceCollection.js";
+import { NATIVE_SHA256_MAX_BYTES } from "./sha256Stream.js";
 
 vi.mock("./BoardCanvas.js", () => ({ BoardCanvas: () => null }));
 vi.mock("./boardApi.js", () => ({
   getBoard: async (projectId: string) => ({ projectId, revision: 1, layout: { frames: [], items: [] } }),
   putBoard: async (projectId: string, revision: number, layout: unknown) => ({ projectId, revision: revision + 1, layout }),
 }));
+vi.mock("./settingsApi.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./settingsApi.js")>();
+  return {
+    ...actual,
+    getSettings: vi.fn(async () => ({ maxUploadBytes: UPLOAD_LIMIT_MAX, revision: 1 })),
+  };
+});
 
 const created = {
   placementId: "00000000-0000-4000-8000-000000000010",
@@ -46,8 +54,13 @@ async function render(node: ReactNode): Promise<{ container: HTMLElement; root: 
 }
 
 describe("ReferenceCollection", () => {
+  beforeEach(() => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  });
+
   afterEach(() => {
     document.body.replaceChildren();
+    vi.unstubAllGlobals();
   });
 
   it("adds a pasted image and leaves text paste in a field alone", async () => {
@@ -84,6 +97,51 @@ describe("ReferenceCollection", () => {
     }
     expect(call[0]).toBe(file);
 
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("shows Preparing image… while hashing a file over 64 MiB", async () => {
+    let resolveUpload!: (value: ProjectReference) => void;
+    const onAddImage = vi.fn(
+      () =>
+        new Promise<ProjectReference>((resolve) => {
+          resolveUpload = resolve;
+        }),
+    );
+    const view = await render(
+      createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        refreshKey: 0,
+        references: [],
+        notice: null,
+        onRetryReferences: vi.fn(),
+        onAddImage,
+        onAddLink: vi.fn(),
+        onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
+        onPlace: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const file = new File([new Uint8Array([1, 2, 3])], "large.png", { type: "image/png" });
+    Object.defineProperty(file, "size", { value: NATIVE_SHA256_MAX_BYTES + 1 });
+    await act(async () => {
+      document.dispatchEvent(pasteEvent(file));
+    });
+    const status = view.container.querySelector(".canvas-status");
+    const preparing = status?.textContent?.match(/Preparing image…/g) ?? [];
+    expect(preparing).toEqual(["Preparing image…"]);
+    expect(onAddImage).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveUpload(created);
+      await Promise.resolve();
+    });
+    expect(status?.textContent?.includes("Preparing image…")).toBe(false);
     await act(async () => {
       view.root.unmount();
     });

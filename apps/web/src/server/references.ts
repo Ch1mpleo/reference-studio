@@ -20,6 +20,7 @@ import {
   referenceSearchResultSchema,
   ServiceError,
   mutationScope,
+  UPLOAD_LIMIT_MAX,
   updatePlacementRequestSchema,
   updateReferenceRequestSchema,
   type ImageCrop,
@@ -29,21 +30,46 @@ import {
   type UpdateReferenceRequest,
   type CreatePlacementRequest,
 } from "@reference-studio/core";
+import { existsSync, unlinkSync } from "node:fs";
+import { open as openFile } from "node:fs/promises";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
-import { managedPath, readManagedFile, writeNewFile } from "./assetFiles.js";
+import {
+  managedPath,
+  publishFile,
+  releasePublishedPath,
+  removeIfUnreferenced,
+  retainPublishedPath,
+  writeNewFile,
+} from "./assetFiles.js";
 import { headerValue, requireCaller } from "./access.js";
 import { publishChange } from "./changes.js";
 import type { EventHub } from "./events.js";
 import { inspectImage, type InspectedImage } from "./images.js";
 import {
-  commitMutation,
+  commitMutation as commitMutationImpl,
   hashCanonicalRequest,
   readIdempotencyKey,
   rejectIdempotencyMismatch,
 } from "./idempotency.js";
+
+type CommitMutation = typeof commitMutationImpl;
+let commitMutation: CommitMutation = commitMutationImpl;
+let afterPublishForTests: (() => Promise<void>) | undefined;
+
+/** Test-only seam to force post-publish commit failures. */
+export function setCommitMutationForTests(next: CommitMutation | undefined): void {
+  commitMutation = next ?? commitMutationImpl;
+}
+
+/** Test-only yield after publish so concurrent retain races can be exercised. */
+export function setAfterPublishForTests(next: (() => Promise<void>) | undefined): void {
+  afterPublishForTests = next;
+}
 import { getProject } from "./projects.js";
 import { assertPlacementDirectionRevision, bumpPlacementDirection, readBoard, saveBoardLayout } from "./boards.js";
+import { readSettings } from "./settings.js";
+import { incomingUploadsDir, streamUploadToTemp } from "./uploads.js";
 
 const IMAGE_FIELDS = new Set(["title", "sourceUrl", "creator", "observations"]);
 const PATH_FIELDS = new Set(["path", "filePath", "filepath", "localPath"]);
@@ -99,35 +125,73 @@ export function registerReferenceRoutes(
     return { references: listProjectReferences(database, projectId) };
   });
 
-  app.post("/api/projects/:projectId/references/images", { bodyLimit: 21 * 1024 * 1024 }, async (request, reply) => {
-    const caller = requireCaller(request);
-    const projectId = requireProject(database, routeParam(request, "projectId"));
-    const key = readIdempotencyKey(request.headers["idempotency-key"]);
-    const upload = await readImageUpload(request);
-    const inspected = await inspectImage(upload.bytes);
-    const fields = parseContract(imageFieldSchema, {
-      title: upload.fields.title ?? "",
-      sourceUrl: upload.fields.sourceUrl ?? "",
-      creator: upload.fields.creator ?? "",
-      observations: upload.fields.observations ?? "",
-    }, "Image details are invalid.");
-    const canonical = imageRequestForStorage(fields, upload.filename, inspected.sha256);
-    const requestHash = hashCanonicalRequest(canonical);
-    const scope = mutationScope(caller, "reference.image", projectId);
-    rejectIdempotencyMismatch(database, scope, key, requestHash);
-    const paths = storeImageFiles(dataDir, inspected, upload.bytes);
-    const outcome = commitMutation(database, {
-      scope,
-      key,
-      requestHash,
-      execute: () => {
-        const reference = insertImageReference(database, projectId, canonical, inspected, paths);
-        return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
-      },
-    });
-    publishReference(hub, projectId, outcome);
-    return reply.code(outcome.statusCode).send(outcome.body);
-  });
+  app.post(
+    "/api/projects/:projectId/references/images",
+    { bodyLimit: UPLOAD_LIMIT_MAX + 1024 * 1024 },
+    async (request, reply) => {
+      const caller = requireCaller(request);
+      const projectId = requireProject(database, routeParam(request, "projectId"));
+      const key = readIdempotencyKey(request.headers["idempotency-key"]);
+      const maxUploadBytes = readSettings(database).maxUploadBytes;
+      const upload = await readImageUpload(request, maxUploadBytes, dataDir);
+      const created: string[] = [];
+      let paths: { originalPath: string; thumbnailPath: string } | undefined;
+      let released = false;
+      try {
+        const inspected = await inspectImage(upload.tempPath, {
+          maxBytes: maxUploadBytes,
+          sha256: upload.sha256,
+        });
+        const fields = parseContract(imageFieldSchema, {
+          title: upload.fields.title ?? "",
+          sourceUrl: upload.fields.sourceUrl ?? "",
+          creator: upload.fields.creator ?? "",
+          observations: upload.fields.observations ?? "",
+        }, "Image details are invalid.");
+        const canonical = imageRequestForStorage(fields, upload.filename, inspected.sha256);
+        const requestHash = hashCanonicalRequest(canonical);
+        const scope = mutationScope(caller, "reference.image", projectId);
+        rejectIdempotencyMismatch(database, scope, key, requestHash);
+        paths = publishImageFiles(dataDir, inspected, upload.tempPath, created);
+        if (afterPublishForTests !== undefined) {
+          await afterPublishForTests();
+        }
+        const outcome = commitMutation(database, {
+          scope,
+          key,
+          requestHash,
+          execute: () => {
+            const reference = insertImageReference(database, projectId, canonical, inspected, paths!);
+            return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
+          },
+        });
+        publishReference(hub, projectId, outcome);
+        return reply.code(outcome.statusCode).send(outcome.body);
+      } catch (error) {
+        if (paths !== undefined) {
+          releasePublishedPath(paths.originalPath);
+          releasePublishedPath(paths.thumbnailPath);
+          released = true;
+        }
+        for (const relativePath of created) {
+          removeIfUnreferenced(database, dataDir, relativePath);
+        }
+        throw error;
+      } finally {
+        if (paths !== undefined && !released) {
+          releasePublishedPath(paths.originalPath);
+          releasePublishedPath(paths.thumbnailPath);
+        }
+        if (existsSync(upload.tempPath)) {
+          try {
+            unlinkSync(upload.tempPath);
+          } catch {
+            // Best-effort cleanup when publish did not rename the temp file.
+          }
+        }
+      }
+    },
+  );
 
   app.post("/api/projects/:projectId/references/links", async (request, reply) => {
     return createTextReference(request, reply, database, hub, "link");
@@ -283,9 +347,15 @@ function requireJson(
   }
 }
 
-async function readImageUpload(request: FastifyRequest): Promise<{
+async function readImageUpload(
+  request: FastifyRequest,
+  maxUploadBytes: number,
+  dataDir: string,
+): Promise<{
   filename: string;
-  bytes: Buffer;
+  tempPath: string;
+  sha256: string;
+  byteSize: number;
   fields: Record<string, string>;
 }> {
   const mediaType = headerValue(request.headers["content-type"])?.split(";")[0]?.trim().toLowerCase();
@@ -294,53 +364,92 @@ async function readImageUpload(request: FastifyRequest): Promise<{
   }
   const fields: Record<string, string> = {};
   let filename = "image";
-  let bytes: Buffer | undefined;
-  for await (const part of request.parts()) {
-    if (PATH_FIELDS.has(part.fieldname)) {
-      if (part.type === "file") {
-        await part.toBuffer().catch(() => undefined);
-      }
-      throw new ServiceError("validation", "Send image bytes. The service does not read local paths.");
-    }
-    if (part.type === "file") {
-      if (part.fieldname !== "file" || bytes !== undefined) {
-        await part.toBuffer().catch(() => undefined);
-        throw new ServiceError("validation", "Send one image in the file field.");
-      }
-      filename = part.filename;
-      try {
-        bytes = await part.toBuffer();
-      } catch (error) {
-        if (isOversizedUpload(error)) {
-          throw new ServiceError("validation", imageTooLargeMessage());
+  let streamed: { tempPath: string; sha256: string; byteSize: number } | undefined;
+  let handedOff = false;
+  try {
+    for await (const part of request.parts({ limits: { fileSize: maxUploadBytes } })) {
+      if (PATH_FIELDS.has(part.fieldname)) {
+        if (part.type === "file") {
+          part.file.resume();
         }
-        throw error;
+        throw new ServiceError("validation", "Send image bytes. The service does not read local paths.");
       }
-      continue;
+      if (part.type === "file") {
+        if (part.fieldname !== "file" || streamed !== undefined) {
+          part.file.resume();
+          throw new ServiceError("validation", "Send one image in the file field.");
+        }
+        filename = part.filename;
+        try {
+          streamed = await streamUploadToTemp(part, {
+            dir: incomingUploadsDir(dataDir),
+            maxBytes: maxUploadBytes,
+          });
+        } catch (error) {
+          if (isOversizedUpload(error)) {
+            throw new ServiceError("validation", imageTooLargeMessage(maxUploadBytes));
+          }
+          throw error;
+        }
+        continue;
+      }
+      if (!IMAGE_FIELDS.has(part.fieldname)) {
+        throw new ServiceError("validation", "That image field is not supported.");
+      }
+      if (typeof part.value !== "string" || part.valueTruncated) {
+        throw new ServiceError("validation", "That field is too long.");
+      }
+      fields[part.fieldname] = part.value;
     }
-    if (!IMAGE_FIELDS.has(part.fieldname)) {
-      throw new ServiceError("validation", "That image field is not supported.");
+    if (streamed === undefined) {
+      throw new ServiceError("validation", "Choose a JPEG, PNG, or WebP image.");
     }
-    if (typeof part.value !== "string" || part.valueTruncated) {
-      throw new ServiceError("validation", "That field is too long.");
+    handedOff = true;
+    return {
+      filename,
+      tempPath: streamed.tempPath,
+      sha256: streamed.sha256,
+      byteSize: streamed.byteSize,
+      fields,
+    };
+  } finally {
+    if (!handedOff && streamed !== undefined) {
+      try {
+        unlinkSync(streamed.tempPath);
+      } catch {
+        // Best-effort cleanup when a later multipart part fails the request.
+      }
     }
-    fields[part.fieldname] = part.value;
   }
-  if (bytes === undefined) {
-    throw new ServiceError("validation", "Choose a JPEG, PNG, or WebP image.");
-  }
-  return { filename, bytes, fields };
 }
 
-function storeImageFiles(
+function publishImageFiles(
   dataDir: string,
   image: InspectedImage,
-  bytes: Buffer,
+  tempPath: string,
+  created: string[],
 ): { originalPath: string; thumbnailPath: string } {
   const originalPath = `assets/originals/${image.sha256}${image.extension}`;
   const thumbnailPath = `assets/thumbnails/${image.sha256}.webp`;
-  writeNewFile(managedPath(dataDir, originalPath), bytes);
-  writeNewFile(managedPath(dataDir, thumbnailPath), image.thumbnail);
+  try {
+    if (publishFile(tempPath, managedPath(dataDir, originalPath))) {
+      created.push(originalPath);
+    }
+    if (writeNewFile(managedPath(dataDir, thumbnailPath), image.thumbnail)) {
+      created.push(thumbnailPath);
+    }
+  } catch (error) {
+    for (const relativePath of created.splice(0)) {
+      try {
+        unlinkSync(managedPath(dataDir, relativePath));
+      } catch {
+        // Best-effort rollback when a later publish step fails.
+      }
+    }
+    throw error;
+  }
+  retainPublishedPath(originalPath);
+  retainPublishedPath(thumbnailPath);
   return { originalPath, thumbnailPath };
 }
 
@@ -596,13 +705,13 @@ function projectReferenceFromRow(row: unknown): ProjectReference {
   });
 }
 
-function sendAsset(
+async function sendAsset(
   database: DatabaseSync,
   dataDir: string,
   assetId: string | undefined,
   variant: "original" | "thumbnail",
   reply: FastifyReply,
-): FastifyReply {
+): Promise<FastifyReply> {
   const id = parseRecordId(assetId);
   if (id === undefined) {
     throw new ServiceError("not_found", "Image was not found.");
@@ -617,14 +726,56 @@ function sendAsset(
     throw new ServiceError("not_found", "Image was not found.");
   }
   const relativePath = variant === "original" ? row.original_path : row.thumbnail_path;
-  let bytes: Buffer;
+  let absolute: string;
   try {
-    bytes = readManagedFile(dataDir, relativePath);
+    absolute = managedPath(dataDir, relativePath);
   } catch {
-    throw new Error("Stored image is missing.");
+    throw new ServiceError("not_found", "Image was not found.");
   }
-  const mediaType = variant === "thumbnail" ? "image/webp" : row.media_type;
-  return reply.header("cache-control", "private, max-age=86400").type(mediaType).send(bytes);
+  let handle: Awaited<ReturnType<typeof openFile>> | undefined;
+  try {
+    try {
+      handle = await openFile(absolute, "r");
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+        throw new ServiceError("not_found", "Image was not found.");
+      }
+      throw error;
+    }
+    let stats: { size: number };
+    try {
+      stats = await handle.stat();
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      handle = undefined;
+      throw error;
+    }
+    if (variant === "original" && stats.size !== readInteger(row.byte_size)) {
+      await handle.close().catch(() => undefined);
+      handle = undefined;
+      throw new Error("Stored image size does not match the asset record.");
+    }
+    const stream = handle.createReadStream();
+    const owned = handle;
+    handle = undefined;
+    stream.on("close", () => {
+      void owned.close().catch(() => undefined);
+    });
+    stream.on("error", () => {
+      void owned.close().catch(() => undefined);
+    });
+    const mediaType = variant === "thumbnail" ? "image/webp" : row.media_type;
+    return reply
+      .header("cache-control", "private, max-age=86400")
+      .header("content-length", String(stats.size))
+      .type(mediaType)
+      .send(stream);
+  } catch (error) {
+    if (handle !== undefined) {
+      await handle.close().catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 const PLACEMENT_COLUMNS = `

@@ -1,3 +1,4 @@
+import { mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
@@ -8,10 +9,10 @@ import {
   healthResponse,
   imageTooLargeMessage,
   MAX_BACKUP_BYTES,
-  MAX_IMAGE_BYTES,
   readyEvent,
   ServiceError,
   serviceErrorBody,
+  UPLOAD_LIMIT_MAX,
   type StudioEvent,
 } from "@reference-studio/core";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -34,9 +35,14 @@ import { registerVariantRoutes } from "./variants.js";
 import { registerProjectRoutes } from "./projects.js";
 import { registerReferenceRoutes } from "./references.js";
 import { registerReferenceImageRoutes } from "./referenceImages.js";
+import { registerSettingsRoutes } from "./settings.js";
 import { issueSessionCookie } from "./session.js";
+import { incomingUploadsDir } from "./uploads.js";
 
 export { publishChange } from "./changes.js";
+
+/** Fixed JSON body ceiling; image uploads use a higher route bodyLimit. */
+const JSON_BODY_LIMIT = 21 * 1024 * 1024;
 
 export type AppDependencies = {
   config: AppConfig;
@@ -48,7 +54,7 @@ export type AppDependencies = {
 export async function createApp(dependencies: AppDependencies): Promise<FastifyInstance> {
   const hub = dependencies.hub ?? new EventHub();
   const app = Fastify({
-    bodyLimit: MAX_IMAGE_BYTES + 1024 * 1024,
+    bodyLimit: JSON_BODY_LIMIT,
     logger: {
       level: dependencies.config.logLevel,
       stream: process.stderr,
@@ -66,6 +72,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   });
 
   migrate(dependencies.database, dependencies.migrationsDir ?? defaultMigrationsDir());
+  sweepIncomingUploads(dependencies.config.dataDir);
 
   const streams = new Set<EventStream>();
   app.addHook("preClose", async () => {
@@ -111,6 +118,7 @@ export async function createApp(dependencies: AppDependencies): Promise<FastifyI
   registerBoardDraftRoutes(app, dependencies.database, hub);
   registerSystemRoutes(app, dependencies.database, hub);
   registerVariantRoutes(app, dependencies.database, hub);
+  registerSettingsRoutes(app, dependencies.database);
 
   app.get("/api/events", (request, reply) => {
     reply.hijack();
@@ -213,12 +221,21 @@ function transportError(
       body: serviceErrorBody(new ServiceError("unsupported_media", "Unsupported media type.")),
     };
   }
-  const restore = (url.split("?")[0] ?? url) === "/api/projects/restore";
+  const pathOnly = url.split("?")[0] ?? url;
+  const restore = pathOnly === "/api/projects/restore";
+  const imageUpload = /\/api\/projects\/[^/]+\/references\/images$/.test(pathOnly);
   if (error.code === "FST_REQ_FILE_TOO_LARGE" || error.code === "FST_ERR_CTP_BODY_TOO_LARGE") {
     return {
       status: 400,
       body: serviceErrorBody(
-        new ServiceError("validation", restore ? backupTooLargeMessage() : imageTooLargeMessage()),
+        new ServiceError(
+          "validation",
+          restore
+            ? backupTooLargeMessage()
+            : imageUpload
+              ? imageTooLargeMessage(UPLOAD_LIMIT_MAX)
+              : "Request body is too large.",
+        ),
       ),
     };
   }
@@ -246,3 +263,38 @@ function transportError(
 type EventStream = {
   close: () => void;
 };
+
+const INCOMING_PART_MAX_AGE_MS = 60 * 60 * 1000;
+
+export function sweepIncomingUploads(dataDir: string, now = Date.now()): string[] {
+  const directory = incomingUploadsDir(dataDir);
+  try {
+    mkdirSync(directory, { recursive: true });
+  } catch {
+    return [];
+  }
+  let names: string[];
+  try {
+    names = readdirSync(directory);
+  } catch {
+    return [];
+  }
+  const removed: string[] = [];
+  const cutoff = now - INCOMING_PART_MAX_AGE_MS;
+  for (const name of names) {
+    if (!name.endsWith(".part")) {
+      continue;
+    }
+    const absolute = path.join(directory, name);
+    try {
+      const age = statSync(absolute).mtimeMs;
+      if (age < cutoff) {
+        unlinkSync(absolute);
+        removed.push(name);
+      }
+    } catch {
+      // Ignore per-entry failures (including ENOENT races) so startup never crashes.
+    }
+  }
+  return removed;
+}
