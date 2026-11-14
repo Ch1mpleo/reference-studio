@@ -69,7 +69,8 @@ Checkpoint on `feat/url-images-preview` (base `origin/feat/url-images-store` @ `
 - Opt-in `store` keeps U1's url-image path. Settings Storage section: Images from URLs (`Show from link` / `Save a copy`). Mode changes affect new pastes only.
 - Broken preview: keep the reference, hide the img, show link-style card with “Preview unavailable”; reload retries. No delete, no persisted failure state.
 - MCP `get_reference` returns `image.status: "hotlinked"` with URL metadata only (no fetch, no image content block).
-- Backup format 6 exports/restores `previewImageUrl` as URL only (formats 1–5 → null). Settings are not in backups. No CSP added.
+- Backup format 6 exports/restores `previewImageUrl` as URL only (formats 1–5 → null when absent). Settings are not in backups. No CSP added.
+- QA follow-up: restore rejects unsafe `previewImageUrl` (loopback/LAN/localhost/userinfo) via shared `assertSafePreviewImageUrl`; `HotlinkPreview` client guard; format &lt; 6 may not carry non-null preview; MCP crop/placementId on hotlink → `asset_missing`; settings labelledby; default-mode e2e asserts fresh `hotlink` without forcing the mode.
 
 ## Rule-to-test table (U1r)
 
@@ -81,25 +82,30 @@ Checkpoint on `feat/url-images-preview` (base `origin/feat/url-images-store` @ `
 | `POST …/url-preview` success → link + `previewImageUrl`, no assets, one event; replay; mismatch; SSRF 400s; agent 403 | `references.test.ts` url-preview |
 | Paste follows mode; SETTINGS_CHANGED switches next paste; shared fallback | `ReferenceCollection.test.tsx` |
 | HotlinkPreview error → img gone, title + Preview unavailable, no API | `HotlinkPreview.test.tsx` |
-| Settings segment load/save/cancel/conflict | `StudioSettings.test.tsx` |
-| MCP hotlinked metadata, zero image blocks, no fetch | `packages/mcp` `get_reference` |
+| HotlinkPreview refuses loopback / private literals (no img) | `HotlinkPreview.test.tsx`, `safeHttpUrl.test.ts` |
+| Restore loopback/LAN/localhost/userinfo preview → 400, no rows (bearer + browser) | `backup.test.ts`, `safeHttpUrl.test.ts` |
+| Format &lt; 6 with non-null `previewImageUrl` → 400; string formatVersion names type | `backup.test.ts` (core) |
+| Settings segment load/save/cancel/conflict; labelled heading | `StudioSettings.test.tsx` |
+| MCP hotlinked metadata; crop/placementId → `asset_missing`; no fetch | `packages/mcp` `get_reference` |
 | Backup v6 round-trip; v5 restore null preview; v6 preview on image kind 400 | `backup.test.ts` |
-| E2e: store-mode U1 paths; default Linked preview; broken preview; page fallback; Save a copy persists | `e2e/url-images.spec.ts`, `e2e/settings.spec.ts` |
+| E2e: default Linked preview (asserts default hotlink); broken preview; page fallback; loopback guard (no steal request); store-mode U1; Save a copy persists | `e2e/url-images.spec.ts`, `e2e/settings.spec.ts` |
 
 ## Commands and results (U1r)
 
-Node v24.22.3 (npm 11.19.1). Browser: Chromium via `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium`.
+Node **v24.22.3** (npm **11.19.1**). Browser: Chromium via `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium`.
 
-Gate (run 1):
+Initial U1r gate: 59 files / 437 unit / 78 e2e.
+
+QA follow-up gate (run 1):
 
 | Command | Result |
 | --- | --- |
 | `npm run check` | exit 0, no diagnostics |
-| `npm test` | 59 files, 437 tests: 437 passed, 0 failed, 0 skipped |
+| `npm test` | 60 files, 460 tests: 460 passed, 0 failed, 0 skipped |
 | `npm run build` | exit 0 |
-| `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` | 78 tests: 78 passed, 0 failed, 0 skipped |
+| `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` | 79 tests: 79 passed, 0 failed, 0 skipped |
 
-Gate (run 2): same counts (59 / 437 / 78); both runs exit 0.
+QA follow-up gate (run 2): same counts (60 / 460 / 79); both runs exit 0.
 
 ## Limits (U1r)
 
