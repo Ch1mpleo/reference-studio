@@ -107,7 +107,10 @@ export class IsolatedServer {
       database,
       remoteFetch: {
         allowLoopbackPort: loopbackPort,
-        resolver: async (host, options) => {
+        resolver: async (
+          host: string,
+          options: { all: true; verbatim: true },
+        ): Promise<Array<{ address: string; family: number }>> => {
           if (host === PREVIEW_TEST_HOST) {
             return [{ address: "127.0.0.1", family: 4 }];
           }
