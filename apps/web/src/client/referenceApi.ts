@@ -132,6 +132,20 @@ export async function addProjectUrlImage(projectId: string, input: CreateUrlImag
   return parseContract(projectReferenceSchema, await response.json(), "Reference was invalid.");
 }
 
+export async function addProjectUrlPreview(projectId: string, input: CreateUrlImage): Promise<ProjectReference> {
+  const parsed = parseContract(createUrlImageSchema, input, "URL image details are invalid.");
+  const canonical = {
+    url: parsed.url,
+    title: parsed.title ?? "",
+    creator: parsed.creator === undefined ? null : parsed.creator,
+    observations: parsed.observations ?? "",
+  };
+  const response = await send(`/api/projects/${projectId}/references/url-preview`, canonical, {
+    json: parsed,
+  });
+  return parseContract(projectReferenceSchema, await response.json(), "Reference was invalid.");
+}
+
 export async function updatePlacement(
   projectId: string,
   placementId: string,

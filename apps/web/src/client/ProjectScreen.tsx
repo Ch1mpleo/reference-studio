@@ -360,6 +360,7 @@ function ProjectEditor({
         onAddImage={collection.addImage}
         onAddLink={collection.addLink}
         onAddUrlImage={collection.addUrlImage}
+        onAddUrlPreview={collection.addUrlPreview}
         onAddNote={collection.addNote}
         onSaveDetails={collection.saveDetails}
         onSavePlacement={collection.savePlacement}

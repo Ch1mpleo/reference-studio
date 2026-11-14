@@ -11,6 +11,7 @@ import {
   addProjectLink,
   addProjectNote,
   addProjectUrlImage,
+  addProjectUrlPreview,
   listProjectReferences,
   placeReference,
   ReferenceRequestError,
@@ -33,6 +34,7 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
   addImage: (file: File, fields: ImageFields) => Promise<ProjectReference>;
   addLink: (input: CreateLinkReference) => Promise<ProjectReference>;
   addUrlImage: (input: CreateUrlImage) => Promise<ProjectReference>;
+  addUrlPreview: (input: CreateUrlImage) => Promise<ProjectReference>;
   addNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   saveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
   savePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
@@ -115,6 +117,15 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     [projectId, remember],
   );
 
+  const addUrlPreview = useCallback(
+    async (input: CreateUrlImage): Promise<ProjectReference> => {
+      const item = await addProjectUrlPreview(projectId, input);
+      remember(item);
+      return item;
+    },
+    [projectId, remember],
+  );
+
   const addNote = useCallback(
     async (input: CreateNoteReference): Promise<ProjectReference> => {
       const item = await addProjectNote(projectId, input);
@@ -166,6 +177,7 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     addImage,
     addLink,
     addUrlImage,
+    addUrlPreview,
     addNote,
     saveDetails,
     savePlacement,

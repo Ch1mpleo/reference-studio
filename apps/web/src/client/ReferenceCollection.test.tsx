@@ -6,6 +6,7 @@ import { UPLOAD_LIMIT_MAX, type ImageFields, type ProjectReference } from "@refe
 import { ReferenceCollection } from "./ReferenceCollection.js";
 import { ReferenceRequestError } from "./referenceApi.js";
 import { NATIVE_SHA256_MAX_BYTES } from "./sha256Stream.js";
+import { SETTINGS_CHANGED_EVENT, getSettings } from "./settingsApi.js";
 
 vi.mock("./BoardCanvas.js", () => ({ BoardCanvas: () => null }));
 vi.mock("./boardApi.js", () => ({
@@ -16,7 +17,11 @@ vi.mock("./settingsApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./settingsApi.js")>();
   return {
     ...actual,
-    getSettings: vi.fn(async () => ({ maxUploadBytes: UPLOAD_LIMIT_MAX, revision: 1 })),
+    getSettings: vi.fn(async () => ({
+      maxUploadBytes: UPLOAD_LIMIT_MAX,
+      urlImageMode: "store",
+      revision: 1,
+    })),
   };
 });
 
@@ -58,6 +63,12 @@ async function render(node: ReactNode): Promise<{ container: HTMLElement; root: 
 describe("ReferenceCollection", () => {
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    vi.mocked(getSettings).mockReset();
+    vi.mocked(getSettings).mockResolvedValue({
+      maxUploadBytes: UPLOAD_LIMIT_MAX,
+      urlImageMode: "store",
+      revision: 1,
+    });
   });
 
   afterEach(() => {
@@ -76,6 +87,7 @@ describe("ReferenceCollection", () => {
         onAddImage,
         onAddLink: vi.fn(),
         onAddUrlImage: vi.fn(),
+        onAddUrlPreview: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -123,6 +135,7 @@ describe("ReferenceCollection", () => {
         onAddImage,
         onAddLink: vi.fn(),
         onAddUrlImage: vi.fn(),
+        onAddUrlPreview: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -180,6 +193,7 @@ describe("ReferenceCollection", () => {
         onAddImage: vi.fn(),
         onAddLink,
         onAddUrlImage,
+        onAddUrlPreview: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -218,6 +232,7 @@ describe("ReferenceCollection", () => {
         onAddImage: vi.fn(),
         onAddLink,
         onAddUrlImage,
+        onAddUrlPreview: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -268,6 +283,7 @@ describe("ReferenceCollection", () => {
           onAddImage: vi.fn(),
           onAddLink,
           onAddUrlImage,
+          onAddUrlPreview: vi.fn(),
           onAddNote: vi.fn(),
           onSaveDetails: vi.fn(),
           onSavePlacement: vi.fn(),
@@ -307,6 +323,7 @@ describe("ReferenceCollection", () => {
         onAddImage: vi.fn(),
         onAddLink,
         onAddUrlImage,
+        onAddUrlPreview: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -345,6 +362,7 @@ describe("ReferenceCollection", () => {
         onAddImage: vi.fn(),
         onAddLink,
         onAddUrlImage,
+        onAddUrlPreview: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -384,6 +402,7 @@ describe("ReferenceCollection", () => {
         onAddImage: vi.fn(),
         onAddLink,
         onAddUrlImage,
+        onAddUrlPreview: vi.fn(),
         onAddNote: vi.fn(),
         onSaveDetails: vi.fn(),
         onSavePlacement: vi.fn(),
@@ -398,6 +417,158 @@ describe("ReferenceCollection", () => {
       document.dispatchEvent(event);
     });
     expect(onAddLink).not.toHaveBeenCalled();
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("uses url-preview only when urlImageMode is hotlink", async () => {
+    vi.mocked(getSettings).mockResolvedValue({
+      maxUploadBytes: UPLOAD_LIMIT_MAX,
+      urlImageMode: "hotlink",
+      revision: 1,
+    });
+    const onAddUrlPreview = vi.fn(async () => created);
+    const onAddUrlImage = vi.fn();
+    const view = await render(
+      createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        refreshKey: 0,
+        references: [],
+        notice: null,
+        onRetryReferences: vi.fn(),
+        onAddImage: vi.fn(),
+        onAddLink: vi.fn(),
+        onAddUrlImage,
+        onAddUrlPreview,
+        onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
+        onPlace: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { files: [], getData: () => "https://example.com/board.png" },
+      });
+      document.dispatchEvent(event);
+    });
+    expect(onAddUrlPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://example.com/board.png" }),
+    );
+    expect(onAddUrlImage).not.toHaveBeenCalled();
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("falls back to a link from hotlink preview failures", async () => {
+    vi.mocked(getSettings).mockResolvedValue({
+      maxUploadBytes: UPLOAD_LIMIT_MAX,
+      urlImageMode: "hotlink",
+      revision: 1,
+    });
+    const onAddUrlPreview = vi.fn(async () => {
+      throw new ReferenceRequestError(
+        "That address is not a JPEG, PNG, or WebP image.",
+        "validation",
+        undefined,
+        "not_an_image",
+      );
+    });
+    const onAddLink = vi.fn(async () => created);
+    const view = await render(
+      createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        refreshKey: 0,
+        references: [],
+        notice: null,
+        onRetryReferences: vi.fn(),
+        onAddImage: vi.fn(),
+        onAddLink,
+        onAddUrlImage: vi.fn(),
+        onAddUrlPreview,
+        onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
+        onPlace: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { files: [], getData: () => "https://example.com/page" },
+      });
+      document.dispatchEvent(event);
+    });
+    expect(onAddUrlPreview).toHaveBeenCalled();
+    expect(onAddLink).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://example.com/page" }),
+    );
+    expect(view.container.querySelector(".canvas-status")?.textContent).toContain(
+      "Saved as a link: that address isn't a JPEG, PNG or WebP image.",
+    );
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
+
+  it("switches the next paste after a settings-changed event", async () => {
+    vi.mocked(getSettings)
+      .mockResolvedValueOnce({
+        maxUploadBytes: UPLOAD_LIMIT_MAX,
+        urlImageMode: "hotlink",
+        revision: 1,
+      })
+      .mockResolvedValue({
+        maxUploadBytes: UPLOAD_LIMIT_MAX,
+        urlImageMode: "store",
+        revision: 2,
+      });
+    const onAddUrlPreview = vi.fn(async () => created);
+    const onAddUrlImage = vi.fn(async () => created);
+    const view = await render(
+      createElement(ReferenceCollection, {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        refreshKey: 0,
+        references: [],
+        notice: null,
+        onRetryReferences: vi.fn(),
+        onAddImage: vi.fn(),
+        onAddLink: vi.fn(),
+        onAddUrlImage,
+        onAddUrlPreview,
+        onAddNote: vi.fn(),
+        onSaveDetails: vi.fn(),
+        onSavePlacement: vi.fn(),
+        onPlace: vi.fn(),
+      }),
+    );
+    await act(async () => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { files: [], getData: () => "https://example.com/first.png" },
+      });
+      document.dispatchEvent(event);
+    });
+    expect(onAddUrlPreview).toHaveBeenCalledTimes(1);
+    expect(onAddUrlImage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
+    });
+    await act(async () => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { files: [], getData: () => "https://example.com/second.png" },
+      });
+      document.dispatchEvent(event);
+    });
+    expect(onAddUrlImage).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://example.com/second.png" }),
+    );
+    expect(onAddUrlPreview).toHaveBeenCalledTimes(1);
     await act(async () => {
       view.root.unmount();
     });
