@@ -8,7 +8,7 @@ import { AnnotationEditor } from "./AnnotationEditor.js";
 const target = { type: "placement" as const, placementId: "00000000-0000-4000-8000-000000000001" };
 const note: BoardAnnotation = { id: "00000000-0000-4000-8000-000000000002", target, body: "Look at the light", borrowedQuality: "", translation: "", limitations: "", provenance: { author: "human" } };
 const other: BoardAnnotation = { ...note, id: "00000000-0000-4000-8000-000000000003", target: { type: "project", projectId: "00000000-0000-4000-8000-000000000004" }, body: "Project note" };
-const image: LibraryReference = { id: "00000000-0000-4000-8000-000000000005", kind: "image", title: "Light", sourceUrl: null, creator: null, observations: "", tags: [], availability: "available", archived: false, motion: null, asset: { id: "00000000-0000-4000-8000-000000000006", sha256: "a".repeat(64), mediaType: "image/png", byteSize: 12, width: 800, height: 400 }, revision: 1, createdAt: "2026-10-21T00:00:00.000Z", updatedAt: "2026-10-21T00:00:00.000Z" };
+const image: LibraryReference = { id: "00000000-0000-4000-8000-000000000005", kind: "image", title: "Light", sourceUrl: null, creator: null, observations: "", tags: [], availability: "available", archived: false, motion: null, asset: { id: "00000000-0000-4000-8000-000000000006", sha256: "a".repeat(64), mediaType: "image/png", byteSize: 12, width: 800, height: 400 }, previewImageUrl: null, revision: 1, createdAt: "2026-10-21T00:00:00.000Z", updatedAt: "2026-10-21T00:00:00.000Z" };
 beforeEach(() => vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true));
 afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); });
 

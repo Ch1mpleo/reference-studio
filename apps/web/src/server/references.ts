@@ -114,6 +114,7 @@ type ReferenceListRow = {
   revision: number | bigint;
   created_at: string;
   updated_at: string;
+  preview_image_url: string | null;
   asset_id: string | null;
   sha256: string | null;
   media_type: string | null;
@@ -724,8 +725,13 @@ function insertReference(
     availability: "available" | "unknown";
     motion: { startSeconds: number; endSeconds: number | null; behavior: string } | null;
     asset: ProjectReference["reference"]["asset"];
+    previewImageUrl?: string | null;
   },
 ): ProjectReference {
+  const previewImageUrl = input.previewImageUrl ?? null;
+  if (previewImageUrl !== null && input.kind !== "link") {
+    throw new ServiceError("validation", "Only a link can store a preview image URL.");
+  }
   const referenceId = createId();
   const placementId = createId();
   const now = new Date().toISOString();
@@ -733,8 +739,8 @@ function insertReference(
     .prepare(
       `INSERT INTO "references" (
         id, kind, title, source_url, creator, observations, tags_json, asset_id, availability, archived,
-        motion_start, motion_end, motion_behavior, revision, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, 0, ?, ?, ?, 1, ?, ?)`,
+        motion_start, motion_end, motion_behavior, preview_image_url, revision, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, 0, ?, ?, ?, ?, 1, ?, ?)`,
     )
     .run(
       referenceId,
@@ -748,6 +754,7 @@ function insertReference(
       input.motion?.startSeconds ?? null,
       input.motion?.endSeconds ?? null,
       input.motion === null ? null : input.motion.behavior,
+      previewImageUrl,
       now,
       now,
     );
@@ -777,6 +784,7 @@ function insertReference(
       archived: false,
       motion: input.motion,
       asset: input.asset,
+      previewImageUrl,
       revision: 1,
       createdAt: now,
       updatedAt: now,
@@ -789,27 +797,7 @@ function listProjectReferences(database: DatabaseSync, projectId: string): Proje
     .prepare(
       `SELECT
         ${PLACEMENT_COLUMNS}
-        "references".id AS id,
-        "references".kind AS kind,
-        "references".title AS title,
-        "references".source_url AS source_url,
-        "references".creator AS creator,
-        "references".observations AS observations,
-        "references".tags_json AS tags_json,
-        "references".availability AS availability,
-        "references".archived AS archived,
-        "references".motion_start AS motion_start,
-        "references".motion_end AS motion_end,
-        "references".motion_behavior AS motion_behavior,
-        "references".revision AS revision,
-        "references".created_at AS created_at,
-        "references".updated_at AS updated_at,
-        assets.id AS asset_id,
-        assets.sha256 AS sha256,
-        assets.media_type AS media_type,
-        assets.byte_size AS byte_size,
-        assets.width AS width,
-        assets.height AS height
+        ${LIBRARY_COLUMNS}
       FROM placements
       JOIN "references" ON "references".id = placements.reference_id
       LEFT JOIN assets ON assets.id = "references".asset_id
@@ -860,6 +848,7 @@ function projectReferenceFromRow(row: unknown): ProjectReference {
               behavior: row.motion_behavior ?? "",
             },
       asset,
+      previewImageUrl: row.preview_image_url,
       revision: readInteger(row.revision),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -961,6 +950,7 @@ const LIBRARY_COLUMNS = `
   "references".motion_start AS motion_start,
   "references".motion_end AS motion_end,
   "references".motion_behavior AS motion_behavior,
+  "references".preview_image_url AS preview_image_url,
   "references".revision AS revision,
   "references".created_at AS created_at,
   "references".updated_at AS updated_at,
@@ -1312,6 +1302,7 @@ function libraryReferenceFromRow(row: unknown): LibraryReference {
             behavior: row.motion_behavior ?? "",
           },
     asset,
+    previewImageUrl: row.preview_image_url,
     revision: readInteger(row.revision),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1496,6 +1487,7 @@ function isLibraryRow(value: unknown): value is LibraryRow {
     (row.motion_start === null || typeof row.motion_start === "number") &&
     (row.motion_end === null || typeof row.motion_end === "number") &&
     (row.motion_behavior === null || typeof row.motion_behavior === "string") &&
+    (row.preview_image_url === null || typeof row.preview_image_url === "string") &&
     (typeof row.revision === "number" || typeof row.revision === "bigint") &&
     typeof row.created_at === "string" &&
     typeof row.updated_at === "string" &&
@@ -1526,6 +1518,7 @@ function isReferenceListRow(value: unknown): value is ReferenceListRow {
     (row.motion_start === null || typeof row.motion_start === "number") &&
     (row.motion_end === null || typeof row.motion_end === "number") &&
     (row.motion_behavior === null || typeof row.motion_behavior === "string") &&
+    (row.preview_image_url === null || typeof row.preview_image_url === "string") &&
     (typeof row.revision === "number" || typeof row.revision === "bigint") &&
     typeof row.created_at === "string" &&
     typeof row.updated_at === "string" &&

@@ -22,7 +22,7 @@ const sampleFrames: BoardFrame[] = [
 ];
 
 function noteReference(id: string, title: string, observations: string): LibraryReference {
-  return { id, kind: "note", title, sourceUrl: null, creator: null, observations, tags: [], availability: "unknown", archived: false, motion: null, asset: null, revision: 1, createdAt: "2026-10-29T00:00:00.000Z", updatedAt: "2026-10-29T00:00:00.000Z" };
+  return { id, kind: "note", title, sourceUrl: null, creator: null, observations, tags: [], availability: "unknown", archived: false, motion: null, asset: null, previewImageUrl: null, revision: 1, createdAt: "2026-10-29T00:00:00.000Z", updatedAt: "2026-10-29T00:00:00.000Z" };
 }
 
 const sampleReferences: ProjectReference[] = [

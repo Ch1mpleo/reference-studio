@@ -102,10 +102,12 @@ export {
   UPLOAD_LIMIT_MAX,
   UPLOAD_LIMIT_MIN,
   UPLOAD_LIMIT_STEP,
+  URL_IMAGE_MODE_DEFAULT,
+  URL_IMAGE_MODES,
   studioSettingsSchema,
   updateSettingsSchema,
 } from "./settings.js";
-export type { StudioSettings, UpdateSettingsRequest } from "./settings.js";
+export type { StudioSettings, UpdateSettingsRequest, UrlImageMode } from "./settings.js";
 export {
   BACKUP_FORMAT,
   BACKUP_FORMAT_VERSION,
