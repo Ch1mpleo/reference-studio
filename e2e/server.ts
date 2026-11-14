@@ -132,7 +132,7 @@ export class IsolatedServer {
   }
 
   /** Test-only: run SQL against the in-process database. */
-  runSql(sql: string, params: unknown[] = []): void {
+  runSql(sql: string, params: Array<null | number | string | bigint | Uint8Array> = []): void {
     const database = this.inProcess?.database;
     if (database === undefined) {
       throw new Error("SQL requires the in-process isolated service.");
