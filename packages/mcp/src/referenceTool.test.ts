@@ -395,6 +395,28 @@ describe("get_reference over stdio", () => {
     controller.abort();
     await pump;
 
+    const preview = await api("POST", `/api/projects/${ids.projectId}/references/links`, {
+      url: "https://example.com/hotlink.png",
+      title: "Hotlinked preview",
+      creator: "",
+      observations: "",
+      motion: null,
+    });
+    const previewId = preview.reference.id as string;
+    const previewUrl = "https://example.com/hotlink.png";
+    const database = openDatabase(dataDir);
+    database.prepare(`UPDATE "references" SET preview_image_url = ? WHERE id = ?`).run(previewUrl, previewId);
+    database.close();
+    const beforeHotlink = listFiles(dataDir);
+    const hotlinked = await call(client, { referenceId: previewId });
+    expect(hotlinked.isError).toBeFalsy();
+    expect(imageBlock(hotlinked)).toBeUndefined();
+    expect(hotlinked.structuredContent?.image).toMatchObject({
+      status: "hotlinked",
+      url: previewUrl,
+    });
+    expect(listFiles(dataDir)).toEqual(beforeHotlink);
+
     const original = (service?.database.prepare("SELECT original_path FROM assets WHERE id = ?").get(
       (stateBefore.references as Json[])[0]?.asset.id,
     ) ?? {}) as { original_path?: string };

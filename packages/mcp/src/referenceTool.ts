@@ -80,7 +80,7 @@ function listOf<T extends z.ZodType>(item: T) {
 }
 
 const imageOutput = z.object({
-  status: z.enum(["included", "not_requested", "not_image", "missing"]),
+  status: z.enum(["included", "not_requested", "not_image", "missing", "hotlinked"]),
   variant: z.enum(["full", "crop"]).nullable(),
   mimeType: z.string().nullable(),
   width: z.number().nullable(),
@@ -89,6 +89,7 @@ const imageOutput = z.object({
   sourceHeight: z.number().nullable(),
   crop: cropOrNull,
   fallback: z.enum(["none", "requality", "downscale", "thumbnail"]).nullable(),
+  url: z.string().optional(),
 });
 
 export const getReferenceOutput = z.object({
@@ -182,7 +183,7 @@ export function registerReferenceTool(server: McpServer, options: ServiceClientO
     "get_reference",
     {
       title: "Get reference",
-      description: `Fetch one reference: metadata, provenance (source URL and creator are attribution only, never evidence that the image was inspected), an observations excerpt, and the image itself as MCP image content, optionally cropped. Pass projectId to also receive that project's placements of the reference and the board annotations on them (human feedback and decisions only; placements keep the first ${MAX_REFERENCE_LINKS} and annotations the last ${MAX_ANNOTATIONS} in board order, with total and truncated; each placement has location inbox or board and its directionId). Pass crop (normalized 0-1 from the top left of the original) or placementId with projectId (uses that placement's saved crop) to inspect a region; never both. maxEdge (${AGENT_IMAGE_MIN_EDGE}-${AGENT_IMAGE_MAX_EDGE}) bounds the longest edge; images are re-encoded to at most 1 MB and image.fallback reports any quality or size reduction. includeImage false returns metadata only. If the stored file is missing, a plain call returns metadata with image.status "missing"; an explicit crop or placementId returns asset_missing. image_too_large means even the smallest render exceeded 1 MB. Read-only: nothing is saved or changed.`,
+      description: `Fetch one reference: metadata, provenance (source URL and creator are attribution only, never evidence that the image was inspected), an observations excerpt, and the image itself as MCP image content, optionally cropped. Hotlinked previews return metadata only. Pass projectId to also receive that project's placements of the reference and the board annotations on them (human feedback and decisions only; placements keep the first ${MAX_REFERENCE_LINKS} and annotations the last ${MAX_ANNOTATIONS} in board order, with total and truncated; each placement has location inbox or board and its directionId). Pass crop (normalized 0-1 from the top left of the original) or placementId with projectId (uses that placement's saved crop) to inspect a region; never both. maxEdge (${AGENT_IMAGE_MIN_EDGE}-${AGENT_IMAGE_MAX_EDGE}) bounds the longest edge; images are re-encoded to at most 1 MB and image.fallback reports any quality or size reduction. includeImage false returns metadata only. If the stored file is missing, a plain call returns metadata with image.status "missing"; an explicit crop or placementId returns asset_missing. image_too_large means even the smallest render exceeded 1 MB. Read-only: nothing is saved or changed.`,
       inputSchema: getReferenceInput,
       outputSchema: getReferenceOutput,
     },
@@ -252,7 +253,9 @@ export function registerReferenceTool(server: McpServer, options: ServiceClientO
 
         let image: ImageState = { ...NO_IMAGE, crop, variant: crop === null ? "full" : "crop" };
         let picture: ImageBytes | undefined;
-        if (input.includeImage !== false) {
+        if (reference.previewImageUrl !== null) {
+          image = { ...NO_IMAGE, status: "hotlinked", url: reference.previewImageUrl };
+        } else if (input.includeImage !== false) {
           if (reference.asset === null && input.crop === undefined) {
             image = { ...NO_IMAGE, status: "not_image" };
           } else {
@@ -317,6 +320,8 @@ function summaryText(output: GetReferenceOutput, attached: boolean): string {
     lines.push("The stored image file is missing, so no image is attached; metadata is still current.");
   } else if (image.status === "not_image") {
     lines.push("This reference has no image, so none is attached.");
+  } else if (image.status === "hotlinked") {
+    lines.push("This reference is a hotlinked preview; metadata only, no image bytes are fetched.");
   } else {
     lines.push("No image was requested. Source URLs and creators are attribution only.");
   }

@@ -54,6 +54,7 @@ type ExportRow = {
   motion_start: number | null;
   motion_end: number | null;
   motion_behavior: string | null;
+  preview_image_url: string | null;
   asset_id: string | null;
   sha256: string | null;
   media_type: string | null;
@@ -140,6 +141,7 @@ export function exportProjectBackup(
         "references".motion_start AS motion_start,
         "references".motion_end AS motion_end,
         "references".motion_behavior AS motion_behavior,
+        "references".preview_image_url AS preview_image_url,
         "references".asset_id AS asset_id,
         assets.sha256 AS sha256,
         assets.media_type AS media_type,
@@ -170,9 +172,10 @@ export function exportProjectBackup(
     }
     const assetOriginalId = exportAsset(dataDir, row, assets, assetBytes);
     if (!references.has(row.reference_id)) {
+      const kind = referenceKind(row.kind);
       references.set(row.reference_id, {
         originalId: row.reference_id,
-        kind: referenceKind(row.kind),
+        kind,
         title: row.title,
         sourceUrl: blankToNull(row.source_url),
         creator: blankToNull(row.creator),
@@ -182,6 +185,7 @@ export function exportProjectBackup(
         archived: readInteger(row.archived) === 1,
         motion: readMotion(row),
         assetOriginalId,
+        previewImageUrl: kind === "link" ? blankToNull(row.preview_image_url) : null,
       });
     }
     placements.push({
@@ -371,12 +375,14 @@ function insertRestoredProject(
     if (reference.kind === "image" && assetId === null) {
       throw new ServiceError("validation", "This backup is missing an image.");
     }
+    const previewImageUrl =
+      reference.kind === "link" ? (reference.previewImageUrl ?? null) : null;
     database
       .prepare(
         `INSERT INTO "references" (
           id, kind, title, source_url, creator, observations, tags_json, asset_id, availability, archived,
-          motion_start, motion_end, motion_behavior, revision, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          motion_start, motion_end, motion_behavior, preview_image_url, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       )
       .run(
         referenceId,
@@ -392,6 +398,7 @@ function insertRestoredProject(
         reference.motion?.startSeconds ?? null,
         reference.motion?.endSeconds ?? null,
         reference.motion === null ? null : reference.motion.behavior,
+        previewImageUrl,
         now,
         now,
       );
@@ -771,6 +778,7 @@ function isExportRow(value: unknown): value is ExportRow {
     (row.motion_start === null || typeof row.motion_start === "number") &&
     (row.motion_end === null || typeof row.motion_end === "number") &&
     (row.motion_behavior === null || typeof row.motion_behavior === "string") &&
+    (row.preview_image_url === null || typeof row.preview_image_url === "string") &&
     (row.asset_id === null || typeof row.asset_id === "string") &&
     (row.sha256 === null || typeof row.sha256 === "string") &&
     (row.media_type === null || typeof row.media_type === "string") &&
