@@ -1,4 +1,6 @@
+import { existsSync, readdirSync } from "node:fs";
 import { createServer, type Server } from "node:http";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import sharp from "sharp";
 import {
@@ -14,6 +16,7 @@ let imageServer: Server;
 let imageOrigin: string;
 let pngBytes: Buffer;
 let oversizedPng: Buffer;
+const brokenPaths = new Set<string>();
 
 test.beforeAll(async () => {
   pngBytes = await sharp({
@@ -24,7 +27,13 @@ test.beforeAll(async () => {
   oversizedPng = Buffer.concat([pngBytes, Buffer.alloc(UPLOAD_LIMIT_MIN + 1024)]);
 
   imageServer = createServer((request, response) => {
-    if (request.url === "/photo.png") {
+    const url = request.url ?? "/";
+    if (brokenPaths.has(url)) {
+      response.writeHead(404, { "content-type": "text/plain" });
+      response.end("gone");
+      return;
+    }
+    if (url === "/photo.png" || url === "/preview.png") {
       response.writeHead(200, {
         "content-type": "image/png",
         "content-length": pngBytes.byteLength,
@@ -32,7 +41,7 @@ test.beforeAll(async () => {
       response.end(pngBytes);
       return;
     }
-    if (request.url === "/huge.png") {
+    if (url === "/huge.png") {
       response.writeHead(200, {
         "content-type": "image/png",
         "content-length": oversizedPng.byteLength,
@@ -101,11 +110,46 @@ async function openDetails(page: Page, title: string) {
   return panel;
 }
 
+async function setStoreModeViaSettings(page: Page) {
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("[data-settings-ready='true']")).toBeVisible();
+  await dialog.getByRole("radio", { name: "Save a copy", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toBeHidden();
+}
+
+async function setUrlImageModeViaApi(page: Page, urlImageMode: "hotlink" | "store") {
+  const updated = await page.evaluate(async (urlImageMode) => {
+    const current = await (await fetch("/api/settings")).json();
+    return (
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          expectedRevision: current.revision,
+          urlImageMode,
+        }),
+      })
+    ).json();
+  }, urlImageMode);
+  expect(updated).toMatchObject({ urlImageMode });
+  await page.reload();
+  await expect(page.locator(".canvas-status")).toContainText("Saved");
+}
+
+function originalCount(): number {
+  const dir = path.join(server.dataDir, "assets", "originals");
+  return existsSync(dir) ? readdirSync(dir).length : 0;
+}
+
 test("pastes a PNG URL into a stored image that survives reload", async ({ page }) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(server.origin);
   const project = await createProject(page, "URL image store");
+  await setStoreModeViaSettings(page);
   const url = `${imageOrigin}/photo.png`;
   await paste(page, url);
   await expect.poll(async () => (await references(page, project.id)).length).toBe(1);
@@ -129,6 +173,7 @@ test("pastes an HTML page URL as a link with a saved-as-link message", async ({ 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(server.origin);
   const project = await createProject(page, "URL page fallback");
+  await setUrlImageModeViaApi(page, "store");
   const url = `${imageOrigin}/page`;
   await paste(page, url);
   await expect.poll(async () => (await references(page, project.id)).length).toBe(1);
@@ -155,12 +200,13 @@ test("pastes an oversized image URL as a link with the size message", async ({ p
         body: JSON.stringify({
           expectedRevision: current.revision,
           maxUploadBytes: 1 * 1024 * 1024,
+          urlImageMode: "store",
         }),
       })
     ).json();
     return settings;
   });
-  expect(updated).toMatchObject({ maxUploadBytes: UPLOAD_LIMIT_MIN });
+  expect(updated).toMatchObject({ maxUploadBytes: UPLOAD_LIMIT_MIN, urlImageMode: "store" });
   // Reload so the workspace picks up the new limit for the fallback message.
   await page.reload();
   await expect(page.locator(".canvas-status")).toContainText("Saved");
@@ -190,4 +236,76 @@ test("shows Image could not be read when dropping an invalid image", async ({ pa
     .dispatchEvent("drop", { dataTransfer, clientX: 240, clientY: 240 });
   await dataTransfer.dispose();
   await expect(page.locator(".canvas-status")).toContainText("Image could not be read.");
+});
+
+test("default mode pastes a PNG URL as a Linked preview without storing assets", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.origin);
+  const project = await createProject(page, "URL image preview");
+  await setUrlImageModeViaApi(page, "hotlink");
+  const beforeOriginals = originalCount();
+  const url = `${imageOrigin}/preview.png`;
+  await paste(page, url);
+  await expect.poll(async () => (await references(page, project.id)).length).toBe(1);
+  const listed = await references(page, project.id);
+  expect(listed[0]?.reference).toMatchObject({
+    kind: "link",
+    previewImageUrl: url,
+    asset: null,
+  });
+  const card = page.locator(".board-material").filter({ hasText: "preview" });
+  await expect(card.getByText("Linked", { exact: true })).toBeVisible();
+  const img = card.getByRole("img", { name: "preview", exact: true });
+  await expect(img).toBeVisible();
+  await expect(img).toHaveAttribute("referrerpolicy", "no-referrer");
+  expect(originalCount()).toBe(beforeOriginals);
+});
+
+test("broken preview hides the image and keeps the card with Preview unavailable", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.origin);
+  const project = await createProject(page, "Broken preview");
+  await setUrlImageModeViaApi(page, "hotlink");
+  const url = `${imageOrigin}/preview.png`;
+  await paste(page, url);
+  await expect.poll(async () => (await references(page, project.id)).length).toBe(1);
+  await expect(page.getByRole("img", { name: "preview", exact: true })).toBeVisible();
+
+  brokenPaths.add("/preview.png");
+  await page.reload();
+  await expect(page.locator(".canvas-status")).toContainText("Saved");
+  await expect.poll(async () => (await references(page, project.id)).length).toBe(1);
+  const listed = await references(page, project.id);
+  expect(listed[0]?.reference).toMatchObject({
+    kind: "link",
+    title: "preview",
+    previewImageUrl: url,
+  });
+  const card = page.locator(".board-material").filter({ hasText: "preview" });
+  await expect(card.getByRole("img")).toHaveCount(0);
+  await expect(card.getByText("preview", { exact: true }).first()).toBeVisible();
+  await expect(card.getByText("Preview unavailable", { exact: true })).toBeVisible();
+  brokenPaths.delete("/preview.png");
+});
+
+test("default mode pastes a page URL as a plain link with saved-as-link message", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.origin);
+  const project = await createProject(page, "Default page fallback");
+  await setUrlImageModeViaApi(page, "hotlink");
+  const url = `${imageOrigin}/page`;
+  await paste(page, url);
+  await expect.poll(async () => (await references(page, project.id)).length).toBe(1);
+  const listed = await references(page, project.id);
+  expect(listed[0]?.reference).toMatchObject({
+    kind: "link",
+    sourceUrl: url,
+    previewImageUrl: null,
+  });
+  await expect(page.locator(".canvas-status")).toContainText(
+    "Saved as a link: that address isn't a JPEG, PNG or WebP image.",
+  );
 });

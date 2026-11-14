@@ -237,7 +237,7 @@ describe("motion variants", () => {
     expect((await ctx.read()).layout.systems!.find((entry) => entry.id === motion.system.id)).toEqual(copiedBoard.layout.systems!.find((entry) => entry.id === motion.system.id));
   });
 
-  it("round-trips variants in format 5 and still imports formats 1 through 4", async () => {
+  it("round-trips variants in format 6 and still imports formats 1 through 5", async () => {
     const ctx = await setup();
     const motion = await addMotion(ctx, {}, ctx.board.layout.frames[0]!.revision ?? 1);
     const directionRevision = motion.board.layout.frames[0]!.revision ?? 1;
@@ -247,7 +247,7 @@ describe("motion variants", () => {
     expect(selected.statusCode).toBe(200);
     const backup = exportProjectBackup(ctx.database, ctx.dataDir, ctx.project.id);
     const manifest = JSON.parse(readBackupZip(backup.bytes).get("backup.json")!.toString()) as { formatVersion: number; variants: VariantRecord[]; board: Board["layout"] };
-    expect(manifest.formatVersion).toBe(5);
+    expect(manifest.formatVersion).toBe(6);
     expect(manifest.variants).toHaveLength(1);
     expect(manifest.board.systems).toHaveLength(1);
     const restore = async (bytes: Buffer) => {
@@ -273,7 +273,7 @@ describe("motion variants", () => {
     const zip = (value: unknown) => writeBackupZip(new Map([["backup.json", Buffer.from(JSON.stringify(value))]]));
     const legacyProject = (formatVersion: number) => ({ originalId: createId(), name: `Legacy ${formatVersion}`, brief: "", audience: "", purpose: "", constraints: "", status: "active" });
     const sections = { systems: [], variants: [], evidence: [], snapshots: [] };
-    for (const formatVersion of [1, 2, 3, 4]) {
+    for (const formatVersion of [1, 2, 3, 4, 5]) {
       const project = legacyProject(formatVersion);
       const frameId = createId();
       const board = formatVersion === 1 ? undefined : formatVersion < 4
@@ -287,8 +287,8 @@ describe("motion variants", () => {
     const oldWithVariants = await restore(zip(current));
     expect(oldWithVariants.statusCode).toBe(400);
     expect(JSON.stringify(oldWithVariants.json())).toContain("Variant records require backup format 5.");
-    const future = await restore(zip({ format: "reference-studio-backup", formatVersion: 6 }));
+    const future = await restore(zip({ format: "reference-studio-backup", formatVersion: 7 }));
     expect(future.statusCode).toBe(400);
-    expect(JSON.stringify(future.json())).toContain(backupVersionMessage("6"));
+    expect(JSON.stringify(future.json())).toContain(backupVersionMessage("7"));
   });
 });

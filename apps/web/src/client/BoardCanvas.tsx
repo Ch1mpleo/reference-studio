@@ -60,7 +60,10 @@ function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
           {previewUnavailable ? <p className="studio-help">Preview unavailable</p> : null}
         </div>
       )}
-      <div className="board-item-caption"><span>{data.title}</span></div>
+      <div className="board-item-caption">
+        {previewUrl !== null ? <span className="studio-kicker">Linked</span> : null}
+        <span>{data.title}</span>
+      </div>
     </>}
     {selected && !data.editing ? <div className="board-item-actions nodrag nopan">
       {data.frame ? <><StudioButton variant="ghost" disabled={data.readOnly} onClick={data.edit}>Rename</StudioButton><StudioButton variant="ghost" onClick={data.systems}>Systems</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.duplicate}>Duplicate</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.archive}>Ungroup</StudioButton></> : reference?.kind === "note" ? <StudioButton variant="ghost" onClick={data.edit}>Edit note</StudioButton> : <StudioButton variant="ghost" onClick={data.inspect}>Details</StudioButton>}

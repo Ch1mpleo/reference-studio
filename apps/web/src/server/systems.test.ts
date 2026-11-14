@@ -61,7 +61,7 @@ describe("direction systems", () => {
     expect(copy.content.variants![0]!.context.rationale).toBe(variant.context.rationale);
     const archive = exportProjectBackup(ctx.database, ctx.dataDir, ctx.project.id);
     const manifest = JSON.parse(readBackupZip(archive.bytes).get("backup.json")!.toString());
-    expect(manifest.formatVersion).toBe(5);
+    expect(manifest.formatVersion).toBe(6);
     const restored = await ctx.upload("/api/projects/restore", archive.bytes, "variants.zip");
     expect(restored.statusCode).toBe(201);
     const project = projectSchema.parse(restored.json());
@@ -198,7 +198,7 @@ describe("direction systems", () => {
     expect(copied.content.tokens[0]!.context.feedbackAnnotationIds).toEqual([feedbackId]);
     expect(copied.content.tokens[0]!.context.decisionAnnotationIds[0]).not.toBe(decisionId);
     const backup = exportProjectBackup(ctx.database, ctx.dataDir, ctx.project.id);
-    expect(JSON.parse(readBackupZip(backup.bytes).get("backup.json")!.toString()).formatVersion).toBe(5);
+    expect(JSON.parse(readBackupZip(backup.bytes).get("backup.json")!.toString()).formatVersion).toBe(6);
     const boundary = "systemsBackup";
     const restored = await ctx.app.inject({ method: "POST", url: "/api/projects/restore", headers: { ...ctx.headers, "idempotency-key": createId(), "content-type": `multipart/form-data; boundary=${boundary}` }, payload: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="systems.zip"\r\nContent-Type: application/zip\r\n\r\n`), backup.bytes, Buffer.from(`\r\n--${boundary}--\r\n`)]) });
     expect(restored.statusCode).toBe(201);

@@ -56,3 +56,51 @@ Bootstrap: `IsolatedServer.createAllowingLoopbackFetch(port)` starts the built A
 ## Limits
 
 - U2 hotlink / `urlImageMode`, og:image, drag-link drop, agent URL add, and CSP are not in this slice.
+
+---
+
+# URL images U1r — preview-by-default + `urlImageMode`
+
+Checkpoint on `feat/url-images-preview` (base `origin/feat/url-images-store` @ `1c9f037`). Spec: [storage](../specs/storage.md).
+
+## What shipped
+
+- Default `urlImageMode` is `hotlink`: paste probes the URL (SSRF + magic, no download) and inserts a link with `previewImageUrl` = the pasted URL. The board shows the image from the origin with `referrerPolicy="no-referrer"`. Nothing is stored under assets.
+- Opt-in `store` keeps U1's url-image path. Settings Storage section: Images from URLs (`Show from link` / `Save a copy`). Mode changes affect new pastes only.
+- Broken preview: keep the reference, hide the img, show link-style card with “Preview unavailable”; reload retries. No delete, no persisted failure state.
+- MCP `get_reference` returns `image.status: "hotlinked"` with URL metadata only (no fetch, no image content block).
+- Backup format 6 exports/restores `previewImageUrl` as URL only (formats 1–5 → null). Settings are not in backups. No CSP added.
+
+## Rule-to-test table (U1r)
+
+| Rule | Proof |
+| --- | --- |
+| Migration `009` adds `url_image_mode` default `hotlink` and `preview_image_url` | `migrate.test.ts`, `settings.test.ts` |
+| PUT mode-only / limit-only; invalid mode 400; stale revision; bearer 403 | `settings.test.ts` |
+| `probeRemoteImage`: magic PNG, early close, no `.incoming`; HTML / blocked redirect / too many redirects / rebinding / stall / oversize content-length accepted | `remoteFetch.test.ts` probe cases |
+| `POST …/url-preview` success → link + `previewImageUrl`, no assets, one event; replay; mismatch; SSRF 400s; agent 403 | `references.test.ts` url-preview |
+| Paste follows mode; SETTINGS_CHANGED switches next paste; shared fallback | `ReferenceCollection.test.tsx` |
+| HotlinkPreview error → img gone, title + Preview unavailable, no API | `HotlinkPreview.test.tsx` |
+| Settings segment load/save/cancel/conflict | `StudioSettings.test.tsx` |
+| MCP hotlinked metadata, zero image blocks, no fetch | `packages/mcp` `get_reference` |
+| Backup v6 round-trip; v5 restore null preview; v6 preview on image kind 400 | `backup.test.ts` |
+| E2e: store-mode U1 paths; default Linked preview; broken preview; page fallback; Save a copy persists | `e2e/url-images.spec.ts`, `e2e/settings.spec.ts` |
+
+## Commands and results (U1r)
+
+Node v24.22.3 (npm 11.19.1). Browser: Chromium via `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium`.
+
+Gate (run 1):
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | exit 0, no diagnostics |
+| `npm test` | 59 files, 437 tests: 437 passed, 0 failed, 0 skipped |
+| `npm run build` | exit 0 |
+| `REFERENCE_STUDIO_BROWSER_CHANNEL=chromium npm run test:e2e` | 78 tests: 78 passed, 0 failed, 0 skipped |
+
+Gate (run 2): same counts (59 / 437 / 78); both runs exit 0.
+
+## Limits (U1r)
+
+- Save a copy from a preview (U3), og:image, drag-link drop, agent URL add, CSP, and converting existing items when the mode changes remain out of scope.
