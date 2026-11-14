@@ -9,6 +9,7 @@ import {
   assertFetchableUrl,
   fetchRemoteImageToTemp,
   isBlockedAddress,
+  probeRemoteImage,
   resolvePublicAddress,
   type AddressResolver,
 } from "./remoteFetch.js";
@@ -647,5 +648,127 @@ describe("fetchRemoteImageToTemp", () => {
       }),
     ).rejects.toMatchObject({ code: "storage_full" });
     expectIncomingEmpty(dataDir);
+  });
+});
+
+describe("probeRemoteImage", () => {
+  it("returns image/png for a PNG and closes the connection early without a temp file", async () => {
+    const dataDir = tempDir();
+    let closedEarly = false;
+    const body = Buffer.concat([PNG_1X1, Buffer.alloc(64 * 1024, 0x42)]);
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "content-length": body.byteLength,
+      });
+      response.write(body.subarray(0, 32));
+      response.on("close", () => {
+        if (!response.writableFinished) {
+          closedEarly = true;
+        }
+      });
+      setTimeout(() => {
+        if (!response.destroyed && !response.writableEnded) {
+          response.write(body.subarray(32));
+          response.end();
+        }
+      }, 50);
+    });
+    const probed = await probeRemoteImage(`${origin}/pixel.png`, {
+      isBlocked: allowLoopback,
+    });
+    expect(probed).toEqual({ finalUrl: `${origin}/pixel.png`, mediaType: "image/png" });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(closedEarly).toBe(true);
+    expectIncomingEmpty(dataDir);
+  });
+
+  it("rejects HTML as not_an_image", async () => {
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html" });
+      response.end("<!doctype html><title>Nope</title>");
+    });
+    await expect(
+      probeRemoteImage(`${origin}/page`, { isBlocked: allowLoopback }),
+    ).rejects.toMatchObject({ details: { reason: "not_an_image" } });
+  });
+
+  it("rejects a redirect into a blocked address", async () => {
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(302, { location: "http://10.0.0.1/secret.png" });
+      response.end();
+    });
+    await expect(
+      probeRemoteImage(`${origin}/start`, { isBlocked: allowLoopback }),
+    ).rejects.toMatchObject({ details: { reason: "url_blocked_address" } });
+  });
+
+  it("rejects more than three redirects", async () => {
+    const { origin } = await listen((request, response) => {
+      const hop = Number((request.url ?? "/0").slice(1));
+      response.writeHead(302, { location: `/${hop + 1}` });
+      response.end();
+    });
+    await expect(
+      probeRemoteImage(`${origin}/0`, { isBlocked: allowLoopback }),
+    ).rejects.toMatchObject({ details: { reason: "url_too_many_redirects" } });
+  });
+
+  it("pins DNS once per hop against rebinding", async () => {
+    const pins: Array<{ address: string; remoteAddress: string | undefined }> = [];
+    const { port } = await listen((request, response) => {
+      if (request.url === "/start") {
+        response.writeHead(302, { location: "/final.png" });
+        response.end();
+        return;
+      }
+      response.writeHead(200, { "content-type": "image/png" });
+      response.end(PNG_1X1);
+    });
+    let call = 0;
+    const resolver: AddressResolver = async () => {
+      call += 1;
+      if (call <= 2) {
+        return [{ address: "127.0.0.1", family: 4 }];
+      }
+      return [{ address: "10.0.0.1", family: 4 }];
+    };
+    const probed = await probeRemoteImage(`http://rebinding.test:${port}/start`, {
+      isBlocked: allowLoopback,
+      resolver,
+      onPinned: (info) => pins.push(info),
+    });
+    expect(probed.mediaType).toBe("image/png");
+    expect(call).toBe(2);
+    expect(pins).toHaveLength(2);
+  });
+
+  it("times out when headers arrive then the body stalls", async () => {
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "content-length": 1024,
+      });
+    });
+    await expect(
+      probeRemoteImage(`${origin}/stall`, {
+        isBlocked: allowLoopback,
+        timeouts: { totalMs: 200, connectMs: 100, idleMs: 50 },
+      }),
+    ).rejects.toMatchObject({ details: { reason: "url_timeout" } });
+  });
+
+  it("accepts an image whose content-length exceeds the upload limit", async () => {
+    const { origin } = await listen((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "content-length": String(2 * 1024 * 1024),
+      });
+      response.end(PNG_1X1);
+    });
+    const probed = await probeRemoteImage(`${origin}/big.png`, {
+      isBlocked: allowLoopback,
+    });
+    expect(probed.mediaType).toBe("image/png");
   });
 });

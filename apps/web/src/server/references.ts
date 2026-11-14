@@ -56,8 +56,10 @@ import {
 } from "./idempotency.js";
 import {
   fetchRemoteImageToTemp as fetchRemoteImageToTempImpl,
+  probeRemoteImage as probeRemoteImageImpl,
   type FetchRemoteImageOptions,
   type FetchedRemoteImage,
+  type ProbeRemoteImageOptions,
   type RemoteFetchDependencies,
 } from "./remoteFetch.js";
 
@@ -132,6 +134,7 @@ export function registerReferenceRoutes(
 ): void {
   const fetchRemoteImage =
     remoteFetch?.fetchRemoteImageToTemp ?? fetchRemoteImageToTempImpl;
+  const probeRemoteImage = remoteFetch?.probeRemoteImage ?? probeRemoteImageImpl;
   app.get("/api/projects/:projectId/references", async (request) => {
     const projectId = requireProject(database, routeParam(request, "projectId"));
     return { references: listProjectReferences(database, projectId) };
@@ -204,6 +207,83 @@ export function registerReferenceRoutes(
       }
     },
   );
+
+  app.post("/api/projects/:projectId/references/url-preview", async (request, reply) => {
+    requireJson(request, "Send the image URL as application/json.");
+    const caller = requireCaller(request);
+    if (caller === "agent") {
+      throw new ServiceError("forbidden", "URL image preview is available to the Studio browser only.");
+    }
+    const projectId = requireProject(database, routeParam(request, "projectId"));
+    const key = readIdempotencyKey(request.headers["idempotency-key"]);
+    const body = parseContract(createUrlImageSchema, request.body, "URL image details are invalid.");
+    const title = body.title ?? "";
+    const creator = body.creator === undefined ? null : body.creator;
+    const observations = body.observations ?? "";
+    const canonical = {
+      url: body.url,
+      title,
+      creator,
+      observations,
+    };
+    const requestHash = hashCanonicalRequest(canonical);
+    const scope = mutationScope(caller, "reference.url-preview", projectId);
+    rejectIdempotencyMismatch(database, scope, key, requestHash);
+    const replayed = findCommittedOutcome(database, scope, key, requestHash);
+    if (replayed !== undefined) {
+      return reply.code(replayed.statusCode).send(replayed.body);
+    }
+
+    const probeOptions: ProbeRemoteImageOptions = {};
+    if (remoteFetch?.isBlocked !== undefined) {
+      probeOptions.isBlocked = remoteFetch.isBlocked;
+    }
+    if (remoteFetch?.allowLoopbackPort !== undefined) {
+      probeOptions.allowLoopbackPort = remoteFetch.allowLoopbackPort;
+    }
+    if (remoteFetch?.resolver !== undefined) {
+      probeOptions.resolver = remoteFetch.resolver;
+    }
+
+    const disconnect = new AbortController();
+    const onClientClose = (): void => {
+      if (!reply.raw.writableFinished) {
+        disconnect.abort();
+      }
+    };
+    reply.raw.on("close", onClientClose);
+    probeOptions.signal = disconnect.signal;
+
+    try {
+      const probed = await probeRemoteImage(body.url, probeOptions);
+      const resolvedTitle =
+        title.trim() !== ""
+          ? title.trim().slice(0, 200)
+          : titleFromRemoteUrl(probed.finalUrl);
+      const stored = linkRequestForStorage({
+        url: body.url,
+        title: resolvedTitle,
+        creator,
+        observations,
+        motion: null,
+      });
+      const outcome = commitMutation(database, {
+        scope,
+        key,
+        requestHash,
+        execute: () => {
+          const reference = insertLinkReference(database, projectId, stored, {
+            previewImageUrl: body.url,
+          });
+          return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
+        },
+      });
+      publishReference(hub, projectId, outcome);
+      return reply.code(outcome.statusCode).send(outcome.body);
+    } finally {
+      reply.raw.off("close", onClientClose);
+    }
+  });
 
   app.post("/api/projects/:projectId/references/url-image", async (request, reply) => {
     requireJson(request, "Send the image URL as application/json.");
@@ -648,6 +728,7 @@ function insertLinkReference(
   database: DatabaseSync,
   projectId: string,
   input: ReturnType<typeof linkRequestForStorage>,
+  options?: { previewImageUrl?: string | null },
 ): ProjectReference {
   return insertReference(database, projectId, {
     kind: "link",
@@ -659,6 +740,7 @@ function insertLinkReference(
     availability: "unknown",
     motion: input.motion,
     asset: null,
+    previewImageUrl: options?.previewImageUrl ?? null,
   });
 }
 

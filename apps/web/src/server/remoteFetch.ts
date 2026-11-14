@@ -70,12 +70,23 @@ export type FetchedRemoteImage = {
   finalUrl: string;
 };
 
+export type ProbeRemoteImageOptions = Omit<FetchRemoteImageOptions, "dataDir" | "maxBytes">;
+
+export type ProbedRemoteImage = {
+  finalUrl: string;
+  mediaType: "image/jpeg" | "image/png" | "image/webp";
+};
+
 /** Test-only seams passed through AppDependencies into the url-image route. */
 export type RemoteFetchDependencies = {
   fetchRemoteImageToTemp?: (
     url: string,
     options: FetchRemoteImageOptions,
   ) => Promise<FetchedRemoteImage>;
+  probeRemoteImage?: (
+    url: string,
+    options: ProbeRemoteImageOptions,
+  ) => Promise<ProbedRemoteImage>;
   isBlocked?: (ip: string) => boolean;
   allowLoopbackPort?: number;
   resolver?: AddressResolver;
@@ -159,6 +170,32 @@ export async function fetchRemoteImageToTemp(
   raw: string,
   options: FetchRemoteImageOptions,
 ): Promise<FetchedRemoteImage> {
+  return runRemoteImageFetch(raw, options, false);
+}
+
+export async function probeRemoteImage(
+  raw: string,
+  options: ProbeRemoteImageOptions,
+): Promise<ProbedRemoteImage> {
+  return runRemoteImageFetch(raw, options, true);
+}
+
+async function runRemoteImageFetch(
+  raw: string,
+  options: FetchRemoteImageOptions,
+  probe: false,
+): Promise<FetchedRemoteImage>;
+async function runRemoteImageFetch(
+  raw: string,
+  options: ProbeRemoteImageOptions,
+  probe: true,
+): Promise<ProbedRemoteImage>;
+async function runRemoteImageFetch(
+  raw: string,
+  options: FetchRemoteImageOptions | ProbeRemoteImageOptions,
+  probe: boolean,
+): Promise<FetchedRemoteImage | ProbedRemoteImage> {
+  const storeOptions = probe ? undefined : (options as FetchRemoteImageOptions);
   const baseBlocked = options.isBlocked ?? isBlockedAddress;
   const resolver = options.resolver ?? dns.lookup;
   const totalMs = options.timeouts?.totalMs ?? TOTAL_MS;
@@ -257,26 +294,41 @@ export async function fetchRemoteImageToTemp(
       }
 
       const contentLength = response.headers["content-length"];
-      if (contentLength !== undefined) {
+      if (!probe && contentLength !== undefined && storeOptions !== undefined) {
         const length = Number(contentLength);
-        if (Number.isFinite(length) && length > options.maxBytes) {
+        if (Number.isFinite(length) && length > storeOptions.maxBytes) {
           drainAndDestroy(response);
           activeResponse = undefined;
           activeRequest = undefined;
-          throw new ServiceError("validation", imageTooLargeMessage(options.maxBytes), {
+          throw new ServiceError("validation", imageTooLargeMessage(storeOptions.maxBytes), {
             reason: "image_too_large",
           });
         }
       }
 
       const head = await readExact(response, MAGIC_BYTES, signal, state);
-      if (!isImageMagic(head)) {
+      const mediaType = mediaTypeFromMagic(head);
+      if (mediaType === undefined) {
         drainAndDestroy(response);
         activeResponse = undefined;
         activeRequest = undefined;
         throw new ServiceError("validation", "That address is not a JPEG, PNG, or WebP image.", {
           reason: "not_an_image",
         });
+      }
+
+      if (probe) {
+        drainAndDestroy(response);
+        activeResponse = undefined;
+        activeRequest = undefined;
+        return {
+          finalUrl: url.href,
+          mediaType,
+        };
+      }
+
+      if (storeOptions === undefined) {
+        throw new Error("Store fetch is missing dataDir and maxBytes.");
       }
 
       const body = Readable.from(prependChunks(head, response));
@@ -286,8 +338,8 @@ export async function fetchRemoteImageToTemp(
 
       try {
         const streamed = await streamToTemp(body, {
-          dir: incomingUploadsDir(options.dataDir),
-          maxBytes: options.maxBytes,
+          dir: incomingUploadsDir(storeOptions.dataDir),
+          maxBytes: storeOptions.maxBytes,
           prefix: "url",
         });
         tempPath = streamed.tempPath;
@@ -470,12 +522,14 @@ function openPinnedRequest(
   });
 }
 
-function isImageMagic(bytes: Buffer): boolean {
+function mediaTypeFromMagic(
+  bytes: Buffer,
+): "image/jpeg" | "image/png" | "image/webp" | undefined {
   if (bytes.length < 3) {
-    return false;
+    return undefined;
   }
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return true;
+    return "image/jpeg";
   }
   if (
     bytes.length >= 8 &&
@@ -488,7 +542,7 @@ function isImageMagic(bytes: Buffer): boolean {
     bytes[6] === 0x1a &&
     bytes[7] === 0x0a
   ) {
-    return true;
+    return "image/png";
   }
   if (
     bytes.length >= 12 &&
@@ -501,9 +555,9 @@ function isImageMagic(bytes: Buffer): boolean {
     bytes[10] === 0x42 &&
     bytes[11] === 0x50
   ) {
-    return true;
+    return "image/webp";
   }
-  return false;
+  return undefined;
 }
 
 async function readExact(
