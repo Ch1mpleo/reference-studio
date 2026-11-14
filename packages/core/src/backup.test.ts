@@ -78,6 +78,9 @@ describe("backup manifest", () => {
       "This file is not a Reference Studio backup.",
     );
     expect(() => readBackupManifest(manifest({ formatVersion: 7 as never }))).toThrow(backupVersionMessage("7"));
+    expect(() => readBackupManifest(manifest({ formatVersion: "6" as never }))).toThrow(
+      "This backup's format version must be a number (received string).",
+    );
     expect(() =>
       readBackupManifest({
         ...manifest(),
@@ -180,6 +183,30 @@ describe("backup manifest", () => {
         board: { frames: [], items: [] },
       }).references[0]?.previewImageUrl,
     ).toBeUndefined();
+    expect(() =>
+      readBackupManifest({
+        ...linkManifest,
+        formatVersion: 5,
+      }),
+    ).toThrow("Preview image URLs require backup format 6.");
+    expect(() =>
+      readBackupManifest({
+        ...linkManifest,
+        formatVersion: 4,
+        board: { frames: [], items: [] },
+      }),
+    ).toThrow("Preview image URLs require backup format 6.");
+    expect(() =>
+      readBackupManifest({
+        ...linkManifest,
+        references: [
+          {
+            ...linkManifest.references[0]!,
+            previewImageUrl: "http://127.0.0.1/steal.png",
+          },
+        ],
+      }),
+    ).toThrow("That preview image URL is not allowed.");
     expect(() =>
       readBackupManifest({
         ...manifest(),

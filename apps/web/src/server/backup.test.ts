@@ -652,6 +652,95 @@ describe("backup and restore", () => {
     });
   });
 
+  it("rejects restore of previewImageUrl pointing at loopback, LAN, localhost, or userinfo", async () => {
+    const { app, database } = await startApp();
+    const before = Number(
+      (database.prepare(`SELECT COUNT(*) AS count FROM projects`).get() as { count: number }).count,
+    );
+    const cases = [
+      "http://127.0.0.1:4317/steal.png",
+      "http://192.168.1.1/reboot.cgi",
+      "http://localhost/a.png",
+      "http://user:pw@example.com/a.png",
+    ];
+    for (const [index, previewImageUrl] of cases.entries()) {
+      const projectId = createId();
+      const referenceId = createId();
+      const placementId = createId();
+      const manifest = {
+        format: BACKUP_FORMAT,
+        formatVersion: 6,
+        exportedAt: "2026-10-23T00:00:00.000Z",
+        project: {
+          originalId: projectId,
+          name: `Unsafe ${index}`,
+          brief: "",
+          audience: "",
+          purpose: "",
+          constraints: "",
+          status: "active",
+        },
+        assets: [],
+        references: [
+          {
+            originalId: referenceId,
+            kind: "link",
+            title: "Unsafe preview",
+            sourceUrl: "https://example.com/page",
+            creator: null,
+            observations: "",
+            tags: [],
+            availability: "unknown",
+            archived: false,
+            motion: null,
+            assetOriginalId: null,
+            previewImageUrl,
+          },
+        ],
+        placements: [
+          {
+            originalId: placementId,
+            referenceOriginalId: referenceId,
+            directionOriginalId: null,
+            role: "inspiration",
+            usageNotes: "",
+            crop: null,
+            interpretation: "",
+            rect: null,
+          },
+        ],
+        board: { frames: [], items: [], systems: [] },
+        variants: [],
+        sections: { systems: [], variants: [], evidence: [], snapshots: [] },
+      };
+      const zip = writeBackupZip(new Map([["backup.json", Buffer.from(JSON.stringify(manifest), "utf8")]]));
+      const agent = await restoreZip(app, zip, `unsafe-agent-${index}`);
+      expect(agent.statusCode, previewImageUrl).toBe(400);
+      expect(JSON.stringify(agent.json())).toContain("preview image URL is not allowed");
+
+      const form = multipart(zip, "backup.zip");
+      const browser = await app.inject({
+        method: "POST",
+        url: "/api/projects/restore",
+        headers: {
+          ...(await browserHeaders(app)),
+          "idempotency-key": `unsafe-browser-${index}`,
+          "content-type": form.contentType,
+        },
+        payload: form.payload,
+      });
+      expect(browser.statusCode, previewImageUrl).toBe(400);
+      expect(JSON.stringify(browser.json())).toContain("preview image URL is not allowed");
+    }
+    const after = Number(
+      (database.prepare(`SELECT COUNT(*) AS count FROM projects`).get() as { count: number }).count,
+    );
+    expect(after).toBe(before);
+    expect(
+      (database.prepare(`SELECT COUNT(*) AS count FROM "references"`).get() as { count: number }).count,
+    ).toBe(0);
+  });
+
   it("restores format 5 backups with null previewImageUrl", async () => {
     const { app } = await startApp();
     const projectId = createId();

@@ -63,4 +63,22 @@ describe("HotlinkPreview", () => {
       view.root.unmount();
     });
   });
+
+  it("refuses loopback preview URLs without rendering an img", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const view = await render(
+      createElement(PreviewCard, {
+        url: "http://127.0.0.1:4317/steal.png",
+        title: "Stolen preview",
+      }),
+    );
+    expect(view.container.querySelector("img")).toBeNull();
+    expect(view.container.textContent).toContain("Stolen preview");
+    expect(view.container.textContent).toContain("Preview unavailable");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
 });

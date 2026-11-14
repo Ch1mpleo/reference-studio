@@ -130,6 +130,15 @@ export class IsolatedServer {
     await this.stop();
     rmSync(this.dataDir, { recursive: true, force: true });
   }
+
+  /** Test-only: run SQL against the in-process database. */
+  runSql(sql: string, params: unknown[] = []): void {
+    const database = this.inProcess?.database;
+    if (database === undefined) {
+      throw new Error("SQL requires the in-process isolated service.");
+    }
+    database.prepare(sql).run(...params);
+  }
 }
 
 function freePort(): Promise<number> {

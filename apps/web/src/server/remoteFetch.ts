@@ -1,10 +1,10 @@
 import { promises as dns } from "node:dns";
 import http from "node:http";
 import https from "node:https";
-import { BlockList, isIP, isIPv4, isIPv6, type Socket } from "node:net";
+import { isIP, isIPv4, type Socket } from "node:net";
 import { Readable } from "node:stream";
 import { unlinkSync } from "node:fs";
-import { ServiceError, imageTooLargeMessage } from "@reference-studio/core";
+import { ServiceError, imageTooLargeMessage, isBlockedAddress } from "@reference-studio/core";
 import { incomingUploadsDir, streamToTemp } from "./uploads.js";
 
 const TOTAL_MS = 30_000;
@@ -13,36 +13,7 @@ const IDLE_MS = 10_000;
 const MAX_REDIRECTS = 3;
 const MAGIC_BYTES = 12;
 
-const ipv4Blocked = new BlockList();
-for (const [subnet, prefix] of [
-  ["0.0.0.0", 8],
-  ["10.0.0.0", 8],
-  ["100.64.0.0", 10],
-  ["127.0.0.0", 8],
-  ["169.254.0.0", 16],
-  ["172.16.0.0", 12],
-  ["192.0.0.0", 24],
-  ["192.0.2.0", 24],
-  ["192.88.99.0", 24],
-  ["192.168.0.0", 16],
-  ["198.18.0.0", 15],
-  ["198.51.100.0", 24],
-  ["203.0.113.0", 24],
-  ["224.0.0.0", 4],
-  ["240.0.0.0", 4],
-] as const) {
-  ipv4Blocked.addSubnet(subnet, prefix, "ipv4");
-}
-
-const ipv6PublicUnicast = new BlockList();
-ipv6PublicUnicast.addSubnet("2000::", 3, "ipv6");
-
-const ipv6BlockedInsidePublic = new BlockList();
-ipv6BlockedInsidePublic.addSubnet("2001::", 32, "ipv6");
-ipv6BlockedInsidePublic.addSubnet("2001:db8::", 32, "ipv6");
-ipv6BlockedInsidePublic.addSubnet("2002::", 16, "ipv6");
-ipv6BlockedInsidePublic.addSubnet("3fff::", 20, "ipv6");
-
+export { isBlockedAddress };
 export type AddressResolver = (
   host: string,
   options: { all: true; verbatim: true },
@@ -117,23 +88,6 @@ export function assertFetchableUrl(raw: string): URL {
     });
   }
   return url;
-}
-
-export function isBlockedAddress(ip: string): boolean {
-  const embedded = embeddedIpv4(ip);
-  if (embedded !== undefined) {
-    return ipv4Blocked.check(embedded, "ipv4");
-  }
-  if (isIPv4(ip)) {
-    return ipv4Blocked.check(ip, "ipv4");
-  }
-  if (isIPv6(ip)) {
-    if (!ipv6PublicUnicast.check(ip, "ipv6")) {
-      return true;
-    }
-    return ipv6BlockedInsidePublic.check(ip, "ipv6");
-  }
-  return true;
 }
 
 export async function resolvePublicAddress(
@@ -694,82 +648,4 @@ function isAbortError(error: unknown): boolean {
     (typeof error === "object" && error !== null && "code" in error && error.code === "ABORT_ERR") ||
     (error instanceof Error && error.name === "AbortError")
   );
-}
-
-function embeddedIpv4(ip: string): string | undefined {
-  if (!isIPv6(ip)) {
-    return undefined;
-  }
-  const bytes = parseIpv6Bytes(ip);
-  if (bytes === undefined) {
-    return undefined;
-  }
-  if (
-    bytes[10] === 0xff &&
-    bytes[11] === 0xff &&
-    bytes.slice(0, 10).every((byte) => byte === 0)
-  ) {
-    return `${bytes[12]}.${bytes[13]}.${bytes[14]}.${bytes[15]}`;
-  }
-  if (
-    bytes[0] === 0x00 &&
-    bytes[1] === 0x64 &&
-    bytes[2] === 0xff &&
-    bytes[3] === 0x9b &&
-    bytes.slice(4, 12).every((byte) => byte === 0)
-  ) {
-    return `${bytes[12]}.${bytes[13]}.${bytes[14]}.${bytes[15]}`;
-  }
-  return undefined;
-}
-
-function parseIpv6Bytes(address: string): Uint8Array | undefined {
-  const bare = address.split("%")[0] ?? address;
-  if (bare.includes(".")) {
-    const lastColon = bare.lastIndexOf(":");
-    if (lastColon < 0) {
-      return undefined;
-    }
-    const v4 = bare.slice(lastColon + 1);
-    if (!isIPv4(v4)) {
-      return undefined;
-    }
-    const octets = v4.split(".").map((part) => Number(part));
-    if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
-      return undefined;
-    }
-    const high = ((octets[0]! << 8) | octets[1]!).toString(16);
-    const low = ((octets[2]! << 8) | octets[3]!).toString(16);
-    return parseIpv6Bytes(`${bare.slice(0, lastColon)}:${high}:${low}`);
-  }
-
-  const halves = bare.split("::");
-  if (halves.length > 2) {
-    return undefined;
-  }
-  const head = halves[0] === "" || halves[0] === undefined ? [] : halves[0].split(":");
-  const tail =
-    halves.length === 1 || halves[1] === "" || halves[1] === undefined ? [] : halves[1].split(":");
-  const missing = halves.length === 2 ? 8 - head.length - tail.length : 0;
-  if (halves.length === 2 && missing < 0) {
-    return undefined;
-  }
-  if (halves.length === 1 && head.length !== 8) {
-    return undefined;
-  }
-  const groups = halves.length === 2 ? [...head, ...Array(missing).fill("0"), ...tail] : head;
-  if (groups.length !== 8) {
-    return undefined;
-  }
-  const bytes = new Uint8Array(16);
-  for (let index = 0; index < 8; index += 1) {
-    const group = groups[index]!;
-    if (!/^[0-9a-fA-F]{1,4}$/.test(group)) {
-      return undefined;
-    }
-    const value = Number.parseInt(group, 16);
-    bytes[index * 2] = (value >> 8) & 0xff;
-    bytes[index * 2 + 1] = value & 0xff;
-  }
-  return bytes;
 }
