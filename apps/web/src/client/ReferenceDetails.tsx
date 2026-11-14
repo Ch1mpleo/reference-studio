@@ -4,6 +4,7 @@ import { ReferenceRequestError, type ReferenceDetailsInput } from "./referenceAp
 import { StudioButton } from "./StudioButton.js";
 import { StudioField, StudioTextArea } from "./StudioField.js";
 import { StudioSelect } from "./StudioSelect.js";
+import { HotlinkPreview } from "./HotlinkPreview.js";
 
 type Draft = {
   title: string;
@@ -28,7 +29,9 @@ export function ReferenceDetails({
   const [overrideRevision, setOverrideRevision] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const dirty = !sameDraft(draft, draftFrom(reference));
+  const previewUrl = reference.previewImageUrl;
   const expectedRevision = overrideRevision ?? baseRevision;
   const titleId = `reference-title-${reference.id}`;
   const sourceId = `reference-source-${reference.id}`;
@@ -97,6 +100,26 @@ export function ReferenceDetails({
       <p className="reference-meta">
         Title, source, creator, tags, observations, and availability belong to this reference. They stay the same in every project.
       </p>
+      {previewUrl !== null ? (
+        <div className="reference-details-media" data-testid="reference-preview-media">
+          {previewUnavailable ? (
+            <div className="board-material-text">
+              <p className="studio-kicker">Linked</p>
+              <h3>{reference.title}</h3>
+              <p>{reference.sourceUrl ?? ""}</p>
+              <p className="studio-help">Preview unavailable</p>
+            </div>
+          ) : (
+            <HotlinkPreview
+              url={previewUrl}
+              alt={reference.title}
+              onStatusChange={(status) => {
+                if (status === "unavailable") setPreviewUnavailable(true);
+              }}
+            />
+          )}
+        </div>
+      ) : null}
       <form onSubmit={(event) => void save(event)}>
         <StudioField id={titleId} label="Title" value={draft.title} maxLength={200} disabled={saveState === "saving"} onChange={(title) => edit({ title })} />
         <StudioField id={sourceId} label="Source" value={draft.sourceUrl} inputMode="url" placeholder="Leave unknown" maxLength={2000} disabled={saveState === "saving"} onChange={(sourceUrl) => edit({ sourceUrl })} />

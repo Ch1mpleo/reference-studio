@@ -6,6 +6,7 @@ import { StudioField } from "./StudioField.js";
 import { StudioReferenceCard } from "./StudioReferenceCard.js";
 import { StudioSegment } from "./StudioSegment.js";
 import { ImageUnavailable } from "./ImageRegions.js";
+import { HotlinkPreview } from "./HotlinkPreview.js";
 
 type Kind = "" | "image" | "link" | "note";
 type Query = { q: string; tag: string; kind: Kind };
@@ -25,6 +26,7 @@ export function ReferenceSearch({
   onPlace: (referenceId: string) => Promise<ProjectReference>;
 }) {
   const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(() => new Set());
+  const [failedPreviews, setFailedPreviews] = useState<Set<string>>(() => new Set());
   const [q, setQ] = useState("");
   const [appliedQ, setAppliedQ] = useState("");
   const [tagDraft, setTagDraft] = useState("");
@@ -164,10 +166,40 @@ export function ReferenceSearch({
             const inProject = placed.has(reference.id);
             return (
               <li key={reference.id}>
-                <StudioReferenceCard title={reference.title} metadata={kindName(reference.kind)} selected={false}
-                  loadingMode="instant" imageState={reference.kind === "image" ? (reference.asset && !failedThumbnails.has(reference.asset.id) ? "ready" : "missing") : "none"}
+                <StudioReferenceCard
+                  title={reference.title}
+                  metadata={reference.previewImageUrl !== null ? "Linked" : kindName(reference.kind)}
+                  selected={false}
+                  loadingMode="instant"
+                  imageState={
+                    reference.previewImageUrl !== null
+                      ? failedPreviews.has(reference.id)
+                        ? "none"
+                        : "ready"
+                      : reference.kind === "image"
+                        ? reference.asset && !failedThumbnails.has(reference.asset.id)
+                          ? "ready"
+                          : "missing"
+                        : "none"
+                  }
                   onOpen={() => void place(reference.id)}
-                  media={reference.asset !== null && !failedThumbnails.has(reference.asset.id) ? (
+                  media={
+                    reference.previewImageUrl !== null && !failedPreviews.has(reference.id) ? (
+                      <HotlinkPreview
+                        url={reference.previewImageUrl}
+                        alt={reference.title}
+                        onStatusChange={(status) => {
+                          if (status === "unavailable") {
+                            setFailedPreviews((current) => new Set(current).add(reference.id));
+                          }
+                        }}
+                      />
+                    ) : reference.previewImageUrl !== null && failedPreviews.has(reference.id) ? (
+                      <div>
+                        <p className="studio-meta">Linked</p>
+                        <p className="studio-help">Preview unavailable</p>
+                      </div>
+                    ) : reference.asset !== null && !failedThumbnails.has(reference.asset.id) ? (
                     <img src={`/api/assets/${reference.asset.id}/thumbnail`} alt={reference.title} width={reference.asset.width} height={reference.asset.height}
                       onError={() => { const id = reference.asset?.id; if (id) setFailedThumbnails((current) => new Set(current).add(id)); }} />
                   ) : reference.kind === "image" ? <ImageUnavailable title={reference.title} /> : <p className="studio-meta">{kindName(reference.kind)}</p>}
