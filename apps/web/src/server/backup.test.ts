@@ -589,6 +589,43 @@ describe("backup and restore", () => {
     expect(JSON.stringify(missing.json())).not.toContain(stored.original_path);
   });
 
+  it("exports null for an unsafe planted previewImageUrl and still succeeds", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { app, database } = await startApp();
+    const atlas = await createProject(app, "Unsafe export", "unsafe-export");
+    const browser = await browserHeaders(app);
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${atlas}/references/links`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "unsafe-export-link" },
+      payload: {
+        url: "https://example.com/page",
+        title: "Planted",
+        creator: "",
+        observations: "",
+        motion: null,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const referenceId = (created.json() as { reference: { id: string } }).reference.id;
+    database
+      .prepare(`UPDATE "references" SET preview_image_url = ? WHERE id = ?`)
+      .run("http://127.0.0.1:4317/steal.png", referenceId);
+
+    const downloaded = await app.inject({
+      method: "GET",
+      url: `/api/projects/${atlas}/backup`,
+      headers: agentHeaders(),
+    });
+    expect(downloaded.statusCode).toBe(200);
+    const manifest = JSON.parse(
+      Buffer.from(readBackupZip(downloaded.rawPayload).get("backup.json")!).toString("utf8"),
+    ) as { references: Array<{ previewImageUrl: string | null }> };
+    expect(manifest.references[0]?.previewImageUrl).toBeNull();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it("round-trips previewImageUrl in format 6 without asset entries", async () => {
     const { app, database } = await startApp();
     const atlas = await createProject(app, "Preview", "preview");
@@ -661,6 +698,8 @@ describe("backup and restore", () => {
       "http://127.0.0.1:4317/steal.png",
       "http://192.168.1.1/reboot.cgi",
       "http://localhost/a.png",
+      "http://localhost.:4317/x.png",
+      "http://foo.localhost./x.png",
       "http://user:pw@example.com/a.png",
     ];
     for (const [index, previewImageUrl] of cases.entries()) {

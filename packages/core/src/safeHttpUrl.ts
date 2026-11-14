@@ -1,8 +1,9 @@
 import { ServiceError } from "./errors.js";
 
 /**
- * Pure address and preview-URL checks (no DNS). Used by backup restore and
- * browser hotlink guards. Fetch/probe keep their own DNS pinning path.
+ * Pure address and preview-URL checks (no DNS). Used by backup restore/export
+ * sanitisation and browser hotlink guards. Server fetch/probe keeps its own
+ * node:net BlockList implementation in remoteFetch.ts.
  */
 
 const IPV4_BLOCKED: ReadonlyArray<{ base: number; mask: number }> = [
@@ -52,7 +53,8 @@ export function isBlockedAddress(ip: string): boolean {
 
 /**
  * Preview URLs for restore and hotlink rendering: http(s) only, no userinfo,
- * no localhost / *.localhost, no blocked IP literals. Does not resolve DNS.
+ * no localhost / *.localhost (after stripping one trailing '.'), no blocked or
+ * invalid IP literals. Does not resolve DNS.
  */
 export function assertSafePreviewImageUrl(raw: string): URL {
   let url: URL;
@@ -78,14 +80,22 @@ export function assertSafePreviewImageUrl(raw: string): URL {
       reason: "url_not_allowed",
     });
   }
-  const host = url.hostname.toLowerCase();
+  // Prefer the typed authority host so leading-zero IPv4 (01.2.3.4) is not
+  // accepted after URL normalisation to 1.2.3.4.
+  const host = normalizeHostname(typedHostname(raw) ?? url.hostname);
   if (host === "localhost" || host.endsWith(".localhost")) {
     throw new ServiceError("validation", previewImageUrlNotAllowedMessage(), {
       reason: "url_blocked_address",
     });
   }
   const literal = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
-  if ((isIPv4(literal) || isIPv6(literal)) && isBlockedAddress(literal)) {
+  if (looksLikeIpv4(literal)) {
+    if (!isIPv4(literal) || isBlockedAddress(literal)) {
+      throw new ServiceError("validation", previewImageUrlNotAllowedMessage(), {
+        reason: "url_blocked_address",
+      });
+    }
+  } else if (isIPv6(literal) && isBlockedAddress(literal)) {
     throw new ServiceError("validation", previewImageUrlNotAllowedMessage(), {
       reason: "url_blocked_address",
     });
@@ -97,13 +107,28 @@ export function assertSafePreviewImageUrl(raw: string): URL {
 export function isAllowedHotlinkPreviewUrl(raw: string, pageHostname?: string): boolean {
   try {
     const url = assertSafePreviewImageUrl(raw);
-    if (pageHostname !== undefined && url.hostname.toLowerCase() === pageHostname.toLowerCase()) {
+    if (
+      pageHostname !== undefined &&
+      normalizeHostname(url.hostname) === normalizeHostname(pageHostname)
+    ) {
       return false;
     }
     return true;
   } catch {
     return false;
   }
+}
+
+/** Strip one trailing '.' so localhost. / foo.localhost. match the localhost rules. */
+export function normalizeHostname(hostname: string): string {
+  const lower = hostname.toLowerCase();
+  return lower.endsWith(".") ? lower.slice(0, -1) : lower;
+}
+
+function typedHostname(raw: string): string | undefined {
+  const match = /^[a-z][a-z0-9+.-]*:\/\/(?:[^/@?#]*@)?(\[[^\]]+\]|[^:/?#]*)/i.exec(raw.trim());
+  const host = match?.[1];
+  return host === undefined || host === "" ? undefined : host;
 }
 
 function isBlockedIpv4(ip: string): boolean {
@@ -123,8 +148,15 @@ function ipv4Mask(prefix: number): number {
   return prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
 }
 
+/** Strict IPv4: no leading zeros (01.2.3.4 is invalid). */
 function isIPv4(value: string): boolean {
-  return /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/.test(value);
+  return /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(
+    value,
+  );
+}
+
+function looksLikeIpv4(value: string): boolean {
+  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(value);
 }
 
 function isIPv6(value: string): boolean {

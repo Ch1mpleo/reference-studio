@@ -39,9 +39,13 @@ describe("assertSafePreviewImageUrl", () => {
     ["ftp://example.com/a.png", "url_not_allowed"],
     ["http://user:pw@example.com/a.png", "url_not_allowed"],
     ["http://localhost/a.png", "url_blocked_address"],
+    ["http://localhost.:4317/x.png", "url_blocked_address"],
+    ["http://LOCALHOST./x.png", "url_blocked_address"],
     ["http://app.localhost/a.png", "url_blocked_address"],
+    ["http://foo.localhost./a.png", "url_blocked_address"],
     ["http://127.0.0.1/steal.png", "url_blocked_address"],
     ["http://192.168.1.1/reboot.cgi", "url_blocked_address"],
+    ["http://01.2.3.4/x.png", "url_blocked_address"],
     ["http://[::ffff:10.0.0.1]/x.png", "url_blocked_address"],
   ])("rejects %s", (raw, reason) => {
     try {
@@ -67,5 +71,10 @@ describe("isAllowedHotlinkPreviewUrl", () => {
   it("refuses loopback and private literals", () => {
     expect(isAllowedHotlinkPreviewUrl("http://127.0.0.1:4317/steal.png")).toBe(false);
     expect(isAllowedHotlinkPreviewUrl("http://192.168.1.1/reboot.cgi")).toBe(false);
+  });
+
+  it("refuses localhost with a trailing dot", () => {
+    expect(isAllowedHotlinkPreviewUrl("http://localhost.:4317/x.png")).toBe(false);
+    expect(isAllowedHotlinkPreviewUrl("http://foo.localhost./x.png")).toBe(false);
   });
 });

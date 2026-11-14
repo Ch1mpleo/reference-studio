@@ -22,7 +22,7 @@ Owning specification for Studio storage settings, upload size limits, streamed i
 
 Default is **preview** (`urlImageMode: "hotlink"`): the board shows the image from the original link; Studio stores the URL only (`previewImageUrl` on a link reference). Nothing is written under `assets/`. If the link breaks, the preview image is hidden and the card keeps the title with “Preview unavailable”; reload retries. Backups keep the link URL, not image bytes. There is no CSP in Studio today; any future CSP must allow `img-src 'self' data: blob: https: http:` while preview mode exists.
 
-- **Client guard:** `HotlinkPreview` refuses to render (same “Preview unavailable” card, no `<img>`) when the URL hostname equals `location.hostname`, is `localhost` / `*.localhost`, or is a loopback / private / link-local IP literal (including v4-mapped and NAT64). This is defence in depth against a planted preview URL that would otherwise send the Studio session cookie to a local listener.
+- **Client guard:** `HotlinkPreview` refuses to render (same “Preview unavailable” card, no `<img>`) when the URL hostname (after stripping one trailing `.`) equals `location.hostname`, is `localhost` / `*.localhost`, or is a loopback / private / link-local IP literal (including v4-mapped and NAT64; dotted quads with leading zeros are rejected). This is defence in depth against a planted preview URL that would otherwise send the Studio session cookie to a local listener.
 
 - Browser sessions only for both paste paths. Agent bearer callers receive 403 and the service does not fetch.
 - **Preview (`hotlink`):** `POST /api/projects/:projectId/references/url-preview` probes the URL (same SSRF address rules and 12-byte JPEG/PNG/WebP magic as store; no download, no temp file) and inserts a link with `previewImageUrl` set to the pasted URL.
@@ -33,7 +33,8 @@ Default is **preview** (`urlImageMode: "hotlink"`): the board shows the image fr
 ## Backups
 
 - Backup format version 6 exports `previewImageUrl` (null for non-links). Formats 1–5 restore with `previewImageUrl: null` when absent; a non-null `previewImageUrl` on format version &lt; 6 is rejected (400). Preview image bytes are never fetched or embedded.
-- **Restore URL validation:** each non-null `previewImageUrl` must pass the same pure (no DNS) policy as paste SSRF shape checks via `assertSafePreviewImageUrl`: http(s) only, no userinfo, reject `localhost` / `*.localhost`, and reject IP literals where `isBlockedAddress` is true (IPv4/IPv6, v4-mapped, NAT64). Invalid previews reject the restore with 400 validation and write no rows. U1 fetch/probe behaviour is unchanged.
+- **Restore URL validation:** each non-null `previewImageUrl` must pass the pure (no DNS) policy in `assertSafePreviewImageUrl`: http(s) only, no userinfo, reject `localhost` / `*.localhost` after stripping one trailing `.`, and reject IP literals where core `isBlockedAddress` is true (IPv4/IPv6, v4-mapped, NAT64; leading-zero dotted quads are invalid/blocked). Invalid previews reject the restore with 400 validation and write no rows. Server fetch/probe keeps U1’s `node:net` BlockList implementation unchanged.
+- **Export:** unsafe `previewImageUrl` values already in the database are written as `null` in the backup (with a warning) so GET backup does not fail; restore still rejects unsafe URLs.
 - Settings (including `urlImageMode` and the upload limit) are not included in project backups.
 - Each backup asset may be up to the 512 MiB ceiling (not the current slider value). The archive total remains 80 MiB until S3.
 

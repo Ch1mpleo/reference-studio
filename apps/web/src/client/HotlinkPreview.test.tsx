@@ -81,4 +81,18 @@ describe("HotlinkPreview", () => {
       view.root.unmount();
     });
   });
+
+  it("refuses localhost with a trailing dot without rendering an img", async () => {
+    const view = await render(
+      createElement(PreviewCard, {
+        url: "http://localhost.:4317/x.png",
+        title: "Dotted localhost",
+      }),
+    );
+    expect(view.container.querySelector("img")).toBeNull();
+    expect(view.container.textContent).toContain("Preview unavailable");
+    await act(async () => {
+      view.root.unmount();
+    });
+  });
 });
