@@ -81,6 +81,9 @@ describe("backup manifest", () => {
     expect(() => readBackupManifest(manifest({ formatVersion: "6" as never }))).toThrow(
       "This backup's format version must be a number (received string).",
     );
+    expect(() => readBackupManifest(manifest({ formatVersion: 6.5 as never }))).toThrow(
+      "This backup's format version must be a whole number (received 6.5).",
+    );
     expect(() =>
       readBackupManifest({
         ...manifest(),

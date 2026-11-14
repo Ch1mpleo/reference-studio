@@ -178,10 +178,16 @@ export function readBackupManifest(value: unknown): BackupManifest {
   if (!isRecord(value) || value.format !== BACKUP_FORMAT) {
     throw new ServiceError("validation", "This file is not a Reference Studio backup.");
   }
-  if (typeof value.formatVersion !== "number" || !Number.isInteger(value.formatVersion)) {
+  if (typeof value.formatVersion !== "number") {
     throw new ServiceError(
       "validation",
       `This backup's format version must be a number (received ${formatVersionType(value.formatVersion)}).`,
+    );
+  }
+  if (!Number.isInteger(value.formatVersion)) {
+    throw new ServiceError(
+      "validation",
+      `This backup's format version must be a whole number (received ${String(value.formatVersion)}).`,
     );
   }
   if (value.formatVersion < 1 || value.formatVersion > BACKUP_FORMAT_VERSION) {
