@@ -254,6 +254,13 @@ export function registerReferenceTool(server: McpServer, options: ServiceClientO
         let image: ImageState = { ...NO_IMAGE, crop, variant: crop === null ? "full" : "crop" };
         let picture: ImageBytes | undefined;
         if (reference.previewImageUrl !== null) {
+          if (explicitRegion) {
+            throw new AdapterError(
+              "asset_missing",
+              "That hotlinked preview has no stored image to crop.",
+              "Call get_reference without crop or placementId to read the hotlinked preview metadata.",
+            );
+          }
           image = { ...NO_IMAGE, status: "hotlinked", url: reference.previewImageUrl };
         } else if (input.includeImage !== false) {
           if (reference.asset === null && input.crop === undefined) {
