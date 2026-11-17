@@ -1971,3 +1971,47 @@ describe("POST /api/projects/:projectId/references/url-preview", () => {
     expect(hits.value).toBe(0);
   });
 });
+
+describe("save-copy", () => {
+  it("converts a preview link in place and preserves its metadata and files", async () => {
+    const { origin } = await listenPngServer();
+    const { app, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const linkResponse = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/links`,
+      headers: agentHeaders("save-copy-link", { "content-type": "application/json" }),
+      payload: { url: `${origin}/preview.png`, title: "Preview", creator: "Artist", observations: "Keep", motion: null },
+    });
+    expect(linkResponse.statusCode, JSON.stringify(linkResponse.json())).toBe(201);
+    const before = linkResponse.json().reference;
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/references/${before.id}/save-copy`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "save-copy-success" },
+      payload: { expectedRevision: before.revision },
+    });
+    expect(response.statusCode).toBe(200);
+    const after = response.json();
+    expect(after).toMatchObject({
+      id: before.id,
+      kind: "image",
+      availability: "available",
+      previewImageUrl: null,
+      sourceUrl: before.sourceUrl,
+      title: before.title,
+      creator: before.creator,
+      observations: before.observations,
+      tags: before.tags,
+      revision: before.revision + 1,
+    });
+    expect(after.asset).toBeTruthy();
+    expect(countRows((await startApp()).database, "placements")).toBe(0);
+    expect(existsSync(path.join(config.dataDir, "assets", "originals"))).toBe(true);
+    expect(existsSync(path.join(config.dataDir, "assets", "thumbnails"))).toBe(true);
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
+  });
+});
