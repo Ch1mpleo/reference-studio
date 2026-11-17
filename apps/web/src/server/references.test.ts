@@ -2082,6 +2082,24 @@ describe("save-copy rejections", () => {
   });
 });
 
+describe("save-copy image response", () => {
+  it("serves a saved copy to the bearer image reader within the byte limit", async () => {
+    const server = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: "/api/projects/" + projectId + "/references/links", headers: agentHeaders("image-reader-link", { "content-type": "application/json" }), payload: { url: server.origin + "/image.png", title: "Image", creator: "", observations: "", motion: null } });
+    const reference = link.json().reference;
+    const saved = await app.inject({ method: "POST", url: "/api/references/" + reference.id + "/save-copy", headers: { ...browser, "content-type": "application/json", "idempotency-key": "image-reader-save" }, payload: { expectedRevision: reference.revision } });
+    expect(saved.statusCode).toBe(200);
+    const image = await app.inject({ method: "GET", url: "/api/references/" + reference.id + "/image", headers: agentHeaders() });
+    expect(image.statusCode).toBe(200);
+    expect(image.rawPayload.byteLength).toBeLessThanOrEqual(1_000_000);
+    expect(image.headers["content-type"]).toMatch(/^image\/(jpeg|png)/);
+    await app.close();
+  });
+});
+
 describe("save-copy pixel limit", () => {
   it("rejects a 12,001 px PNG without changing the link", async () => {
     const wide = await sharp({ create: { width: 12_001, height: 10, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
