@@ -19,6 +19,7 @@ import {
   referenceCursor,
   referenceSearchQuerySchema,
   referenceSearchResultSchema,
+  saveCopyRequestSchema,
   ServiceError,
   mutationScope,
   UPLOAD_LIMIT_MAX,
@@ -30,6 +31,7 @@ import {
   type UpdatePlacementRequest,
   type UpdateReferenceRequest,
   type CreatePlacementRequest,
+  type SaveCopyRequest,
 } from "@reference-studio/core";
 import { existsSync, unlinkSync } from "node:fs";
 import { open as openFile } from "node:fs/promises";
@@ -1278,6 +1280,41 @@ function updateReference(database: DatabaseSync, id: string, input: UpdateRefere
     });
   }
   const saved = findLibraryReference(database, id);
+  if (saved === undefined) {
+    throw new Error("Updated reference is missing.");
+  }
+  return saved;
+}
+
+function convertLinkToImage(
+  database: DatabaseSync,
+  referenceId: string,
+  expectedRevision: number,
+  published: PublishedRemoteImage,
+): LibraryReference {
+  const assetId = reuseOrInsertAsset(database, published.inspected, published.paths);
+  const result = database
+    .prepare(
+      `UPDATE "references"
+       SET kind = 'image', asset_id = ?, availability = 'available', preview_image_url = NULL,
+           revision = revision + 1, updated_at = ?
+       WHERE id = ? AND revision = ? AND kind = 'link' AND motion_start IS NULL`,
+    )
+    .run(assetId, new Date().toISOString(), referenceId, expectedRevision);
+  if (result.changes !== 1) {
+    const raced = findLibraryReference(database, referenceId);
+    if (raced === undefined) {
+      throw new ServiceError("not_found", "Reference was not found.");
+    }
+    assertExpectedRevision(raced.revision, expectedRevision, { type: "reference", id: referenceId });
+    throw new ServiceError("conflict", "The record changed since it was loaded.", {
+      currentRevision: raced.revision,
+      expectedRevision,
+      recordType: "reference",
+      recordId: referenceId,
+    });
+  }
+  const saved = findLibraryReference(database, referenceId);
   if (saved === undefined) {
     throw new Error("Updated reference is missing.");
   }
