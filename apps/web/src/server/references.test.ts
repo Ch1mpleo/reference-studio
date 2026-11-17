@@ -2081,3 +2081,79 @@ describe("save-copy rejections", () => {
     expect(hits.value).toBe(0);
   });
 });
+
+describe("save-copy fetch failures", () => {
+  it("rejects a blocked address without changing the reference or publishing files", async () => {
+    const { origin } = await listenPngServer();
+    let blockAll = false;
+    const { app, hub, config } = await startAppWithRemoteFetch({
+      isBlocked: (ip) => blockAll ? true : allowLoopback(ip),
+    });
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("blocked-link", { "content-type": "application/json" }), payload: { url: `${origin}/blocked.png`, title: "Blocked", creator: "", observations: "", motion: null } });
+    const id = link.json().reference.id;
+    const before = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    blockAll = true;
+    const response = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "blocked-save-copy" }, payload: { expectedRevision: 1 } });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { details: { reason: "url_blocked_address" } } });
+    const after = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+    expect(after.json()).toEqual(before.json());
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    assetDirsEmpty(config.dataDir);
+    await app.close();
+  });
+
+  it("rejects blocked and HTML fetches without changing the reference", async () => {
+    for (const scenario of [
+      { url: "http://192.0.2.1/blocked.png", reason: "url_blocked_address" },
+      { url: "html", reason: "not_an_image" },
+    ]) {
+      const { origin } = await listenPngServer(() => "html");
+      const { app, hub, config } = await startAppWithRemoteFetch();
+      const projectId = await createProject(app);
+      const browser = await browserHeaders(app);
+      const source = scenario.url === "html" ? `${origin}/html` : scenario.url;
+      const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders(`fetch-failure-${scenario.reason}`, { "content-type": "application/json" }), payload: { url: source, title: "Keep", creator: "", observations: "", motion: null } });
+      const id = link.json().reference.id;
+      const before = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+      const events: StudioEvent[] = [];
+      hub.subscribe((event) => events.push(event));
+      const failed = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": `save-copy-${scenario.reason}` }, payload: { expectedRevision: 1 } });
+      expect(failed.statusCode).toBe(400);
+      expect(failed.json()).toMatchObject({ error: { details: { reason: scenario.reason } } });
+      const after = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+      expect(after.json()).toEqual(before.json());
+      expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+      assetDirsEmpty(config.dataDir);
+      await app.close();
+    }
+  });
+
+  it("cleans up after a 404 fetch failure", async () => {
+    const { origin } = await listenPngServer();
+    const { app, hub, config } = await startAppWithRemoteFetch({
+      fetchRemoteImageToTemp: async () => {
+        throw new ServiceError("validation", "That URL cannot be fetched.", { reason: "url_fetch_failed" });
+      },
+    });
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("404-link", { "content-type": "application/json" }), payload: { url: `${origin}/missing.png`, title: "404", creator: "", observations: "", motion: null } });
+    const id = link.json().reference.id;
+    const before = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const response = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "404-save-copy" }, payload: { expectedRevision: 1 } });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { details: { reason: "url_fetch_failed" } } });
+    const after = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+    expect(after.json()).toEqual(before.json());
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    assetDirsEmpty(config.dataDir);
+    await app.close();
+  });
+});
