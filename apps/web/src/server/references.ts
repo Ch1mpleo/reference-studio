@@ -365,6 +365,75 @@ export function registerReferenceRoutes(
     }
   });
 
+  app.post("/api/references/:referenceId/save-copy", async (request, reply) => {
+    requireJson(request, "Save-copy requests must use application/json.");
+    const caller = requireCaller(request);
+    if (caller === "agent") {
+      throw new ServiceError("forbidden", "Saving a copy is available to the Studio browser only.");
+    }
+    const referenceId = requireReferenceId(routeParam(request, "referenceId"));
+    const key = readIdempotencyKey(request.headers["idempotency-key"]);
+    const input = parseContract(saveCopyRequestSchema, request.body, "Save-copy details are invalid.");
+    const scope = mutationScope(caller, "reference.save-copy", referenceId);
+    const requestHash = hashCanonicalRequest({ referenceId, expectedRevision: input.expectedRevision });
+    rejectIdempotencyMismatch(database, scope, key, requestHash);
+    const replay = findCommittedOutcome(database, scope, key, requestHash);
+    if (replay !== undefined) {
+      return reply.code(replay.statusCode).send(replay.body);
+    }
+
+    const current = findLibraryReference(database, referenceId);
+    if (current === undefined || current.archived) {
+      throw new ServiceError("not_found", "Reference was not found.");
+    }
+    assertExpectedRevision(current.revision, input.expectedRevision, { type: "reference", id: referenceId });
+    if (current.kind !== "link") {
+      throw new ServiceError("validation", "Only a linked image can be saved as a copy.");
+    }
+    if (current.motion !== null) {
+      throw new ServiceError("validation", "Remove the motion mark before saving a copy.", { reason: "has_motion" });
+    }
+    const fetchUrl = current.previewImageUrl ?? current.sourceUrl;
+    if (fetchUrl === null) {
+      throw new ServiceError("validation", "Only a linked image can be saved as a copy.");
+    }
+
+    const abort = abortOnClientClose(reply);
+    let published: PublishedRemoteImage | undefined;
+    try {
+      published = await fetchAndPublishRemoteImage({
+        url: fetchUrl,
+        dataDir,
+        database,
+        maxBytes: readSettings(database).maxUploadBytes,
+        signal: abort.signal,
+        fetchRemoteImage,
+        remoteFetch,
+      });
+      const outcome = commitMutation(database, {
+        scope,
+        key,
+        requestHash,
+        execute: () => {
+          const libraryReference = convertLinkToImage(database, referenceId, input.expectedRevision, published!);
+          return { statusCode: 200, body: libraryReference, revision: libraryReference.revision, changed: true };
+        },
+      });
+      publishLibraryChange(hub, database, outcome);
+      return reply.code(200).send(outcome.libraryReference ?? outcome.body);
+    } catch (error) {
+      if (published !== undefined) {
+        rollbackPublishedImage(database, dataDir, published);
+      }
+      throw error;
+    } finally {
+      if (published !== undefined) {
+        releasePublishedImage(published);
+      }
+      abort.dispose();
+    }
+  });
+
   app.post("/api/projects/:projectId/references/links", async (request, reply) => {
     return createTextReference(request, reply, database, hub, "link");
   });
