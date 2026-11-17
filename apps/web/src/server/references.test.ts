@@ -2083,6 +2083,55 @@ describe("save-copy rejections", () => {
 });
 
 describe("save-copy fetch failures", () => {
+  it("cleans up after timeout, over-limit, and storage-full failures", async () => {
+    const scenarios = [
+      { reason: "url_timeout", message: "That URL timed out.", lowerLimit: false },
+      { reason: "image_too_large", message: "Image is too large.", lowerLimit: true },
+      { reason: "storage_full", message: "Storage is full.", lowerLimit: false },
+    ];
+    for (const scenario of scenarios) {
+      const server = await listenPngServer();
+      const { app, hub, config } = await startAppWithRemoteFetch({
+        fetchRemoteImageToTemp: async () => {
+          throw new ServiceError("validation", scenario.message, { reason: scenario.reason });
+        },
+      });
+      const projectId = await createProject(app);
+      const browser = await browserHeaders(app);
+      if (scenario.lowerLimit) {
+        const settings = await app.inject({
+          method: "PUT",
+          url: "/api/settings",
+          headers: { ...browser, "content-type": "application/json", "idempotency-key": "set-low-upload-limit" },
+          payload: { expectedRevision: 1, maxUploadBytes: UPLOAD_LIMIT_MIN },
+        });
+        expect(settings.statusCode, JSON.stringify(settings.json())).toBe(200);
+      }
+      const link = await app.inject({
+        method: "POST",
+        url: "/api/projects/" + projectId + "/references/links",
+        headers: agentHeaders("failure-link-" + scenario.reason, { "content-type": "application/json" }),
+        payload: { url: server.origin + "/failure.png", title: "Failure", creator: "", observations: "", motion: null },
+      });
+      const id = link.json().reference.id;
+      const before = await app.inject({ method: "GET", url: "/api/references/" + id, headers: browser });
+      const events: StudioEvent[] = [];
+      hub.subscribe((event) => events.push(event));
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/references/" + id + "/save-copy",
+        headers: { ...browser, "content-type": "application/json", "idempotency-key": "failure-" + scenario.reason },
+        payload: { expectedRevision: 1 },
+      });
+      expect(response.json()).toMatchObject({ error: { details: { reason: scenario.reason } } });
+      const after = await app.inject({ method: "GET", url: "/api/references/" + id, headers: browser });
+      expect(after.json()).toEqual(before.json());
+      expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+      assetDirsEmpty(config.dataDir);
+      await app.close();
+    }
+  });
+
   it("rejects a blocked address without changing the reference or publishing files", async () => {
     const { origin } = await listenPngServer();
     let blockAll = false;
