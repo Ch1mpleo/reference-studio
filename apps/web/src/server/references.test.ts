@@ -2082,6 +2082,48 @@ describe("save-copy rejections", () => {
   });
 });
 
+describe("save-copy race rollback", () => {
+  it("rolls back newly published files when the reference revision races", async () => {
+    const server = await listenPngServer();
+    const { app, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({
+      method: "POST",
+      url: "/api/projects/" + projectId + "/references/links",
+      headers: agentHeaders("race-link", { "content-type": "application/json" }),
+      payload: { url: server.origin + "/race.png", title: "Race", creator: "", observations: "", motion: null },
+    });
+    const id = link.json().reference.id;
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    try {
+      setAfterPublishForTests(async () => {
+        const patched = await app.inject({
+          method: "PATCH",
+          url: "/api/references/" + id,
+          headers: { ...browser, "content-type": "application/json", "idempotency-key": "race-patch" },
+          payload: { expectedRevision: 1, title: "Raced" },
+        });
+        expect(patched.statusCode).toBe(200);
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/references/" + id + "/save-copy",
+        headers: { ...browser, "content-type": "application/json", "idempotency-key": "race-copy" },
+        payload: { expectedRevision: 1 },
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ error: { details: { currentRevision: 2 } } });
+      expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
+      assetDirsEmpty(config.dataDir);
+    } finally {
+      setAfterPublishForTests(undefined);
+      await app.close();
+    }
+  });
+});
+
 describe("save-copy fetch failures", () => {
   it("cleans up after timeout, over-limit, and storage-full failures", async () => {
     const scenarios = [
