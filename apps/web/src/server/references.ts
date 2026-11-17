@@ -312,55 +312,23 @@ export function registerReferenceRoutes(
     }
 
     const maxUploadBytes = readSettings(database).maxUploadBytes;
-    const fetchOptions: FetchRemoteImageOptions = {
-      dataDir,
-      maxBytes: maxUploadBytes,
-    };
-    if (remoteFetch?.isBlocked !== undefined) {
-      fetchOptions.isBlocked = remoteFetch.isBlocked;
-    }
-    if (remoteFetch?.allowLoopbackPort !== undefined) {
-      fetchOptions.allowLoopbackPort = remoteFetch.allowLoopbackPort;
-    }
-    if (remoteFetch?.resolver !== undefined) {
-      fetchOptions.resolver = remoteFetch.resolver;
-    }
-
-    const disconnect = new AbortController();
-    // Per-response signal: reply.raw "close" before the response finishes means
-    // the client left. Keep-alive sockets must not abort later requests.
-    const onClientClose = (): void => {
-      if (!reply.raw.writableFinished) {
-        disconnect.abort();
-      }
-    };
-    reply.raw.on("close", onClientClose);
-    fetchOptions.signal = disconnect.signal;
-
-    let fetched: FetchedRemoteImage | undefined;
-    let paths: { originalPath: string; thumbnailPath: string } | undefined;
-    const created: string[] = [];
-    let released = false;
+    const abort = abortOnClientClose(reply);
+    let published: PublishedRemoteImage | undefined;
     try {
-      fetched = await fetchRemoteImage(body.url, fetchOptions);
-      let inspected;
-      try {
-        inspected = await inspectImage(fetched.tempPath, {
-          maxBytes: maxUploadBytes,
-          sha256: fetched.sha256,
-        });
-      } catch (error) {
-        try {
-          unlinkSync(fetched.tempPath);
-        } catch {
-          // Best-effort temp cleanup when inspection fails.
-        }
-        throw error;
-      }
+      const image = await fetchAndPublishRemoteImage({
+        url: body.url,
+        dataDir,
+        database,
+        maxBytes: maxUploadBytes,
+        signal: abort.signal,
+        fetchRemoteImage,
+        remoteFetch,
+      });
+      published = image;
       const resolvedTitle =
         title.trim() !== ""
           ? title.trim().slice(0, 200)
-          : titleFromRemoteUrl(fetched.finalUrl);
+          : titleFromRemoteUrl(image.finalUrl);
       const imageCanonical = imageRequestForStorage(
         {
           title: resolvedTitle,
@@ -369,46 +337,29 @@ export function registerReferenceRoutes(
           observations,
         },
         "image",
-        inspected.sha256,
+        image.inspected.sha256,
       );
-      paths = publishImageFiles(dataDir, inspected, fetched.tempPath, created);
-      if (afterPublishForTests !== undefined) {
-        await afterPublishForTests();
-      }
       const outcome = commitMutation(database, {
         scope,
         key,
         requestHash,
         execute: () => {
-          const reference = insertImageReference(database, projectId, imageCanonical, inspected, paths!);
+          const reference = insertImageReference(database, projectId, imageCanonical, image.inspected, image.paths);
           return { statusCode: 201, body: reference, revision: reference.reference.revision, changed: true };
         },
       });
       publishReference(hub, projectId, outcome);
       return reply.code(outcome.statusCode).send(outcome.body);
     } catch (error) {
-      if (paths !== undefined) {
-        releasePublishedPath(paths.originalPath);
-        releasePublishedPath(paths.thumbnailPath);
-        released = true;
-      }
-      for (const relativePath of created) {
-        removeIfUnreferenced(database, dataDir, relativePath);
+      if (published !== undefined) {
+        rollbackPublishedImage(database, dataDir, published);
       }
       throw error;
     } finally {
-      reply.raw.off("close", onClientClose);
-      if (paths !== undefined && !released) {
-        releasePublishedPath(paths.originalPath);
-        releasePublishedPath(paths.thumbnailPath);
+      if (published !== undefined) {
+        releasePublishedImage(published);
       }
-      if (fetched !== undefined && existsSync(fetched.tempPath)) {
-        try {
-          unlinkSync(fetched.tempPath);
-        } catch {
-          // Best-effort cleanup when publish did not rename the temp file.
-        }
-      }
+      abort.dispose();
     }
   });
 
@@ -694,6 +645,131 @@ function publishImageFiles(
   retainPublishedPath(originalPath);
   retainPublishedPath(thumbnailPath);
   return { originalPath, thumbnailPath };
+}
+
+type PublishedRemoteImage = {
+  inspected: InspectedImage;
+  paths: { originalPath: string; thumbnailPath: string };
+  finalUrl: string;
+  created: string[];
+};
+
+const releasedPublishedImages = new WeakSet<PublishedRemoteImage>();
+
+function abortOnClientClose(reply: FastifyReply): { signal: AbortSignal; dispose(): void } {
+  const disconnect = new AbortController();
+  // Per-response signal: reply.raw "close" before the response finishes means
+  // the client left. Keep-alive sockets must not abort later requests.
+  const onClientClose = (): void => {
+    if (!reply.raw.writableFinished) {
+      disconnect.abort();
+    }
+  };
+  reply.raw.on("close", onClientClose);
+  return {
+    signal: disconnect.signal,
+    dispose: () => reply.raw.off("close", onClientClose),
+  };
+}
+
+function remoteFetchOptions(
+  remoteFetch: RemoteFetchDependencies | undefined,
+  base: { dataDir: string; maxBytes: number; signal: AbortSignal },
+): FetchRemoteImageOptions {
+  const options: FetchRemoteImageOptions = {
+    dataDir: base.dataDir,
+    maxBytes: base.maxBytes,
+    signal: base.signal,
+  };
+  if (remoteFetch?.isBlocked !== undefined) {
+    options.isBlocked = remoteFetch.isBlocked;
+  }
+  if (remoteFetch?.allowLoopbackPort !== undefined) {
+    options.allowLoopbackPort = remoteFetch.allowLoopbackPort;
+  }
+  if (remoteFetch?.resolver !== undefined) {
+    options.resolver = remoteFetch.resolver;
+  }
+  return options;
+}
+
+async function fetchAndPublishRemoteImage(input: {
+  url: string;
+  dataDir: string;
+  database: DatabaseSync;
+  maxBytes: number;
+  signal: AbortSignal;
+  fetchRemoteImage: (
+    url: string,
+    options: FetchRemoteImageOptions,
+  ) => Promise<FetchedRemoteImage>;
+  remoteFetch: RemoteFetchDependencies | undefined;
+}): Promise<PublishedRemoteImage> {
+  const fetched = await input.fetchRemoteImage(
+    input.url,
+    remoteFetchOptions(input.remoteFetch, input),
+  );
+  let inspected: InspectedImage;
+  try {
+    inspected = await inspectImage(fetched.tempPath, {
+      maxBytes: input.maxBytes,
+      sha256: fetched.sha256,
+    });
+  } catch (error) {
+    try {
+      unlinkSync(fetched.tempPath);
+    } catch {
+      // Best-effort temp cleanup when inspection fails.
+    }
+    throw error;
+  }
+  const created: string[] = [];
+  let paths: { originalPath: string; thumbnailPath: string } | undefined;
+  try {
+    paths = publishImageFiles(input.dataDir, inspected, fetched.tempPath, created);
+    if (afterPublishForTests !== undefined) {
+      await afterPublishForTests();
+    }
+  } catch (error) {
+    if (paths !== undefined) {
+      rollbackPublishedImage(input.database, input.dataDir, {
+        inspected,
+        paths,
+        finalUrl: fetched.finalUrl,
+        created,
+      });
+    }
+    throw error;
+  } finally {
+    if (existsSync(fetched.tempPath)) {
+      try {
+        unlinkSync(fetched.tempPath);
+      } catch {
+        // Best-effort cleanup when publish did not rename the temp file.
+      }
+    }
+  }
+  return { inspected, paths: paths!, finalUrl: fetched.finalUrl, created };
+}
+
+function rollbackPublishedImage(
+  database: DatabaseSync,
+  dataDir: string,
+  published: PublishedRemoteImage,
+): void {
+  releasePublishedImage(published);
+  for (const relativePath of published.created) {
+    removeIfUnreferenced(database, dataDir, relativePath);
+  }
+}
+
+function releasePublishedImage(published: PublishedRemoteImage): void {
+  if (releasedPublishedImages.has(published)) {
+    return;
+  }
+  releasedPublishedImages.add(published);
+  releasePublishedPath(published.paths.originalPath);
+  releasePublishedPath(published.paths.thumbnailPath);
 }
 
 function insertImageReference(
