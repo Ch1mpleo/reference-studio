@@ -2050,3 +2050,34 @@ describe("save-copy additional cases", () => {
     expect(hits.value).toBe(count);
   });
 });
+
+describe("save-copy rejections", () => {
+  it("rejects image references without fetching", async () => {
+    const { origin, hits } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const created = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/url-image`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "reject-image" }, payload: { url: `${origin}/seed.png` } });
+    const id = created.json().reference.id;
+    const response = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "reject-image-copy" }, payload: { expectedRevision: 1 } });
+    expect(response.json().error.message).toBe("Only a linked image can be saved as a copy.");
+    expect(hits.value).toBe(1);
+  });
+
+  it("rejects motion links, unknown ids, and agent callers before fetching", async () => {
+    const { origin, hits } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("motion-link", { "content-type": "application/json" }), payload: { url: `${origin}/motion.png`, title: "Motion", creator: "", observations: "", motion: { startSeconds: 1, endSeconds: null, behavior: "move" } } });
+    const id = link.json().reference.id;
+    const motion = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "motion-copy" }, payload: { expectedRevision: 1 } });
+    expect(motion.json().error.details.reason).toBe("has_motion");
+    const unknown = await app.inject({ method: "POST", url: "/api/references/00000000-0000-4000-8000-000000000000/save-copy", headers: { ...browser, "content-type": "application/json", "idempotency-key": "unknown-copy" }, payload: { expectedRevision: 1 } });
+    expect(unknown.json().error.code).toBe("not_found");
+    const agent = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: agentHeaders("agent-copy", { "content-type": "application/json" }), payload: { expectedRevision: 1 } });
+    expect(agent.statusCode).toBe(403);
+    expect(agent.json().error.message).toBe("Saving a copy is available to the Studio browser only.");
+    expect(hits.value).toBe(0);
+  });
+});
