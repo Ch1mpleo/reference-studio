@@ -2015,3 +2015,38 @@ describe("save-copy", () => {
     expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
   });
 });
+
+describe("save-copy additional cases", () => {
+  it("saves a plain link whose source URL is a PNG", async () => {
+    const { origin } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("plain-link", { "content-type": "application/json" }), payload: { url: `${origin}/plain.png`, title: "Plain", creator: "", observations: "", motion: null } });
+    const reference = link.json().reference;
+    expect(reference.previewImageUrl).toBeNull();
+    const saved = await app.inject({ method: "POST", url: `/api/references/${reference.id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "plain-copy" }, payload: { expectedRevision: reference.revision } });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ id: reference.id, kind: "image", previewImageUrl: null, asset: expect.any(Object) });
+  });
+
+  it("replays the same key without another fetch and rejects a changed revision", async () => {
+    const { origin, hits } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("copy-idem-link", { "content-type": "application/json" }), payload: { url: `${origin}/idem.png`, title: "Idem", creator: "", observations: "", motion: null } });
+    const reference = link.json().reference;
+    const headers = { ...browser, "content-type": "application/json", "idempotency-key": "copy-idempotency" };
+    const url = `/api/references/${reference.id}/save-copy`;
+    const first = await app.inject({ method: "POST", url, headers, payload: { expectedRevision: reference.revision } });
+    const count = hits.value;
+    const replay = await app.inject({ method: "POST", url, headers, payload: { expectedRevision: reference.revision } });
+    expect(first.statusCode).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+    expect(hits.value).toBe(count);
+    const mismatch = await app.inject({ method: "POST", url, headers, payload: { expectedRevision: reference.revision + 1 } });
+    expect(mismatch.json().error.details.reason).toBe("idempotency_mismatch");
+    expect(hits.value).toBe(count);
+  });
+});
