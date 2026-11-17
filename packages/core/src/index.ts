@@ -69,6 +69,7 @@ export {
   referenceDetailSchema,
   referenceSearchQuerySchema,
   referenceSearchResultSchema,
+  saveCopyRequestSchema,
   projectReferenceListSchema,
   projectReferenceSchema,
   updatePlacementRequestSchema,
@@ -94,6 +95,7 @@ export type {
   ReferenceSearchResult,
   UpdatePlacementRequest,
   UpdateReferenceRequest,
+  SaveCopyRequest,
 } from "./references.js";
 export { browserSessionResponseSchema } from "./session.js";
 export type { BrowserSessionResponse } from "./session.js";

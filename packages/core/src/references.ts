@@ -289,6 +289,9 @@ export const updateReferenceRequestSchema = z
 
 export type UpdateReferenceRequest = z.infer<typeof updateReferenceRequestSchema>;
 
+export const saveCopyRequestSchema = z.object({ expectedRevision: z.number().int().positive() }).strict();
+export type SaveCopyRequest = z.infer<typeof saveCopyRequestSchema>;
+
 export const createPlacementRequestSchema = z
   .object({
     referenceId: z.uuid(),
