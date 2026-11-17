@@ -1464,7 +1464,7 @@ describe("asset roles", () => {
 describe("POST /api/projects/:projectId/references/url-image", () => {
   it("stores a fetched image with the pasted sourceUrl, asset, thumbnail, one event, and revision +1", async () => {
     const { origin } = await listenPngServer();
-    const { app, hub, config } = await startAppWithRemoteFetch();
+    const { app, database, hub, config } = await startAppWithRemoteFetch();
     const projectId = await createProject(app);
     const events: StudioEvent[] = [];
     hub.subscribe((event) => events.push(event));
@@ -1975,7 +1975,7 @@ describe("POST /api/projects/:projectId/references/url-preview", () => {
 describe("save-copy", () => {
   it("converts a preview link in place and preserves its metadata and files", async () => {
     const { origin } = await listenPngServer();
-    const { app, hub, config } = await startAppWithRemoteFetch();
+    const { app, database, hub, config } = await startAppWithRemoteFetch();
     const projectId = await createProject(app);
     const browser = await browserHeaders(app);
     const linkResponse = await app.inject({
@@ -1986,6 +1986,15 @@ describe("save-copy", () => {
     });
     expect(linkResponse.statusCode, JSON.stringify(linkResponse.json())).toBe(201);
     const before = linkResponse.json().reference;
+    const placement = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/placements`,
+      headers: agentHeaders("save-copy-placement", { "content-type": "application/json" }),
+      payload: { referenceId: before.id, allowDuplicate: true },
+    });
+    expect(placement.statusCode).toBe(201);
+    const placementId = placement.json().placementId;
+    const placementCount = countRows(database, "placements");
     const events: StudioEvent[] = [];
     hub.subscribe((event) => events.push(event));
     const response = await app.inject({
@@ -2009,7 +2018,8 @@ describe("save-copy", () => {
       revision: before.revision + 1,
     });
     expect(after.asset).toBeTruthy();
-    expect(countRows((await startApp()).database, "placements")).toBe(0);
+    expect(countRows(database, "placements")).toBe(placementCount);
+    expect(database.prepare("SELECT id FROM placements WHERE id = ?").get(placementId)).toBeDefined();
     expect(existsSync(path.join(config.dataDir, "assets", "originals"))).toBe(true);
     expect(existsSync(path.join(config.dataDir, "assets", "thumbnails"))).toBe(true);
     expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
