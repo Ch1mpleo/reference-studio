@@ -2122,6 +2122,51 @@ describe("save-copy race rollback", () => {
       await app.close();
     }
   });
+
+  it("keeps a pre-existing identical asset when a save-copy race rolls back", async () => {
+    const server = await listenPngServer();
+    const { app, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const image = await app.inject({
+      method: "POST",
+      url: "/api/projects/" + projectId + "/references/url-image",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "shared-asset-image" },
+      payload: { url: server.origin + "/shared.png", title: "Shared" },
+    });
+    expect(image.statusCode).toBe(201);
+    const imageReference = image.json().reference;
+    const sha = imageReference.asset.sha256;
+    const originalPath = path.join(config.dataDir, "assets", "originals", sha + ".png");
+    const thumbnailPath = path.join(config.dataDir, "assets", "thumbnails", sha + ".webp");
+    const originalCount = readdirSync(path.dirname(originalPath)).length;
+    const thumbnailCount = readdirSync(path.dirname(thumbnailPath)).length;
+    const link = await app.inject({
+      method: "POST",
+      url: "/api/projects/" + projectId + "/references/links",
+      headers: agentHeaders("shared-race-link", { "content-type": "application/json" }),
+      payload: { url: server.origin + "/shared.png", title: "Link", creator: "", observations: "", motion: null },
+    });
+    const id = link.json().reference.id;
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    try {
+      setAfterPublishForTests(async () => {
+        await app.inject({ method: "PATCH", url: "/api/references/" + id, headers: { ...browser, "content-type": "application/json", "idempotency-key": "shared-race-patch" }, payload: { expectedRevision: 1, title: "Raced" } });
+      });
+      const response = await app.inject({ method: "POST", url: "/api/references/" + id + "/save-copy", headers: { ...browser, "content-type": "application/json", "idempotency-key": "shared-race-copy" }, payload: { expectedRevision: 1 } });
+      expect(response.statusCode).toBe(409);
+      expect(existsSync(originalPath)).toBe(true);
+      expect(existsSync(thumbnailPath)).toBe(true);
+      expect(image.json().reference.asset.id).toBe(imageReference.asset.id);
+      expect(readdirSync(path.dirname(originalPath))).toHaveLength(originalCount);
+      expect(readdirSync(path.dirname(thumbnailPath))).toHaveLength(thumbnailCount);
+      expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
+    } finally {
+      setAfterPublishForTests(undefined);
+      await app.close();
+    }
+  });
 });
 
 describe("save-copy fetch failures", () => {
