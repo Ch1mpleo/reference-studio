@@ -2082,6 +2082,29 @@ describe("save-copy rejections", () => {
   });
 });
 
+describe("save-copy pixel limit", () => {
+  it("rejects a 12,001 px PNG without changing the link", async () => {
+    const wide = await sharp({ create: { width: 12_001, height: 10, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    const server = await listenPngServer(() => wide);
+    const { app, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: "/api/projects/" + projectId + "/references/links", headers: agentHeaders("wide-link", { "content-type": "application/json" }), payload: { url: server.origin + "/wide.png", title: "Wide", creator: "", observations: "", motion: null } });
+    const id = link.json().reference.id;
+    const before = await app.inject({ method: "GET", url: "/api/references/" + id, headers: browser });
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const response = await app.inject({ method: "POST", url: "/api/references/" + id + "/save-copy", headers: { ...browser, "content-type": "application/json", "idempotency-key": "wide-copy" }, payload: { expectedRevision: 1 } });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { details: { reason: "image_too_large_pixels" } } });
+    const after = await app.inject({ method: "GET", url: "/api/references/" + id, headers: browser });
+    expect(after.json()).toEqual(before.json());
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    assetDirsEmpty(config.dataDir);
+    await app.close();
+  });
+});
+
 describe("save-copy race rollback", () => {
   it("rolls back newly published files when the reference revision races", async () => {
     const server = await listenPngServer();
