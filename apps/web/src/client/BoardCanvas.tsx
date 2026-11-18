@@ -79,7 +79,7 @@ function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
     {selected && !data.editing ? <div className="board-item-actions nodrag nopan">
       {data.frame ? <><StudioButton variant="ghost" disabled={data.readOnly} onClick={data.edit}>Rename</StudioButton><StudioButton variant="ghost" onClick={data.systems}>Systems</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.duplicate}>Duplicate</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.archive}>Ungroup</StudioButton></> : reference?.kind === "note" ? <StudioButton variant="ghost" onClick={data.edit}>Edit note</StudioButton> : <StudioButton variant="ghost" onClick={data.inspect}>Details</StudioButton>}
       {reference?.asset ? <StudioButton variant="ghost" onClick={data.view}>View image</StudioButton> : null}
-      {reference?.kind === "link" && reference.motion === null && !data.readOnly ? <StudioButton variant="ghost" busy={savingCopy} disabled={data.readOnly || savingCopy} onClick={() => void saveCopy().catch(() => undefined)}>Save a copy</StudioButton> : null}
+      {reference?.kind === "link" && reference.motion === null && !data.readOnly && data.saveCopy !== undefined ? <StudioButton variant="ghost" busy={savingCopy} disabled={data.readOnly || savingCopy} onClick={() => void saveCopy().catch(() => undefined)}>Save a copy</StudioButton> : null}
     </div> : null}
   </div>;
 }
@@ -90,7 +90,7 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
   editingId, onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems, groupCommandsDisabled, playground, onMovePlayground, onClosePlayground, onAcceptBoard }: {
   layout: BoardLayout; references: ProjectReference[]; selection: string[]; projectId: string;
   onSelect: (ids: string[]) => void; onCommit: (layout: BoardLayout) => void;
-  onInspect: (id: string) => void; onView: (id: string) => void; onSaveCopy: (referenceId: string, expectedRevision: number) => Promise<LibraryReference>; onReady: (view: BoardView) => void;
+  onInspect: (id: string) => void; onView: (id: string) => void; onSaveCopy?: (referenceId: string, expectedRevision: number) => Promise<LibraryReference>; onReady: (view: BoardView) => void;
   onZoom: (zoom: number) => void;
   onGestureStart: () => void;
   readOnly?: boolean;
@@ -112,6 +112,7 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
   const view = useRef<BoardView | null>(null);
   const latest = useRef({ layout, onCommit, onInspect, onView, onSelect, onGestureStart });
   latest.current = { layout, onCommit, onInspect, onView, onSelect, onGestureStart };
+  const hasSaveCopy = onSaveCopy !== undefined;
   const actions = useRef({ onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems, onSaveCopy });
   actions.current = { onEdit, onEditDone, onEditNote, onRenameGroup, onDuplicateGroup, onArchiveGroup, onOpenSystems, onSaveCopy };
   const frame = useRef<number | null>(null);
@@ -172,7 +173,7 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
       saveText: (text: string, revision: number) => isFrame ? actions.current.onRenameGroup(id, text, revision) : actions.current.onEditNote(id, text, revision),
       duplicate: () => actions.current.onDuplicateGroup(id), archive: () => actions.current.onArchiveGroup(id),
       systems: () => actions.current.onOpenSystems(id),
-      saveCopy: item === undefined ? undefined : () => actions.current.onSaveCopy(item.reference.id, item.reference.revision),
+      saveCopy: item === undefined || !hasSaveCopy ? undefined : () => actions.current.onSaveCopy!(item.reference.id, item.reference.revision),
       annotations: (layout.annotations ?? []).filter((note) => note.target.type === "placement" && note.target.placementId === id),
       inspect: () => latest.current.onInspect(id), view: () => latest.current.onView(id), resized: schedule,
       resizeStarted: () => { gesturing.current = true; latest.current.onGestureStart(); } });
@@ -192,7 +193,7 @@ export function BoardCanvas({ layout, references, selection, readOnly = false, p
     if (playground) next.push({ id: playground.id, type: "playground", position: playground.position, width: playground.width, style: { width: playground.width }, dragHandle: ".playground-handle", selectable: false, focusable: false, zIndex: 1001, data: { study: playground, close: () => playgroundActions.current.onClosePlayground(), move: (point) => playgroundActions.current.onMovePlayground(point), acceptBoard: (board) => playgroundActions.current.onAcceptBoard?.(board) } });
     nodesRef.current = next;
     setNodes(next);
-  }, [layout, references, readOnly, editingId, groupCommandsDisabled, playground]);
+  }, [layout, references, readOnly, editingId, groupCommandsDisabled, playground, hasSaveCopy]);
 
   useEffect(() => {
     setNodes((current) => {

@@ -2,15 +2,15 @@
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProjectReference } from "@reference-studio/core";
+import type { LibraryReference, ProjectReference } from "@reference-studio/core";
 import { useProjectReferences } from "./useProjectReferences.js";
 
 vi.mock("./referenceApi.js", async () => {
   const actual = await vi.importActual<typeof import("./referenceApi.js")>("./referenceApi.js");
-  return { ...actual, listProjectReferences: vi.fn() };
+  return { ...actual, listProjectReferences: vi.fn(), saveReferenceCopy: vi.fn() };
 });
 
-const { listProjectReferences } = await import("./referenceApi.js");
+const { listProjectReferences, saveReferenceCopy } = await import("./referenceApi.js");
 
 const reference = {
   placementId: "00000000-0000-4000-8000-000000000010",
@@ -116,5 +116,49 @@ describe("project reference loading", () => {
     expect(output()?.getAttribute("data-title")).toBe("");
 
     await act(async () => { root.unmount(); });
+  });
+
+  it("replaces the matching project reference after save-copy and clears the notice", async () => {
+    const savedReference: LibraryReference = {
+      ...reference.reference,
+      kind: "image",
+      availability: "available",
+      asset: {
+        id: "00000000-0000-4000-8000-000000000012",
+        sha256: "f".repeat(64),
+        mediaType: "image/png",
+        byteSize: 68,
+        width: 1,
+        height: 1,
+      },
+      previewImageUrl: null,
+      revision: 2,
+    };
+    vi.mocked(listProjectReferences)
+      .mockResolvedValueOnce([reference])
+      .mockRejectedValueOnce(new Error("refresh unavailable"));
+    vi.mocked(saveReferenceCopy).mockResolvedValueOnce(savedReference);
+    let library!: ReturnType<typeof useProjectReferences>;
+    function Probe() {
+      library = useProjectReferences("00000000-0000-4000-8000-000000000001", 0);
+      return null;
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(createElement(Probe)));
+    expect(library.references).toEqual([reference]);
+    await act(async () => library.retry());
+    expect(library.notice).toBe("The references could not be loaded.");
+
+    let result: LibraryReference | undefined;
+    await act(async () => {
+      result = await library.saveCopy(reference.reference.id, reference.reference.revision);
+    });
+    expect(saveReferenceCopy).toHaveBeenCalledWith(reference.reference.id, reference.reference.revision);
+    expect(result).toEqual(savedReference);
+    expect(library.references).toEqual([{ ...reference, reference: savedReference }]);
+    expect(library.notice).toBeNull();
+    await act(async () => root.unmount());
   });
 });

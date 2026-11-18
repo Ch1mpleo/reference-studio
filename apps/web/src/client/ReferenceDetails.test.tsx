@@ -6,6 +6,11 @@ import type { LibraryReference } from "@reference-studio/core";
 import { ReferenceDetails } from "./ReferenceDetails.js";
 import { ReferenceRequestError } from "./referenceApi.js";
 
+vi.mock("./HotlinkPreview.js", () => ({
+  HotlinkPreview: (props: { url: string; onStatusChange: (status: "available" | "unavailable") => void }) =>
+    createElement("button", { type: "button", "data-preview-unavailable": true, onClick: () => props.onStatusChange("unavailable") }, "Mark preview unavailable"),
+}));
+
 const reference: LibraryReference = {
   id: "00000000-0000-4000-8000-000000000011",
   kind: "note",
@@ -62,4 +67,58 @@ describe("ReferenceDetails", () => {
       view.root.unmount();
     });
   });
+
+  it("shows save-copy for preview, unavailable-preview, and plain links", async () => {
+    const previewLink = { ...reference, kind: "link" as const, sourceUrl: "https://example.com/source", previewImageUrl: "https://example.com/preview.png" };
+    const preview = await render(createElement(ReferenceDetails, { reference: previewLink, onSave: vi.fn(), onSaveCopy: vi.fn(async () => previewLink) }));
+    const copyButton = () => [...preview.container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Save a copy");
+    expect(copyButton()).toBeDefined();
+    expect(preview.container.querySelector("[data-testid='reference-preview-media']")).not.toBeNull();
+    await act(async () => preview.container.querySelector<HTMLButtonElement>("[data-preview-unavailable]")?.click());
+    expect(preview.container.textContent).toContain("Preview unavailable");
+    expect(copyButton()).toBeDefined();
+    await act(async () => preview.root.unmount());
+
+    const plainLink = { ...previewLink, previewImageUrl: null };
+    const plain = await render(createElement(ReferenceDetails, { reference: plainLink, onSave: vi.fn(), onSaveCopy: vi.fn(async () => plainLink) }));
+    expect(copyButtonFor(plain.container)).toBeDefined();
+    expect(plain.container.querySelector("[data-testid='reference-preview-media']")).toBeNull();
+    await act(async () => plain.root.unmount());
+  });
+
+  it.each([
+    ["images", { ...reference, kind: "image" as const }],
+    ["notes", reference],
+    ["links with motion", { ...reference, kind: "link" as const, sourceUrl: "https://example.com/source", motion: { startSeconds: 1, endSeconds: null, behavior: "move" as const } }],
+  ] as const)("hides save-copy for %s", async (_label, item) => {
+    const view = await render(createElement(ReferenceDetails, { reference: item, onSave: vi.fn(), onSaveCopy: vi.fn(async () => item) }));
+    expect(copyButtonFor(view.container)).toBeUndefined();
+    await act(async () => view.root.unmount());
+  });
+
+  it("hides save-copy when the details are read-only", async () => {
+    const link = { ...reference, kind: "link" as const, sourceUrl: "https://example.com/source" };
+    const view = await render(createElement(ReferenceDetails, { reference: link, onSave: vi.fn(), onSaveCopy: vi.fn(async () => link), readOnly: true }));
+    expect(copyButtonFor(view.container)).toBeUndefined();
+    await act(async () => view.root.unmount());
+  });
+
+  it("calls save-copy with the reference id and revision and clears busy state after rejection", async () => {
+    const link = { ...reference, kind: "link" as const, sourceUrl: "https://example.com/source" };
+    const onSaveCopy = vi.fn(async () => { throw new Error("failed"); });
+    const view = await render(createElement(ReferenceDetails, { reference: link, onSave: vi.fn(), onSaveCopy }));
+    const button = copyButtonFor(view.container);
+    if (button === undefined) throw new Error("Expected save-copy button.");
+    await act(async () => {
+      button.click();
+      await Promise.resolve();
+    });
+    expect(onSaveCopy).toHaveBeenCalledWith(link.id, link.revision);
+    expect(button.disabled).toBe(false);
+    await act(async () => view.root.unmount());
+  });
 });
+
+function copyButtonFor(container: HTMLElement): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Save a copy");
+}

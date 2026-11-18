@@ -56,7 +56,7 @@ export type CollectionProps = {
   onAddUrlPreview: (input: CreateUrlImage) => Promise<ProjectReference>;
   onAddNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   onSaveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
-  onSaveCopy: (referenceId: string, expectedRevision: number) => Promise<LibraryReference>;
+  onSaveCopy?: (referenceId: string, expectedRevision: number) => Promise<LibraryReference>;
   onSavePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
   onPlace: (referenceId: string, options?: PlacementOptions) => Promise<ProjectReference>;
 };
@@ -291,6 +291,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
   async function saveCopy(referenceId: string, expectedRevision: number): Promise<LibraryReference> {
     setMessage("Saving a copy…");
     try {
+      if (onSaveCopy === undefined) throw new Error("Save-copy is unavailable.");
       const saved = await onSaveCopy(referenceId, expectedRevision);
       setMessage("Saved a copy. Source link kept.");
       return saved;
@@ -382,7 +383,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) setDropping(false); }} onDrop={drop}>
     <div className="canvas-surface"><Suspense fallback={null}><BoardCanvas projectId={projectId} layout={effective} references={references} selection={selection} readOnly={operation}
       editingId={editingId} onEdit={setEditingId} onEditDone={(id) => { setEditingId((current) => current === id ? null : current); setFailedNotes((ids) => ids.filter((entry) => entry !== id)); }} onEditNote={editNote} onRenameGroup={renameGroup}
-      onDuplicateGroup={(id) => groupCommand(id, false)} onArchiveGroup={(id) => groupCommand(id, true)} onOpenSystems={openSystems} onSaveCopy={saveCopy} groupCommandsDisabled={board.unsaved || operation}
+      onDuplicateGroup={(id) => groupCommand(id, false)} onArchiveGroup={(id) => groupCommand(id, true)} onOpenSystems={openSystems} onSaveCopy={onSaveCopy === undefined ? undefined : saveCopy} groupCommandsDisabled={board.unsaved || operation}
       onSelect={setSelection} onCommit={board.commit} onInspect={inspect} onView={view} onGestureStart={board.beginGesture}
       playground={playground} onMovePlayground={(position) => setPlayground((current) => current ? { ...current, position } : current)} onClosePlayground={removePlayground} onAcceptBoard={board.acceptServer}
       onReady={(instance) => { canvas.current = instance; }} onZoom={setZoom} /></Suspense></div>
@@ -417,7 +418,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
         {selected.reference.sourceUrl ? <a className="studio-url" href={selected.reference.sourceUrl} target="_blank" rel="noreferrer">{selected.reference.sourceUrl}</a> : null}
       </> : null}
         {references.filter((item) => visited.includes(item.placementId)).map((item) => <div key={item.placementId} hidden={item.placementId !== inspectedId}>
-          <details className="studio-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} onSaveCopy={saveCopy} readOnly={operation} /></details>
+          <details className="studio-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} onSaveCopy={onSaveCopy === undefined ? undefined : saveCopy} readOnly={operation} /></details>
           <details className="studio-disclosure"><summary>Usage and crop</summary><PlacementUse item={item} onSave={onSavePlacement} /></details>
           {annotations.some((note) => note.target.type === "placement" && note.target.placementId === item.placementId) ? <details><summary>Attached notes</summary>{annotations.filter((note) => note.target.type === "placement" && note.target.placementId === item.placementId).map((note) => <p key={note.id}>{note.body || note.borrowedQuality}</p>)}</details> : null}
         </div>)}
