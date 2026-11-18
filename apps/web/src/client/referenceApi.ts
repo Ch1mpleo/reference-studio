@@ -13,6 +13,7 @@ import {
   projectReferenceListSchema,
   projectReferenceSchema,
   referenceSearchResultSchema,
+  saveCopyRequestSchema,
   serviceErrorBodySchema,
   updatePlacementRequestSchema,
   updateReferenceRequestSchema,
@@ -164,6 +165,12 @@ export async function updatePlacement(
 export async function updateReference(referenceId: string, input: ReferenceDetailsInput): Promise<LibraryReference> {
   const parsed = parseContract(updateReferenceRequestSchema, input, "Reference details are invalid.");
   const response = await send(`/api/references/${referenceId}`, parsed, { json: input }, "PATCH");
+  return parseContract(libraryReferenceSchema, await response.json(), "Reference was invalid.");
+}
+
+export async function saveReferenceCopy(referenceId: string, expectedRevision: number): Promise<LibraryReference> {
+  const input = parseContract(saveCopyRequestSchema, { expectedRevision }, "Save-copy details are invalid.");
+  const response = await send(`/api/references/${referenceId}/save-copy`, input, { json: { expectedRevision } });
   return parseContract(libraryReferenceSchema, await response.json(), "Reference was invalid.");
 }
 
