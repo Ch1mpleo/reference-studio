@@ -176,10 +176,15 @@ describe("backup and restore", () => {
     expect(assetBytes!.byteLength).toBe(asset.byteSize);
     const restored = await restoreZip(app, exported.rawPayload, "restore-saved-copy");
     expect(restored.statusCode).toBe(201);
-    const restoredProject = restored.json().id;
+    const restoredProject = (restored.json() as { id: string }).id;
     const listed = await app.inject({ method: "GET", url: `/api/projects/${restoredProject}/references`, headers: agentHeaders() });
     expect(listed.json()).toMatchObject({ references: [{ reference: { kind: "image", sourceUrl, asset: expect.any(Object) } }] });
-    const restoredReference = listed.json().references.find((item) => item.reference.sourceUrl === sourceUrl).reference;
+    const listedReferences = listed.json() as {
+      references: Array<{
+        reference: { id: string; kind: string; sourceUrl: string; previewImageUrl: string | null; asset: { id: string } };
+      }>;
+    };
+    const restoredReference = listedReferences.references.find((item) => item.reference.sourceUrl === sourceUrl)!.reference;
     expect(restoredReference).toMatchObject({ kind: "image", sourceUrl, previewImageUrl: null });
     const restoredAsset = database.prepare("SELECT original_path FROM assets WHERE id = ?").get(restoredReference.asset.id) as { original_path: string };
     expect(existsSync(path.join(dataDir, restoredAsset.original_path))).toBe(true);

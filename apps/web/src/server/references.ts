@@ -31,7 +31,6 @@ import {
   type UpdatePlacementRequest,
   type UpdateReferenceRequest,
   type CreatePlacementRequest,
-  type SaveCopyRequest,
 } from "@reference-studio/core";
 import { existsSync, unlinkSync } from "node:fs";
 import { open as openFile } from "node:fs/promises";
@@ -420,7 +419,7 @@ export function registerReferenceRoutes(
         },
       });
       publishLibraryChange(hub, database, outcome);
-      return reply.code(200).send(outcome.libraryReference ?? outcome.body);
+      return reply.code(200).send(outcome.body);
     } catch (error) {
       if (published !== undefined) {
         rollbackPublishedImage(database, dataDir, published);
