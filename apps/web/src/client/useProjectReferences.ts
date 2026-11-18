@@ -153,14 +153,18 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
   const saveCopy = useCallback(
     async (referenceId: string, expectedRevision: number): Promise<LibraryReference> => {
       const saved = await saveReferenceCopy(referenceId, expectedRevision);
-      generation.current += 1;
       setReferences((current) =>
-        current.map((item) => (item.reference.id === saved.id ? { ...item, reference: saved } : item)),
+        current.map((item) =>
+          item.reference.id === saved.id && item.reference.revision <= saved.revision
+            ? { ...item, reference: saved }
+            : item,
+        ),
       );
       setNotice(null);
+      await load();
       return saved;
     },
-    [],
+    [load],
   );
 
   const savePlacement = useCallback(

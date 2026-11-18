@@ -47,9 +47,16 @@ export function ReferenceDetails({
 
   async function saveCopy(): Promise<void> {
     if (onSaveCopy === undefined) return;
+    const startingDraft = draftFrom(reference);
     setSavingCopy(true);
     try {
-      await onSaveCopy(reference.id, reference.revision);
+      const saved = await onSaveCopy(reference.id, reference.revision);
+      const savedDraft = draftFrom(saved);
+      setDraft((current) => reconcileDraft(current, startingDraft, savedDraft));
+      setBaseRevision(saved.revision);
+      setOverrideRevision(null);
+      setSaveState("idle");
+      setMessage(null);
     } finally {
       setSavingCopy(false);
     }
@@ -201,4 +208,15 @@ function sameDraft(left: Draft, right: Draft): boolean {
     left.tags === right.tags &&
     left.availability === right.availability
   );
+}
+
+function reconcileDraft(current: Draft, starting: Draft, saved: Draft): Draft {
+  return {
+    title: current.title === starting.title ? saved.title : current.title,
+    sourceUrl: current.sourceUrl === starting.sourceUrl ? saved.sourceUrl : current.sourceUrl,
+    creator: current.creator === starting.creator ? saved.creator : current.creator,
+    observations: current.observations === starting.observations ? saved.observations : current.observations,
+    tags: current.tags === starting.tags ? saved.tags : current.tags,
+    availability: current.availability === starting.availability ? saved.availability : current.availability,
+  };
 }

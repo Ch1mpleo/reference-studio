@@ -37,6 +37,24 @@ const reference = {
   },
 } satisfies ProjectReference;
 
+function savedImage(): LibraryReference {
+  return {
+    ...reference.reference,
+    kind: "image",
+    availability: "available",
+    asset: {
+      id: "00000000-0000-4000-8000-000000000012",
+      sha256: "f".repeat(64),
+      mediaType: "image/png",
+      byteSize: 68,
+      width: 1,
+      height: 1,
+    },
+    previewImageUrl: null,
+    revision: 2,
+  };
+}
+
 function Harness({ refreshKey }: { refreshKey: number }) {
   const library = useProjectReferences("00000000-0000-4000-8000-000000000001", refreshKey);
   return createElement("output", {
@@ -119,24 +137,11 @@ describe("project reference loading", () => {
   });
 
   it("replaces the matching project reference after save-copy and clears the notice", async () => {
-    const savedReference: LibraryReference = {
-      ...reference.reference,
-      kind: "image",
-      availability: "available",
-      asset: {
-        id: "00000000-0000-4000-8000-000000000012",
-        sha256: "f".repeat(64),
-        mediaType: "image/png",
-        byteSize: 68,
-        width: 1,
-        height: 1,
-      },
-      previewImageUrl: null,
-      revision: 2,
-    };
+    const savedReference = savedImage();
     vi.mocked(listProjectReferences)
       .mockResolvedValueOnce([reference])
-      .mockRejectedValueOnce(new Error("refresh unavailable"));
+      .mockRejectedValueOnce(new Error("refresh unavailable"))
+      .mockResolvedValueOnce([{ ...reference, reference: savedReference }]);
     vi.mocked(saveReferenceCopy).mockResolvedValueOnce(savedReference);
     let library!: ReturnType<typeof useProjectReferences>;
     function Probe() {
@@ -159,6 +164,81 @@ describe("project reference loading", () => {
     expect(result).toEqual(savedReference);
     expect(library.references).toEqual([{ ...reference, reference: savedReference }]);
     expect(library.notice).toBeNull();
+    await act(async () => root.unmount());
+  });
+
+  it("keeps a newer reference when an older save-copy response arrives later", async () => {
+    const newer: ProjectReference = { ...reference, reference: { ...reference.reference, title: "Newer title", revision: 3 } };
+    const saved = savedImage();
+    let resolveSave!: (value: LibraryReference) => void;
+    vi.mocked(listProjectReferences)
+      .mockResolvedValueOnce([reference])
+      .mockResolvedValueOnce([newer])
+      .mockRejectedValueOnce(new Error("authoritative refresh unavailable"));
+    vi.mocked(saveReferenceCopy).mockImplementationOnce(() => new Promise((resolve) => { resolveSave = resolve; }));
+    let library!: ReturnType<typeof useProjectReferences>;
+    function Probe({ refreshKey }: { refreshKey: number }) {
+      library = useProjectReferences("00000000-0000-4000-8000-000000000001", refreshKey);
+      return null;
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(createElement(Probe, { refreshKey: 0 })));
+    const pending = library.saveCopy(reference.reference.id, reference.reference.revision);
+    await act(async () => root.render(createElement(Probe, { refreshKey: 1 })));
+    expect(library.references).toEqual([newer]);
+
+    await act(async () => {
+      resolveSave(saved);
+      await pending;
+    });
+    expect(library.references).toEqual([newer]);
+    await act(async () => root.unmount());
+  });
+
+  it("replaces a superseded refresh with an authoritative load after save-copy", async () => {
+    let resolveOldRefresh!: (value: ProjectReference[]) => void;
+    let resolveAuthoritative!: (value: ProjectReference[]) => void;
+    const saved = savedImage();
+    const savedProjectReference: ProjectReference = { ...reference, reference: saved };
+    const unrelated: ProjectReference = {
+      ...reference,
+      placementId: "00000000-0000-4000-8000-000000000020",
+      reference: { ...reference.reference, id: "00000000-0000-4000-8000-000000000021", title: "Unrelated update" },
+    };
+    vi.mocked(listProjectReferences)
+      .mockResolvedValueOnce([reference])
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOldRefresh = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveAuthoritative = resolve; }));
+    vi.mocked(saveReferenceCopy).mockResolvedValueOnce(saved);
+    let library!: ReturnType<typeof useProjectReferences>;
+    function Probe({ refreshKey }: { refreshKey: number }) {
+      library = useProjectReferences("00000000-0000-4000-8000-000000000001", refreshKey);
+      return null;
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(createElement(Probe, { refreshKey: 0 })));
+    await act(async () => root.render(createElement(Probe, { refreshKey: 1 })));
+    expect(library.refreshing).toBe(true);
+
+    let pending!: Promise<LibraryReference>;
+    await act(async () => {
+      pending = library.saveCopy(reference.reference.id, reference.reference.revision);
+      await Promise.resolve();
+    });
+    expect(library.refreshing).toBe(true);
+    await act(async () => {
+      resolveAuthoritative([savedProjectReference, unrelated]);
+      await pending;
+    });
+    expect(library.references).toEqual([savedProjectReference, unrelated]);
+    expect(library.refreshing).toBe(false);
+    await act(async () => resolveOldRefresh([]));
+    expect(library.references).toEqual([savedProjectReference, unrelated]);
+    expect(library.refreshing).toBe(false);
     await act(async () => root.unmount());
   });
 });

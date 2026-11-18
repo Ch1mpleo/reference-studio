@@ -117,6 +117,84 @@ describe("ReferenceDetails", () => {
     expect(button.disabled).toBe(false);
     await act(async () => view.root.unmount());
   });
+
+  it("updates availability and keeps save disabled after a pristine save-copy", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const link = { ...reference, kind: "link" as const, sourceUrl: "https://example.com/source" };
+    const saved: LibraryReference = {
+      ...link,
+      kind: "image" as const,
+      availability: "available" as const,
+      asset: {
+        id: "00000000-0000-4000-8000-000000000012",
+        sha256: "f".repeat(64),
+        mediaType: "image/png",
+        byteSize: 68,
+        width: 1,
+        height: 1,
+      },
+      previewImageUrl: null,
+      revision: link.revision + 1,
+    };
+    const view = await render(createElement(ReferenceDetails, {
+      reference: link,
+      onSave: vi.fn(),
+      onSaveCopy: vi.fn(async () => saved),
+    }));
+    const button = copyButtonFor(view.container);
+    if (button === undefined) throw new Error("Expected save-copy button.");
+    await act(async () => { button.click(); await Promise.resolve(); });
+    await act(async () => view.root.render(createElement(ReferenceDetails, { reference: saved, onSave: vi.fn() })));
+
+    expect(view.container.querySelector<HTMLButtonElement>("#reference-availability-00000000-0000-4000-8000-000000000011")?.textContent).toContain("Available");
+    expect(view.container.querySelector<HTMLButtonElement>("button[type='submit']")?.disabled).toBe(true);
+    await act(async () => view.root.unmount());
+  });
+
+  it("preserves a title edited while save-copy is in flight", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const link = { ...reference, kind: "link" as const, sourceUrl: "https://example.com/source" };
+    const saved: LibraryReference = {
+      ...link,
+      kind: "image" as const,
+      availability: "available" as const,
+      asset: {
+        id: "00000000-0000-4000-8000-000000000012",
+        sha256: "f".repeat(64),
+        mediaType: "image/png",
+        byteSize: 68,
+        width: 1,
+        height: 1,
+      },
+      previewImageUrl: null,
+      revision: link.revision + 1,
+    };
+    let resolveSave!: (value: LibraryReference) => void;
+    const view = await render(createElement(ReferenceDetails, {
+      reference: link,
+      onSave: vi.fn(),
+      onSaveCopy: vi.fn((): Promise<LibraryReference> => new Promise((resolve) => { resolveSave = resolve; })),
+    }));
+    const copyButton = copyButtonFor(view.container);
+    const title = view.container.querySelector<HTMLInputElement>("#reference-title-00000000-0000-4000-8000-000000000011");
+    if (copyButton === undefined || title === null) throw new Error("Expected the save-copy action and title field.");
+    await act(async () => { copyButton.click(); await Promise.resolve(); });
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(title, "My edited title");
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      resolveSave(saved);
+      await Promise.resolve();
+      view.root.render(createElement(ReferenceDetails, { reference: saved, onSave: vi.fn() }));
+    });
+
+    expect(title.value).toBe("My edited title");
+    expect(view.container.querySelector<HTMLButtonElement>("#reference-availability-00000000-0000-4000-8000-000000000011")?.textContent).toContain("Available");
+    expect(view.container.querySelector<HTMLButtonElement>("button[type='submit']")?.disabled).toBe(false);
+    await act(async () => view.root.unmount());
+  });
 });
 
 function copyButtonFor(container: HTMLElement): HTMLButtonElement | undefined {
