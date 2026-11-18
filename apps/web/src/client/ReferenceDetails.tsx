@@ -20,9 +20,13 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 export function ReferenceDetails({
   reference,
   onSave,
+  onSaveCopy,
+  readOnly = false,
 }: {
   reference: LibraryReference;
   onSave: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+  onSaveCopy?: (referenceId: string, expectedRevision: number) => Promise<LibraryReference>;
+  readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftFrom(reference));
   const [baseRevision, setBaseRevision] = useState(reference.revision);
@@ -30,6 +34,7 @@ export function ReferenceDetails({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
+  const [savingCopy, setSavingCopy] = useState(false);
   const dirty = !sameDraft(draft, draftFrom(reference));
   const previewUrl = reference.previewImageUrl;
   const expectedRevision = overrideRevision ?? baseRevision;
@@ -39,6 +44,16 @@ export function ReferenceDetails({
   const tagsId = `reference-tags-${reference.id}`;
   const observationsId = `reference-observations-${reference.id}`;
   const availabilityId = `reference-availability-${reference.id}`;
+
+  async function saveCopy(): Promise<void> {
+    if (onSaveCopy === undefined) return;
+    setSavingCopy(true);
+    try {
+      await onSaveCopy(reference.id, reference.revision);
+    } finally {
+      setSavingCopy(false);
+    }
+  }
 
   function edit(patch: Partial<Draft>): void {
     setDraft({ ...draft, ...patch });
@@ -118,6 +133,13 @@ export function ReferenceDetails({
               }}
             />
           )}
+        </div>
+      ) : null}
+      {onSaveCopy !== undefined && reference.kind === "link" && reference.motion === null && !readOnly ? (
+        <div className="form-actions">
+          <StudioButton variant="ghost" busy={savingCopy} disabled={readOnly || savingCopy} onClick={() => void saveCopy()}>
+            Save a copy
+          </StudioButton>
         </div>
       ) : null}
       <form onSubmit={(event) => void save(event)}>
