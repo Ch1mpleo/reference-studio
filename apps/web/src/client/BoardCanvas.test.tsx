@@ -19,6 +19,7 @@ vi.mock("@xyflow/react", async () => {
         { className: "react-flow" },
         nodes.map((node) => {
           const NodeView = nodeTypes[node.type];
+          if (NodeView === undefined) return null;
           return createElement(
             NodeView,
             { key: node.id, data: node.data, selected: node.selected, width: node.width, height: node.height } as never,
@@ -85,7 +86,7 @@ function props(item: LibraryReference, options: { readOnly?: boolean; onSaveCopy
     editingId: null,
     onEdit: vi.fn(),
     onEditDone: vi.fn(),
-    onEditNote: vi.fn(async () => undefined),
+    onEditNote: vi.fn(async () => 1),
     onRenameGroup: vi.fn(async () => undefined),
     onDuplicateGroup: vi.fn(),
     onArchiveGroup: vi.fn(),
