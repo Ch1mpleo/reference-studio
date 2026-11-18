@@ -29,6 +29,24 @@ const reference: LibraryReference = {
   updatedAt: "2026-10-21T00:00:00.000Z",
 };
 
+function converted(link: LibraryReference): LibraryReference {
+  return {
+    ...link,
+    kind: "image",
+    availability: "available",
+    asset: {
+      id: "00000000-0000-4000-8000-000000000012",
+      sha256: "f".repeat(64),
+      mediaType: "image/png",
+      byteSize: 68,
+      width: 1,
+      height: 1,
+    },
+    previewImageUrl: null,
+    revision: link.revision + 1,
+  };
+}
+
 async function render(node: ReactNode): Promise<{ container: HTMLElement; root: Root }> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -192,6 +210,57 @@ describe("ReferenceDetails", () => {
 
     expect(title.value).toBe("My edited title");
     expect(view.container.querySelector<HTMLButtonElement>("#reference-availability-00000000-0000-4000-8000-000000000011")?.textContent).toContain("Available");
+    expect(view.container.querySelector<HTMLButtonElement>("button[type='submit']")?.disabled).toBe(false);
+    await act(async () => view.root.unmount());
+  });
+
+  it("reconciles a canvas conversion delivered through props", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const link = { ...reference, kind: "link" as const, sourceUrl: "https://example.com/source" };
+    const image = converted(link);
+    const onSave = vi.fn(async () => image);
+    const view = await render(createElement(ReferenceDetails, { reference: link, onSave }));
+    await act(async () => {
+      view.root.render(createElement(ReferenceDetails, { reference: image, onSave }));
+    });
+
+    const availability = view.container.querySelector<HTMLButtonElement>(`#reference-availability-${link.id}`);
+    const submit = view.container.querySelector<HTMLButtonElement>("button[type='submit']");
+    expect(availability?.textContent).toContain("Available");
+    expect(submit?.disabled).toBe(true);
+
+    const title = view.container.querySelector<HTMLInputElement>(`#reference-title-${link.id}`);
+    const form = view.container.querySelector("form");
+    if (title === null || form === null) throw new Error("Expected details fields.");
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(title, "Updated title");
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    expect(onSave).toHaveBeenCalledWith(link.id, expect.objectContaining({ expectedRevision: image.revision }));
+    await act(async () => view.root.unmount());
+  });
+
+  it("preserves a user edit when a canvas conversion arrives through props", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const link = { ...reference, kind: "link" as const, sourceUrl: "https://example.com/source" };
+    const image = converted(link);
+    const view = await render(createElement(ReferenceDetails, { reference: link, onSave: vi.fn() }));
+    const title = view.container.querySelector<HTMLInputElement>(`#reference-title-${link.id}`);
+    if (title === null) throw new Error("Expected title field.");
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(title, "My edited title");
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      view.root.render(createElement(ReferenceDetails, { reference: image, onSave: vi.fn() }));
+    });
+
+    expect(title.value).toBe("My edited title");
+    expect(view.container.querySelector<HTMLButtonElement>(`#reference-availability-${link.id}`)?.textContent).toContain("Available");
     expect(view.container.querySelector<HTMLButtonElement>("button[type='submit']")?.disabled).toBe(false);
     await act(async () => view.root.unmount());
   });

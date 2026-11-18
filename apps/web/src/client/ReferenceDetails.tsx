@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { isHttpUrl, type LibraryReference } from "@reference-studio/core";
 import { ReferenceRequestError, type ReferenceDetailsInput } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
@@ -35,6 +35,9 @@ export function ReferenceDetails({
   const [message, setMessage] = useState<string | null>(null);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const [savingCopy, setSavingCopy] = useState(false);
+  const latestReference = useRef(reference);
+  const previousReference = useRef(reference);
+  latestReference.current = reference;
   const dirty = !sameDraft(draft, draftFrom(reference));
   const previewUrl = reference.previewImageUrl;
   const expectedRevision = overrideRevision ?? baseRevision;
@@ -45,16 +48,37 @@ export function ReferenceDetails({
   const observationsId = `reference-observations-${reference.id}`;
   const availabilityId = `reference-availability-${reference.id}`;
 
+  useEffect(() => {
+    const previous = previousReference.current;
+    previousReference.current = reference;
+    if (
+      previous.id !== reference.id ||
+      previous.kind !== "link" ||
+      reference.kind !== "image" ||
+      reference.revision <= previous.revision
+    ) return;
+
+    const baseline = draftFrom(previous);
+    const saved = draftFrom(reference);
+    setDraft((current) => reconcileDraft(current, baseline, saved));
+    setBaseRevision((current) => Math.max(current, reference.revision));
+    setOverrideRevision((current) => current !== null && current > reference.revision ? current : null);
+    setSaveState((current) => current === "saving" ? current : "idle");
+    setMessage(null);
+  }, [reference]);
+
   async function saveCopy(): Promise<void> {
     if (onSaveCopy === undefined) return;
     const startingDraft = draftFrom(reference);
     setSavingCopy(true);
     try {
       const saved = await onSaveCopy(reference.id, reference.revision);
-      const savedDraft = draftFrom(saved);
+      const latest = latestReference.current;
+      const currentReference = latest.id === saved.id && latest.revision > saved.revision ? latest : saved;
+      const savedDraft = draftFrom(currentReference);
       setDraft((current) => reconcileDraft(current, startingDraft, savedDraft));
-      setBaseRevision(saved.revision);
-      setOverrideRevision(null);
+      setBaseRevision((current) => Math.max(current, currentReference.revision));
+      setOverrideRevision((current) => current !== null && current > currentReference.revision ? current : null);
       setSaveState("idle");
       setMessage(null);
     } finally {
