@@ -2059,6 +2059,91 @@ describe("save-copy additional cases", () => {
     expect(mismatch.json().error.details.reason).toBe("idempotency_mismatch");
     expect(hits.value).toBe(count);
   });
+
+  it("removes files published by a concurrent same-key replay", async () => {
+    const secondBytes = await sharp(PNG_1X1).resize(2, 1).png().toBuffer();
+    let fetchCount = 0;
+    let releaseFirstFetch!: () => void;
+    let releaseSecondFetch!: () => void;
+    let markFirstFetchStarted!: () => void;
+    let markSecondFetchStarted!: () => void;
+    const firstFetchGate = new Promise<void>((resolve) => {
+      releaseFirstFetch = resolve;
+    });
+    const secondFetchGate = new Promise<void>((resolve) => {
+      releaseSecondFetch = resolve;
+    });
+    const firstFetchStarted = new Promise<void>((resolve) => {
+      markFirstFetchStarted = resolve;
+    });
+    const secondFetchStarted = new Promise<void>((resolve) => {
+      markSecondFetchStarted = resolve;
+    });
+    const { app, database, config } = await startAppWithRemoteFetch({
+      fetchRemoteImageToTemp: async (url, options) => {
+        fetchCount += 1;
+        const bytes = fetchCount === 1 ? PNG_1X1 : secondBytes;
+        const tempPath = path.join(incomingUploadsDir(options.dataDir), `same-key-${fetchCount}.png`);
+        mkdirSync(path.dirname(tempPath), { recursive: true });
+        writeFileSync(tempPath, bytes);
+        if (fetchCount === 1) {
+          markFirstFetchStarted();
+          await firstFetchGate;
+        } else {
+          markSecondFetchStarted();
+          await secondFetchGate;
+        }
+        return {
+          tempPath,
+          bytes: bytes.byteLength,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+          finalUrl: url,
+        };
+      },
+    });
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/links`,
+      headers: agentHeaders("same-key-replay-link", { "content-type": "application/json" }),
+      payload: { url: "https://example.com/replay.png", title: "Replay", creator: "", observations: "", motion: null },
+    });
+    expect(link.statusCode).toBe(201);
+    const reference = link.json().reference;
+    const headers = { ...browser, "content-type": "application/json", "idempotency-key": "same-key-replay" };
+    const requestUrl = `/api/references/${reference.id}/save-copy`;
+    const payload = { expectedRevision: reference.revision };
+    try {
+      const firstRequest = app.inject({ method: "POST", url: requestUrl, headers, payload });
+      await firstFetchStarted;
+      const secondRequest = app.inject({ method: "POST", url: requestUrl, headers, payload });
+      await secondFetchStarted;
+      releaseFirstFetch();
+      const first = await firstRequest;
+      expect(first.statusCode).toBe(200);
+      const beforeReplay = await app.inject({ method: "GET", url: `/api/references/${reference.id}`, headers: browser });
+      const assetFileCount = (): number =>
+        ["assets/originals", "assets/thumbnails"].reduce(
+          (count, relative) => count + readdirSync(path.join(config.dataDir, ...relative.split("/"))).length,
+          0,
+        );
+      const fileCountBeforeReplay = assetFileCount();
+      releaseSecondFetch();
+      const replay = await secondRequest;
+      expect(replay.statusCode).toBe(200);
+      expect(replay.json()).toEqual(first.json());
+      expect(assetFileCount()).toBe(fileCountBeforeReplay);
+      const afterReplay = await app.inject({ method: "GET", url: `/api/references/${reference.id}`, headers: browser });
+      expect(afterReplay.json()).toEqual(beforeReplay.json());
+      expect(fetchCount).toBe(2);
+      expect(countRows(database, "assets")).toBe(1);
+    } finally {
+      releaseFirstFetch();
+      releaseSecondFetch();
+      await app.close();
+    }
+  });
 });
 
 describe("save-copy rejections", () => {

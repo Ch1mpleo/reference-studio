@@ -418,6 +418,9 @@ export function registerReferenceRoutes(
           return { statusCode: 200, body: libraryReference, revision: libraryReference.revision, changed: true };
         },
       });
+      if (outcome.replayed) {
+        rollbackPublishedImage(database, dataDir, published!);
+      }
       publishLibraryChange(hub, database, outcome);
       return reply.code(200).send(outcome.body);
     } catch (error) {
