@@ -19,6 +19,7 @@ import {
   referenceCursor,
   referenceSearchQuerySchema,
   referenceSearchResultSchema,
+  saveCopyRequestSchema,
   ServiceError,
   mutationScope,
   UPLOAD_LIMIT_MAX,
@@ -350,6 +351,78 @@ export function registerReferenceRoutes(
       });
       publishReference(hub, projectId, outcome);
       return reply.code(outcome.statusCode).send(outcome.body);
+    } catch (error) {
+      if (published !== undefined) {
+        rollbackPublishedImage(database, dataDir, published);
+      }
+      throw error;
+    } finally {
+      if (published !== undefined) {
+        releasePublishedImage(published);
+      }
+      abort.dispose();
+    }
+  });
+
+  app.post("/api/references/:referenceId/save-copy", async (request, reply) => {
+    requireJson(request, "Save-copy requests must use application/json.");
+    const caller = requireCaller(request);
+    if (caller === "agent") {
+      throw new ServiceError("forbidden", "Saving a copy is available to the Studio browser only.");
+    }
+    const referenceId = requireReferenceId(routeParam(request, "referenceId"));
+    const key = readIdempotencyKey(request.headers["idempotency-key"]);
+    const input = parseContract(saveCopyRequestSchema, request.body, "Save-copy details are invalid.");
+    const scope = mutationScope(caller, "reference.save-copy", referenceId);
+    const requestHash = hashCanonicalRequest({ referenceId, expectedRevision: input.expectedRevision });
+    rejectIdempotencyMismatch(database, scope, key, requestHash);
+    const replay = findCommittedOutcome(database, scope, key, requestHash);
+    if (replay !== undefined) {
+      return reply.code(replay.statusCode).send(replay.body);
+    }
+
+    const current = findLibraryReference(database, referenceId);
+    if (current === undefined || current.archived) {
+      throw new ServiceError("not_found", "Reference was not found.");
+    }
+    assertExpectedRevision(current.revision, input.expectedRevision, { type: "reference", id: referenceId });
+    if (current.kind !== "link") {
+      throw new ServiceError("validation", "Only a linked image can be saved as a copy.");
+    }
+    if (current.motion !== null) {
+      throw new ServiceError("validation", "Remove the motion mark before saving a copy.", { reason: "has_motion" });
+    }
+    const fetchUrl = current.previewImageUrl ?? current.sourceUrl;
+    if (fetchUrl === null) {
+      throw new ServiceError("validation", "Only a linked image can be saved as a copy.");
+    }
+
+    const abort = abortOnClientClose(reply);
+    let published: PublishedRemoteImage | undefined;
+    try {
+      published = await fetchAndPublishRemoteImage({
+        url: fetchUrl,
+        dataDir,
+        database,
+        maxBytes: readSettings(database).maxUploadBytes,
+        signal: abort.signal,
+        fetchRemoteImage,
+        remoteFetch,
+      });
+      const outcome = commitMutation(database, {
+        scope,
+        key,
+        requestHash,
+        execute: () => {
+          const libraryReference = convertLinkToImage(database, referenceId, input.expectedRevision, published!);
+          return { statusCode: 200, body: libraryReference, revision: libraryReference.revision, changed: true };
+        },
+      });
+      if (outcome.replayed) {
+        rollbackPublishedImage(database, dataDir, published!);
+      }
+      publishLibraryChange(hub, database, outcome);
+      return reply.code(200).send(outcome.body);
     } catch (error) {
       if (published !== undefined) {
         rollbackPublishedImage(database, dataDir, published);
@@ -1278,6 +1351,41 @@ function updateReference(database: DatabaseSync, id: string, input: UpdateRefere
     });
   }
   const saved = findLibraryReference(database, id);
+  if (saved === undefined) {
+    throw new Error("Updated reference is missing.");
+  }
+  return saved;
+}
+
+function convertLinkToImage(
+  database: DatabaseSync,
+  referenceId: string,
+  expectedRevision: number,
+  published: PublishedRemoteImage,
+): LibraryReference {
+  const assetId = reuseOrInsertAsset(database, published.inspected, published.paths);
+  const result = database
+    .prepare(
+      `UPDATE "references"
+       SET kind = 'image', asset_id = ?, availability = 'available', preview_image_url = NULL,
+           revision = revision + 1, updated_at = ?
+       WHERE id = ? AND revision = ? AND kind = 'link' AND motion_start IS NULL`,
+    )
+    .run(assetId, new Date().toISOString(), referenceId, expectedRevision);
+  if (result.changes !== 1) {
+    const raced = findLibraryReference(database, referenceId);
+    if (raced === undefined) {
+      throw new ServiceError("not_found", "Reference was not found.");
+    }
+    assertExpectedRevision(raced.revision, expectedRevision, { type: "reference", id: referenceId });
+    throw new ServiceError("conflict", "The record changed since it was loaded.", {
+      currentRevision: raced.revision,
+      expectedRevision,
+      recordType: "reference",
+      recordId: referenceId,
+    });
+  }
+  const saved = findLibraryReference(database, referenceId);
   if (saved === undefined) {
     throw new Error("Updated reference is missing.");
   }

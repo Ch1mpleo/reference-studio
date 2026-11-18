@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, rmSync, unlinkSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { crc32 } from "node:zlib";
@@ -23,6 +24,7 @@ import type { AppConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { EventHub } from "./events.js";
 import { readBackupZip, writeBackupZip } from "./zipArchive.js";
+import { isBlockedAddress } from "./remoteFetch.js";
 
 const PNG_1X1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -32,6 +34,24 @@ const PNG_1X1 = Buffer.from(
 const directories: string[] = [];
 const closers: Array<() => void> = [];
 const host = "127.0.0.1:4317";
+
+function allowLoopback(ip: string): boolean {
+  return ip !== "127.0.0.1" && isBlockedAddress(ip);
+}
+
+async function listenPngServer(): Promise<{ origin: string; server: Server }> {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "image/png", "content-length": PNG_1X1.byteLength });
+    response.end(PNG_1X1);
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (typeof address !== "object" || address === null) throw new Error("Missing server address.");
+  return { origin: `http://127.0.0.1:${address.port}`, server };
+}
 
 function tempDir(): string {
   const directory = mkdtempSync(path.join(tmpdir(), "reference-studio-backup-"));
@@ -126,6 +146,64 @@ async function createProject(app: FastifyInstance, name: string, key: string): P
 }
 
 describe("backup and restore", () => {
+  it("preserves a saved copy through backup and restore", async () => {
+    const dataDir = tempDir();
+    const database = openDatabase(dataDir);
+    const hub = new EventHub();
+    const app = await createApp({ config: testConfig(dataDir), database, hub, remoteFetch: { isBlocked: allowLoopback } });
+    const server = await listenPngServer();
+    const projectId = await createProject(app, "Saved copy", "saved-copy-project");
+    const browser = await browserHeaders(app);
+    const sourceUrl = server.origin + "/preview.png";
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "backup-link" }, payload: { url: sourceUrl, title: "Preview", creator: "", observations: "", motion: null } });
+    const referenceId = link.json().reference.id;
+    const saved = await app.inject({ method: "POST", url: `/api/references/${referenceId}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "backup-save" }, payload: { expectedRevision: 1 } });
+    expect(saved.statusCode).toBe(200);
+    const exported = await app.inject({ method: "GET", url: `/api/projects/${projectId}/backup`, headers: agentHeaders() });
+    expect(exported.statusCode).toBe(200);
+    const entries = readBackupZip(exported.rawPayload);
+    const manifest = JSON.parse(Buffer.from(entries.get("backup.json")!).toString("utf8")) as {
+      references: Array<{ originalId: string; kind: string; sourceUrl: string; previewImageUrl: string | null; assetOriginalId: string | null }>;
+      assets: Array<{ originalId: string; path: string; sha256: string; byteSize: number }>;
+    };
+    const reference = manifest.references.find((item) => item.originalId === referenceId)!;
+    expect(reference).toMatchObject({ kind: "image", sourceUrl, previewImageUrl: null });
+    expect(reference.assetOriginalId).not.toBeNull();
+    const asset = manifest.assets.find((item) => item.originalId === reference.assetOriginalId)!;
+    expect(asset.path).toMatch(/^assets\/[0-9a-f]{64}\.[a-z0-9]+$/);
+    const assetBytes = entries.get(asset.path);
+    expect(assetBytes).toBeDefined();
+    expect(assetBytes!.byteLength).toBe(asset.byteSize);
+    const restored = await restoreZip(app, exported.rawPayload, "restore-saved-copy");
+    expect(restored.statusCode).toBe(201);
+    const restoredProject = (restored.json() as { id: string }).id;
+    const listed = await app.inject({ method: "GET", url: `/api/projects/${restoredProject}/references`, headers: agentHeaders() });
+    expect(listed.json()).toMatchObject({ references: [{ reference: { kind: "image", sourceUrl, asset: expect.any(Object) } }] });
+    const listedReferences = listed.json() as {
+      references: Array<{
+        reference: { id: string; kind: string; sourceUrl: string; previewImageUrl: string | null; asset: { id: string } };
+      }>;
+    };
+    const restoredReference = listedReferences.references.find((item) => item.reference.sourceUrl === sourceUrl)!.reference;
+    expect(restoredReference).toMatchObject({ kind: "image", sourceUrl, previewImageUrl: null });
+    const restoredAsset = database.prepare("SELECT original_path FROM assets WHERE id = ?").get(restoredReference.asset.id) as { original_path: string };
+    expect(existsSync(path.join(dataDir, restoredAsset.original_path))).toBe(true);
+    server.server.close();
+    await app.close();
+    database.close();
+  });
+
+  it("smoke builds an app with the remote-fetch test harness", async () => {
+    const dataDir = tempDir();
+    const database = openDatabase(dataDir);
+    const hub = new EventHub();
+    const app = await createApp({ config: testConfig(dataDir), database, hub, remoteFetch: { isBlocked: allowLoopback } });
+    const response = await app.inject({ method: "GET", url: "/api/settings", headers: agentHeaders() });
+    expect(response.statusCode).toBe(200);
+    await app.close();
+    database.close();
+  });
+
   it("round-trips supported annotation manifests larger than the legacy 2 MB ceiling", async () => {
     const { app } = await startApp();
     const projectId = await createProject(app, "Long annotations", "large-notes");

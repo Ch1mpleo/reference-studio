@@ -1971,3 +1971,461 @@ describe("POST /api/projects/:projectId/references/url-preview", () => {
     expect(hits.value).toBe(0);
   });
 });
+
+describe("save-copy", () => {
+  it("converts a preview link in place and preserves its metadata and files", async () => {
+    const { origin } = await listenPngServer();
+    const { app, database, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const linkResponse = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/links`,
+      headers: agentHeaders("save-copy-link", { "content-type": "application/json" }),
+      payload: { url: `${origin}/preview.png`, title: "Preview", creator: "Artist", observations: "Keep", motion: null },
+    });
+    expect(linkResponse.statusCode, JSON.stringify(linkResponse.json())).toBe(201);
+    const before = linkResponse.json().reference;
+    const placement = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/placements`,
+      headers: agentHeaders("save-copy-placement", { "content-type": "application/json" }),
+      payload: { referenceId: before.id, allowDuplicate: true },
+    });
+    expect(placement.statusCode).toBe(201);
+    const placementId = placement.json().placementId;
+    const placementCount = countRows(database, "placements");
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/references/${before.id}/save-copy`,
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "save-copy-success" },
+      payload: { expectedRevision: before.revision },
+    });
+    expect(response.statusCode).toBe(200);
+    const after = response.json();
+    expect(after).toMatchObject({
+      id: before.id,
+      kind: "image",
+      availability: "available",
+      previewImageUrl: null,
+      sourceUrl: before.sourceUrl,
+      title: before.title,
+      creator: before.creator,
+      observations: before.observations,
+      tags: before.tags,
+      revision: before.revision + 1,
+    });
+    expect(after.asset).toBeTruthy();
+    expect(countRows(database, "placements")).toBe(placementCount);
+    expect(database.prepare("SELECT id FROM placements WHERE id = ?").get(placementId)).toBeDefined();
+    expect(existsSync(path.join(config.dataDir, "assets", "originals"))).toBe(true);
+    expect(existsSync(path.join(config.dataDir, "assets", "thumbnails"))).toBe(true);
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
+  });
+});
+
+describe("save-copy additional cases", () => {
+  it("saves a plain link whose source URL is a PNG", async () => {
+    const { origin } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("plain-link", { "content-type": "application/json" }), payload: { url: `${origin}/plain.png`, title: "Plain", creator: "", observations: "", motion: null } });
+    const reference = link.json().reference;
+    expect(reference.previewImageUrl).toBeNull();
+    const saved = await app.inject({ method: "POST", url: `/api/references/${reference.id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "plain-copy" }, payload: { expectedRevision: reference.revision } });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ id: reference.id, kind: "image", previewImageUrl: null, asset: expect.any(Object) });
+  });
+
+  it("replays the same key without another fetch and rejects a changed revision", async () => {
+    const { origin, hits } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("copy-idem-link", { "content-type": "application/json" }), payload: { url: `${origin}/idem.png`, title: "Idem", creator: "", observations: "", motion: null } });
+    const reference = link.json().reference;
+    const headers = { ...browser, "content-type": "application/json", "idempotency-key": "copy-idempotency" };
+    const url = `/api/references/${reference.id}/save-copy`;
+    const first = await app.inject({ method: "POST", url, headers, payload: { expectedRevision: reference.revision } });
+    const count = hits.value;
+    const replay = await app.inject({ method: "POST", url, headers, payload: { expectedRevision: reference.revision } });
+    expect(first.statusCode).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+    expect(hits.value).toBe(count);
+    const mismatch = await app.inject({ method: "POST", url, headers, payload: { expectedRevision: reference.revision + 1 } });
+    expect(mismatch.json().error.details.reason).toBe("idempotency_mismatch");
+    expect(hits.value).toBe(count);
+  });
+
+  it("removes files published by a concurrent same-key replay", async () => {
+    const secondBytes = await sharp(PNG_1X1).resize(2, 1).png().toBuffer();
+    let fetchCount = 0;
+    let releaseFirstFetch!: () => void;
+    let releaseSecondFetch!: () => void;
+    let markFirstFetchStarted!: () => void;
+    let markSecondFetchStarted!: () => void;
+    const firstFetchGate = new Promise<void>((resolve) => {
+      releaseFirstFetch = resolve;
+    });
+    const secondFetchGate = new Promise<void>((resolve) => {
+      releaseSecondFetch = resolve;
+    });
+    const firstFetchStarted = new Promise<void>((resolve) => {
+      markFirstFetchStarted = resolve;
+    });
+    const secondFetchStarted = new Promise<void>((resolve) => {
+      markSecondFetchStarted = resolve;
+    });
+    const { app, database, config } = await startAppWithRemoteFetch({
+      fetchRemoteImageToTemp: async (url, options) => {
+        fetchCount += 1;
+        const bytes = fetchCount === 1 ? PNG_1X1 : secondBytes;
+        const tempPath = path.join(incomingUploadsDir(options.dataDir), `same-key-${fetchCount}.png`);
+        mkdirSync(path.dirname(tempPath), { recursive: true });
+        writeFileSync(tempPath, bytes);
+        if (fetchCount === 1) {
+          markFirstFetchStarted();
+          await firstFetchGate;
+        } else {
+          markSecondFetchStarted();
+          await secondFetchGate;
+        }
+        return {
+          tempPath,
+          bytes: bytes.byteLength,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+          finalUrl: url,
+        };
+      },
+    });
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/references/links`,
+      headers: agentHeaders("same-key-replay-link", { "content-type": "application/json" }),
+      payload: { url: "https://example.com/replay.png", title: "Replay", creator: "", observations: "", motion: null },
+    });
+    expect(link.statusCode).toBe(201);
+    const reference = link.json().reference;
+    const headers = { ...browser, "content-type": "application/json", "idempotency-key": "same-key-replay" };
+    const requestUrl = `/api/references/${reference.id}/save-copy`;
+    const payload = { expectedRevision: reference.revision };
+    try {
+      const firstRequest = app.inject({ method: "POST", url: requestUrl, headers, payload });
+      await firstFetchStarted;
+      const secondRequest = app.inject({ method: "POST", url: requestUrl, headers, payload });
+      await secondFetchStarted;
+      releaseFirstFetch();
+      const first = await firstRequest;
+      expect(first.statusCode).toBe(200);
+      const beforeReplay = await app.inject({ method: "GET", url: `/api/references/${reference.id}`, headers: browser });
+      const assetFileCount = (): number =>
+        ["assets/originals", "assets/thumbnails"].reduce(
+          (count, relative) => count + readdirSync(path.join(config.dataDir, ...relative.split("/"))).length,
+          0,
+        );
+      const fileCountBeforeReplay = assetFileCount();
+      releaseSecondFetch();
+      const replay = await secondRequest;
+      expect(replay.statusCode).toBe(200);
+      expect(replay.json()).toEqual(first.json());
+      expect(assetFileCount()).toBe(fileCountBeforeReplay);
+      const afterReplay = await app.inject({ method: "GET", url: `/api/references/${reference.id}`, headers: browser });
+      expect(afterReplay.json()).toEqual(beforeReplay.json());
+      expect(fetchCount).toBe(2);
+      expect(countRows(database, "assets")).toBe(1);
+    } finally {
+      releaseFirstFetch();
+      releaseSecondFetch();
+      await app.close();
+    }
+  });
+});
+
+describe("save-copy rejections", () => {
+  it("rejects image references without fetching", async () => {
+    const { origin, hits } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const created = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/url-image`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "reject-image" }, payload: { url: `${origin}/seed.png` } });
+    const id = created.json().reference.id;
+    const response = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "reject-image-copy" }, payload: { expectedRevision: 1 } });
+    expect(response.json().error.message).toBe("Only a linked image can be saved as a copy.");
+    expect(hits.value).toBe(1);
+  });
+
+  it("rejects motion links, unknown ids, and agent callers before fetching", async () => {
+    const { origin, hits } = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("motion-link", { "content-type": "application/json" }), payload: { url: `${origin}/motion.png`, title: "Motion", creator: "", observations: "", motion: { startSeconds: 1, endSeconds: null, behavior: "move" } } });
+    const id = link.json().reference.id;
+    const motion = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "motion-copy" }, payload: { expectedRevision: 1 } });
+    expect(motion.json().error.details.reason).toBe("has_motion");
+    const unknown = await app.inject({ method: "POST", url: "/api/references/00000000-0000-4000-8000-000000000000/save-copy", headers: { ...browser, "content-type": "application/json", "idempotency-key": "unknown-copy" }, payload: { expectedRevision: 1 } });
+    expect(unknown.json().error.code).toBe("not_found");
+    const agent = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: agentHeaders("agent-copy", { "content-type": "application/json" }), payload: { expectedRevision: 1 } });
+    expect(agent.statusCode).toBe(403);
+    expect(agent.json().error.message).toBe("Saving a copy is available to the Studio browser only.");
+    expect(hits.value).toBe(0);
+  });
+});
+
+describe("save-copy image response", () => {
+  it("serves a saved copy to the bearer image reader within the byte limit", async () => {
+    const server = await listenPngServer();
+    const { app } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: "/api/projects/" + projectId + "/references/links", headers: agentHeaders("image-reader-link", { "content-type": "application/json" }), payload: { url: server.origin + "/image.png", title: "Image", creator: "", observations: "", motion: null } });
+    const reference = link.json().reference;
+    const saved = await app.inject({ method: "POST", url: "/api/references/" + reference.id + "/save-copy", headers: { ...browser, "content-type": "application/json", "idempotency-key": "image-reader-save" }, payload: { expectedRevision: reference.revision } });
+    expect(saved.statusCode).toBe(200);
+    const image = await app.inject({ method: "GET", url: "/api/references/" + reference.id + "/image", headers: agentHeaders() });
+    expect(image.statusCode).toBe(200);
+    expect(image.rawPayload.byteLength).toBeLessThanOrEqual(1_000_000);
+    expect(image.headers["content-type"]).toMatch(/^image\/(jpeg|png)/);
+    await app.close();
+  });
+});
+
+describe("save-copy pixel limit", () => {
+  it("rejects a 12,001 px PNG without changing the link", async () => {
+    const wide = await sharp({ create: { width: 12_001, height: 10, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    const server = await listenPngServer(() => wide);
+    const { app, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: "/api/projects/" + projectId + "/references/links", headers: agentHeaders("wide-link", { "content-type": "application/json" }), payload: { url: server.origin + "/wide.png", title: "Wide", creator: "", observations: "", motion: null } });
+    const id = link.json().reference.id;
+    const before = await app.inject({ method: "GET", url: "/api/references/" + id, headers: browser });
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const response = await app.inject({ method: "POST", url: "/api/references/" + id + "/save-copy", headers: { ...browser, "content-type": "application/json", "idempotency-key": "wide-copy" }, payload: { expectedRevision: 1 } });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { details: { reason: "image_too_large_pixels" } } });
+    const after = await app.inject({ method: "GET", url: "/api/references/" + id, headers: browser });
+    expect(after.json()).toEqual(before.json());
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    assetDirsEmpty(config.dataDir);
+    await app.close();
+  });
+});
+
+describe("save-copy race rollback", () => {
+  it("rolls back newly published files when the reference revision races", async () => {
+    const server = await listenPngServer();
+    const { app, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({
+      method: "POST",
+      url: "/api/projects/" + projectId + "/references/links",
+      headers: agentHeaders("race-link", { "content-type": "application/json" }),
+      payload: { url: server.origin + "/race.png", title: "Race", creator: "", observations: "", motion: null },
+    });
+    const id = link.json().reference.id;
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    try {
+      setAfterPublishForTests(async () => {
+        const patched = await app.inject({
+          method: "PATCH",
+          url: "/api/references/" + id,
+          headers: { ...browser, "content-type": "application/json", "idempotency-key": "race-patch" },
+          payload: { expectedRevision: 1, title: "Raced" },
+        });
+        expect(patched.statusCode).toBe(200);
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/references/" + id + "/save-copy",
+        headers: { ...browser, "content-type": "application/json", "idempotency-key": "race-copy" },
+        payload: { expectedRevision: 1 },
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ error: { details: { currentRevision: 2 } } });
+      expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
+      assetDirsEmpty(config.dataDir);
+    } finally {
+      setAfterPublishForTests(undefined);
+      await app.close();
+    }
+  });
+
+  it("keeps a pre-existing identical asset when a save-copy race rolls back", async () => {
+    const server = await listenPngServer();
+    const { app, hub, config } = await startAppWithRemoteFetch();
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const image = await app.inject({
+      method: "POST",
+      url: "/api/projects/" + projectId + "/references/url-image",
+      headers: { ...browser, "content-type": "application/json", "idempotency-key": "shared-asset-image" },
+      payload: { url: server.origin + "/shared.png", title: "Shared" },
+    });
+    expect(image.statusCode).toBe(201);
+    const imageReference = image.json().reference;
+    const sha = imageReference.asset.sha256;
+    const originalPath = path.join(config.dataDir, "assets", "originals", sha + ".png");
+    const thumbnailPath = path.join(config.dataDir, "assets", "thumbnails", sha + ".webp");
+    const originalCount = readdirSync(path.dirname(originalPath)).length;
+    const thumbnailCount = readdirSync(path.dirname(thumbnailPath)).length;
+    const link = await app.inject({
+      method: "POST",
+      url: "/api/projects/" + projectId + "/references/links",
+      headers: agentHeaders("shared-race-link", { "content-type": "application/json" }),
+      payload: { url: server.origin + "/shared.png", title: "Link", creator: "", observations: "", motion: null },
+    });
+    const id = link.json().reference.id;
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    try {
+      setAfterPublishForTests(async () => {
+        await app.inject({ method: "PATCH", url: "/api/references/" + id, headers: { ...browser, "content-type": "application/json", "idempotency-key": "shared-race-patch" }, payload: { expectedRevision: 1, title: "Raced" } });
+      });
+      const response = await app.inject({ method: "POST", url: "/api/references/" + id + "/save-copy", headers: { ...browser, "content-type": "application/json", "idempotency-key": "shared-race-copy" }, payload: { expectedRevision: 1 } });
+      expect(response.statusCode).toBe(409);
+      expect(existsSync(originalPath)).toBe(true);
+      expect(existsSync(thumbnailPath)).toBe(true);
+      expect(image.json().reference.asset.id).toBe(imageReference.asset.id);
+      expect(readdirSync(path.dirname(originalPath))).toHaveLength(originalCount);
+      expect(readdirSync(path.dirname(thumbnailPath))).toHaveLength(thumbnailCount);
+      expect(events.filter((event) => event.type === "changed")).toHaveLength(1);
+    } finally {
+      setAfterPublishForTests(undefined);
+      await app.close();
+    }
+  });
+});
+
+describe("save-copy fetch failures", () => {
+  it("cleans up after timeout, over-limit, and storage-full failures", async () => {
+    const scenarios = [
+      { reason: "url_timeout", message: "That URL timed out.", lowerLimit: false },
+      { reason: "image_too_large", message: "Image is too large.", lowerLimit: true },
+      { reason: "storage_full", message: "Storage is full.", lowerLimit: false },
+    ];
+    for (const scenario of scenarios) {
+      const server = await listenPngServer();
+      const { app, hub, config } = await startAppWithRemoteFetch({
+        fetchRemoteImageToTemp: async () => {
+          throw new ServiceError("validation", scenario.message, { reason: scenario.reason });
+        },
+      });
+      const projectId = await createProject(app);
+      const browser = await browserHeaders(app);
+      if (scenario.lowerLimit) {
+        const settings = await app.inject({
+          method: "PUT",
+          url: "/api/settings",
+          headers: { ...browser, "content-type": "application/json", "idempotency-key": "set-low-upload-limit" },
+          payload: { expectedRevision: 1, maxUploadBytes: UPLOAD_LIMIT_MIN },
+        });
+        expect(settings.statusCode, JSON.stringify(settings.json())).toBe(200);
+      }
+      const link = await app.inject({
+        method: "POST",
+        url: "/api/projects/" + projectId + "/references/links",
+        headers: agentHeaders("failure-link-" + scenario.reason, { "content-type": "application/json" }),
+        payload: { url: server.origin + "/failure.png", title: "Failure", creator: "", observations: "", motion: null },
+      });
+      const id = link.json().reference.id;
+      const before = await app.inject({ method: "GET", url: "/api/references/" + id, headers: browser });
+      const events: StudioEvent[] = [];
+      hub.subscribe((event) => events.push(event));
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/references/" + id + "/save-copy",
+        headers: { ...browser, "content-type": "application/json", "idempotency-key": "failure-" + scenario.reason },
+        payload: { expectedRevision: 1 },
+      });
+      expect(response.json()).toMatchObject({ error: { details: { reason: scenario.reason } } });
+      const after = await app.inject({ method: "GET", url: "/api/references/" + id, headers: browser });
+      expect(after.json()).toEqual(before.json());
+      expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+      assetDirsEmpty(config.dataDir);
+      await app.close();
+    }
+  });
+
+  it("rejects a blocked address without changing the reference or publishing files", async () => {
+    const { origin } = await listenPngServer();
+    let blockAll = false;
+    const { app, hub, config } = await startAppWithRemoteFetch({
+      isBlocked: (ip) => blockAll ? true : allowLoopback(ip),
+    });
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("blocked-link", { "content-type": "application/json" }), payload: { url: `${origin}/blocked.png`, title: "Blocked", creator: "", observations: "", motion: null } });
+    const id = link.json().reference.id;
+    const before = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    blockAll = true;
+    const response = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "blocked-save-copy" }, payload: { expectedRevision: 1 } });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { details: { reason: "url_blocked_address" } } });
+    const after = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+    expect(after.json()).toEqual(before.json());
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    assetDirsEmpty(config.dataDir);
+    await app.close();
+  });
+
+  it("rejects blocked and HTML fetches without changing the reference", async () => {
+    for (const scenario of [
+      { url: "http://192.0.2.1/blocked.png", reason: "url_blocked_address" },
+      { url: "html", reason: "not_an_image" },
+    ]) {
+      const { origin } = await listenPngServer(() => "html");
+      const { app, hub, config } = await startAppWithRemoteFetch();
+      const projectId = await createProject(app);
+      const browser = await browserHeaders(app);
+      const source = scenario.url === "html" ? `${origin}/html` : scenario.url;
+      const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders(`fetch-failure-${scenario.reason}`, { "content-type": "application/json" }), payload: { url: source, title: "Keep", creator: "", observations: "", motion: null } });
+      const id = link.json().reference.id;
+      const before = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+      const events: StudioEvent[] = [];
+      hub.subscribe((event) => events.push(event));
+      const failed = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": `save-copy-${scenario.reason}` }, payload: { expectedRevision: 1 } });
+      expect(failed.statusCode).toBe(400);
+      expect(failed.json()).toMatchObject({ error: { details: { reason: scenario.reason } } });
+      const after = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+      expect(after.json()).toEqual(before.json());
+      expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+      assetDirsEmpty(config.dataDir);
+      await app.close();
+    }
+  });
+
+  it("cleans up after a 404 fetch failure", async () => {
+    const { origin } = await listenPngServer();
+    const { app, hub, config } = await startAppWithRemoteFetch({
+      fetchRemoteImageToTemp: async () => {
+        throw new ServiceError("validation", "That URL cannot be fetched.", { reason: "url_fetch_failed" });
+      },
+    });
+    const projectId = await createProject(app);
+    const browser = await browserHeaders(app);
+    const link = await app.inject({ method: "POST", url: `/api/projects/${projectId}/references/links`, headers: agentHeaders("404-link", { "content-type": "application/json" }), payload: { url: `${origin}/missing.png`, title: "404", creator: "", observations: "", motion: null } });
+    const id = link.json().reference.id;
+    const before = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+    const events: StudioEvent[] = [];
+    hub.subscribe((event) => events.push(event));
+    const response = await app.inject({ method: "POST", url: `/api/references/${id}/save-copy`, headers: { ...browser, "content-type": "application/json", "idempotency-key": "404-save-copy" }, payload: { expectedRevision: 1 } });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { details: { reason: "url_fetch_failed" } } });
+    const after = await app.inject({ method: "GET", url: `/api/references/${id}`, headers: browser });
+    expect(after.json()).toEqual(before.json());
+    expect(events.filter((event) => event.type === "changed")).toHaveLength(0);
+    assetDirsEmpty(config.dataDir);
+    await app.close();
+  });
+});
