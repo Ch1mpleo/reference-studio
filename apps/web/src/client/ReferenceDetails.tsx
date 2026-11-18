@@ -137,7 +137,7 @@ export function ReferenceDetails({
       ) : null}
       {onSaveCopy !== undefined && reference.kind === "link" && reference.motion === null && !readOnly ? (
         <div className="form-actions">
-          <StudioButton variant="ghost" busy={savingCopy} disabled={readOnly || savingCopy} onClick={() => void saveCopy()}>
+          <StudioButton variant="ghost" busy={savingCopy} disabled={readOnly || savingCopy} onClick={() => void saveCopy().catch(() => undefined)}>
             Save a copy
           </StudioButton>
         </div>

@@ -79,7 +79,7 @@ function Material({ data, selected, width, height }: NodeProps<MaterialNode>) {
     {selected && !data.editing ? <div className="board-item-actions nodrag nopan">
       {data.frame ? <><StudioButton variant="ghost" disabled={data.readOnly} onClick={data.edit}>Rename</StudioButton><StudioButton variant="ghost" onClick={data.systems}>Systems</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.duplicate}>Duplicate</StudioButton><StudioButton variant="ghost" disabled={data.groupCommandsDisabled} onClick={data.archive}>Ungroup</StudioButton></> : reference?.kind === "note" ? <StudioButton variant="ghost" onClick={data.edit}>Edit note</StudioButton> : <StudioButton variant="ghost" onClick={data.inspect}>Details</StudioButton>}
       {reference?.asset ? <StudioButton variant="ghost" onClick={data.view}>View image</StudioButton> : null}
-      {reference?.kind === "link" && reference.motion === null && !data.readOnly ? <StudioButton variant="ghost" busy={savingCopy} disabled={data.readOnly || savingCopy} onClick={() => void saveCopy()}>Save a copy</StudioButton> : null}
+      {reference?.kind === "link" && reference.motion === null && !data.readOnly ? <StudioButton variant="ghost" busy={savingCopy} disabled={data.readOnly || savingCopy} onClick={() => void saveCopy().catch(() => undefined)}>Save a copy</StudioButton> : null}
     </div> : null}
   </div>;
 }

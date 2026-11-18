@@ -56,12 +56,13 @@ export type CollectionProps = {
   onAddUrlPreview: (input: CreateUrlImage) => Promise<ProjectReference>;
   onAddNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   onSaveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+  onSaveCopy: (referenceId: string, expectedRevision: number) => Promise<LibraryReference>;
   onSavePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
   onPlace: (referenceId: string, options?: PlacementOptions) => Promise<ProjectReference>;
 };
 
 export function ReferenceWorkspace({ projectId, refreshKey, references, notice, status = "ready", refreshing = false,
-  onAddImage, onAddLink, onAddUrlImage, onAddUrlPreview, onAddNote, onSaveDetails, onSavePlacement, onPlace, onRetryReferences }: CollectionProps) {
+  onAddImage, onAddLink, onAddUrlImage, onAddUrlPreview, onAddNote, onSaveDetails, onSaveCopy, onSavePlacement, onPlace, onRetryReferences }: CollectionProps) {
   const board = useProjectBoard(projectId, refreshKey);
   const [selection, setSelection] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -287,6 +288,40 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
       throw error;
     } finally { setSavingNotes((count) => count - 1); }
   }
+  async function saveCopy(referenceId: string, expectedRevision: number): Promise<LibraryReference> {
+    setMessage("Saving a copy…");
+    try {
+      const saved = await onSaveCopy(referenceId, expectedRevision);
+      setMessage("Saved a copy. Source link kept.");
+      return saved;
+    } catch (error) {
+      if (error instanceof ReferenceRequestError && error.code === "conflict") {
+        await onRetryReferences();
+        setMessage("This reference changed. Try again.");
+        throw error;
+      }
+      let failure = error instanceof Error ? error.message : "Could not save a copy.";
+      if (error instanceof ReferenceRequestError) {
+        if (error.reason === "image_too_large") {
+          failure = `${imageTooLargeMessage(maxUploadBytes)} Raise the upload limit in Settings.`;
+        } else if (error.reason === "image_too_large_pixels") {
+          failure = "That image is over 12,000 px on a side.";
+        } else if (error.reason === "not_an_image") {
+          failure = "That link isn't a JPEG, PNG or WebP image.";
+        } else if (error.reason?.startsWith("url_")) {
+          failure = "Couldn't fetch the image from that link.";
+        } else if (error.reason === "storage_full") {
+          failure = "Not enough disk space to save a copy.";
+        } else if (error.reason === "has_motion") {
+          failure = error.message;
+        } else if (error.code === "network") {
+          failure = "Studio couldn't reach the service.";
+        }
+      }
+      setMessage(`${failure} The link is unchanged.`);
+      throw error;
+    }
+  }
   async function renameGroup(id: string, name: string): Promise<void> {
     if (operation) throw new Error("Wait for the group operation to finish before renaming.");
     const layout = board.currentLayout();
@@ -347,7 +382,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) setDropping(false); }} onDrop={drop}>
     <div className="canvas-surface"><Suspense fallback={null}><BoardCanvas projectId={projectId} layout={effective} references={references} selection={selection} readOnly={operation}
       editingId={editingId} onEdit={setEditingId} onEditDone={(id) => { setEditingId((current) => current === id ? null : current); setFailedNotes((ids) => ids.filter((entry) => entry !== id)); }} onEditNote={editNote} onRenameGroup={renameGroup}
-      onDuplicateGroup={(id) => groupCommand(id, false)} onArchiveGroup={(id) => groupCommand(id, true)} onOpenSystems={openSystems} groupCommandsDisabled={board.unsaved || operation}
+      onDuplicateGroup={(id) => groupCommand(id, false)} onArchiveGroup={(id) => groupCommand(id, true)} onOpenSystems={openSystems} onSaveCopy={saveCopy} groupCommandsDisabled={board.unsaved || operation}
       onSelect={setSelection} onCommit={board.commit} onInspect={inspect} onView={view} onGestureStart={board.beginGesture}
       playground={playground} onMovePlayground={(position) => setPlayground((current) => current ? { ...current, position } : current)} onClosePlayground={removePlayground} onAcceptBoard={board.acceptServer}
       onReady={(instance) => { canvas.current = instance; }} onZoom={setZoom} /></Suspense></div>
@@ -382,7 +417,7 @@ export function ReferenceWorkspace({ projectId, refreshKey, references, notice, 
         {selected.reference.sourceUrl ? <a className="studio-url" href={selected.reference.sourceUrl} target="_blank" rel="noreferrer">{selected.reference.sourceUrl}</a> : null}
       </> : null}
         {references.filter((item) => visited.includes(item.placementId)).map((item) => <div key={item.placementId} hidden={item.placementId !== inspectedId}>
-          <details className="studio-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} /></details>
+          <details className="studio-disclosure"><summary>Reference details</summary><ReferenceDetails reference={item.reference} onSave={onSaveDetails} onSaveCopy={saveCopy} readOnly={operation} /></details>
           <details className="studio-disclosure"><summary>Usage and crop</summary><PlacementUse item={item} onSave={onSavePlacement} /></details>
           {annotations.some((note) => note.target.type === "placement" && note.target.placementId === item.placementId) ? <details><summary>Attached notes</summary>{annotations.filter((note) => note.target.type === "placement" && note.target.placementId === item.placementId).map((note) => <p key={note.id}>{note.body || note.borrowedQuality}</p>)}</details> : null}
         </div>)}

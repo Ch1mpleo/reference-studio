@@ -363,6 +363,7 @@ function ProjectEditor({
         onAddUrlPreview={collection.addUrlPreview}
         onAddNote={collection.addNote}
         onSaveDetails={collection.saveDetails}
+        onSaveCopy={collection.saveCopy}
         onSavePlacement={collection.savePlacement}
         onPlace={collection.place}
       />
