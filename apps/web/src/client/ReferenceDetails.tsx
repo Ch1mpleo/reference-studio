@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { isHttpUrl, type LibraryReference } from "@reference-studio/core";
 import { ReferenceRequestError, type ReferenceDetailsInput } from "./referenceApi.js";
 import { StudioButton } from "./StudioButton.js";
@@ -20,9 +20,13 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 export function ReferenceDetails({
   reference,
   onSave,
+  onSaveCopy,
+  readOnly = false,
 }: {
   reference: LibraryReference;
   onSave: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+  onSaveCopy?: (referenceId: string, expectedRevision: number) => Promise<LibraryReference>;
+  readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftFrom(reference));
   const [baseRevision, setBaseRevision] = useState(reference.revision);
@@ -30,6 +34,10 @@ export function ReferenceDetails({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
+  const [savingCopy, setSavingCopy] = useState(false);
+  const latestReference = useRef(reference);
+  const previousReference = useRef(reference);
+  latestReference.current = reference;
   const dirty = !sameDraft(draft, draftFrom(reference));
   const previewUrl = reference.previewImageUrl;
   const expectedRevision = overrideRevision ?? baseRevision;
@@ -39,6 +47,44 @@ export function ReferenceDetails({
   const tagsId = `reference-tags-${reference.id}`;
   const observationsId = `reference-observations-${reference.id}`;
   const availabilityId = `reference-availability-${reference.id}`;
+
+  useEffect(() => {
+    const previous = previousReference.current;
+    previousReference.current = reference;
+    if (
+      previous.id !== reference.id ||
+      previous.kind !== "link" ||
+      reference.kind !== "image" ||
+      reference.revision <= previous.revision
+    ) return;
+
+    const baseline = draftFrom(previous);
+    const saved = draftFrom(reference);
+    setDraft((current) => reconcileDraft(current, baseline, saved));
+    setBaseRevision((current) => Math.max(current, reference.revision));
+    setOverrideRevision((current) => current !== null && current > reference.revision ? current : null);
+    setSaveState((current) => current === "saving" ? current : "idle");
+    setMessage(null);
+  }, [reference]);
+
+  async function saveCopy(): Promise<void> {
+    if (onSaveCopy === undefined) return;
+    const startingDraft = draftFrom(reference);
+    setSavingCopy(true);
+    try {
+      const saved = await onSaveCopy(reference.id, reference.revision);
+      const latest = latestReference.current;
+      const currentReference = latest.id === saved.id && latest.revision > saved.revision ? latest : saved;
+      const savedDraft = draftFrom(currentReference);
+      setDraft((current) => reconcileDraft(current, startingDraft, savedDraft));
+      setBaseRevision((current) => Math.max(current, currentReference.revision));
+      setOverrideRevision((current) => current !== null && current > currentReference.revision ? current : null);
+      setSaveState("idle");
+      setMessage(null);
+    } finally {
+      setSavingCopy(false);
+    }
+  }
 
   function edit(patch: Partial<Draft>): void {
     setDraft({ ...draft, ...patch });
@@ -120,6 +166,13 @@ export function ReferenceDetails({
           )}
         </div>
       ) : null}
+      {onSaveCopy !== undefined && reference.kind === "link" && reference.motion === null && !readOnly ? (
+        <div className="form-actions">
+          <StudioButton variant="ghost" busy={savingCopy} disabled={readOnly || savingCopy} onClick={() => void saveCopy().catch(() => undefined)}>
+            Save a copy
+          </StudioButton>
+        </div>
+      ) : null}
       <form onSubmit={(event) => void save(event)}>
         <StudioField id={titleId} label="Title" value={draft.title} maxLength={200} disabled={saveState === "saving"} onChange={(title) => edit({ title })} />
         <StudioField id={sourceId} label="Source" value={draft.sourceUrl} inputMode="url" placeholder="Leave unknown" maxLength={2000} disabled={saveState === "saving"} onChange={(sourceUrl) => edit({ sourceUrl })} />
@@ -179,4 +232,15 @@ function sameDraft(left: Draft, right: Draft): boolean {
     left.tags === right.tags &&
     left.availability === right.availability
   );
+}
+
+function reconcileDraft(current: Draft, starting: Draft, saved: Draft): Draft {
+  return {
+    title: current.title === starting.title ? saved.title : current.title,
+    sourceUrl: current.sourceUrl === starting.sourceUrl ? saved.sourceUrl : current.sourceUrl,
+    creator: current.creator === starting.creator ? saved.creator : current.creator,
+    observations: current.observations === starting.observations ? saved.observations : current.observations,
+    tags: current.tags === starting.tags ? saved.tags : current.tags,
+    availability: current.availability === starting.availability ? saved.availability : current.availability,
+  };
 }

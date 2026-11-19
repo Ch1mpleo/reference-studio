@@ -15,6 +15,7 @@ import {
   listProjectReferences,
   placeReference,
   ReferenceRequestError,
+  saveReferenceCopy,
   updatePlacement,
   updateReference,
   uploadProjectImage,
@@ -37,6 +38,7 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
   addUrlPreview: (input: CreateUrlImage) => Promise<ProjectReference>;
   addNote: (input: CreateNoteReference) => Promise<ProjectReference>;
   saveDetails: (referenceId: string, input: ReferenceDetailsInput) => Promise<LibraryReference>;
+  saveCopy: (referenceId: string, expectedRevision: number) => Promise<LibraryReference>;
   savePlacement: (placementId: string, input: PlacementUseInput) => Promise<ProjectReference>;
   place: (referenceId: string, options?: PlacementOptions) => Promise<ProjectReference>;
 } {
@@ -148,6 +150,23 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     [],
   );
 
+  const saveCopy = useCallback(
+    async (referenceId: string, expectedRevision: number): Promise<LibraryReference> => {
+      const saved = await saveReferenceCopy(referenceId, expectedRevision);
+      setReferences((current) =>
+        current.map((item) =>
+          item.reference.id === saved.id && item.reference.revision <= saved.revision
+            ? { ...item, reference: saved }
+            : item,
+        ),
+      );
+      setNotice(null);
+      await load();
+      return saved;
+    },
+    [load],
+  );
+
   const savePlacement = useCallback(
     async (placementId: string, input: PlacementUseInput): Promise<ProjectReference> => {
       const saved = await updatePlacement(projectId, placementId, input);
@@ -180,6 +199,7 @@ export function useProjectReferences(projectId: string, refreshKey: number): {
     addUrlPreview,
     addNote,
     saveDetails,
+    saveCopy,
     savePlacement,
     place,
   };
